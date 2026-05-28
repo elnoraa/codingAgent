@@ -80,6 +80,7 @@ def load_config() -> dict[str, Any]:
         "temperature": cfg.get("temperature", 0.7),
         "top_p": cfg.get("topP", 1.0),
         "custom_persona": cfg.get("customPersona", ""),
+        "context_files": cfg.get("contextFiles", ["README*", "CONTRIBUTING*", "Makefile", "setup.py", "pyproject.toml"]),
     }
 
 
@@ -123,6 +124,7 @@ def main() -> None:
         max_tokens=config["max_tokens"],
         custom_persona=config["custom_persona"],
         auto_save_interval=auto_save_interval,
+        context_files=config["context_files"],
     )
     repl.start()
 

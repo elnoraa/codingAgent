@@ -165,6 +165,7 @@ class Repl:
         max_tokens: int,
         custom_persona: str = "",
         auto_save_interval: int = 0,
+        context_files: list[str] | None = None,
     ) -> None:
         self.llm = llm
         self.system_prompt = system_prompt
@@ -178,6 +179,7 @@ class Repl:
         self._auto_save_interval = auto_save_interval
         self._file_snapshots: dict[str, list[tuple[str, str]]] = {}
         self._change_log: list[dict[str, object]] = []
+        self._context_files = context_files or []
 
         # Cost tracking
         self._input_tokens_total = 0
@@ -497,6 +499,32 @@ class Repl:
                 "the session back to turn 1 for the next task."
             )
 
+        # ── Context files injection ────────────────────────────────────────
+        context_section = ""
+        if self._context_files:
+            import glob as _glob
+            injected: list[str] = []
+            for pattern in self._context_files:
+                matched = _glob.glob(os.path.join(self.working_directory, pattern))
+                for filepath in matched:
+                    if not os.path.isfile(filepath):
+                        continue
+                    try:
+                        with open(filepath, "r", encoding="utf-8", errors="replace") as f:
+                            content = f.read(2000)  # cap at 2000 chars
+                        relpath = os.path.relpath(filepath, self.working_directory)
+                        injected.append(
+                            f"### `{relpath}`\n```\n{content}\n```"
+                        )
+                    except (OSError, IOError):
+                        continue
+            if injected:
+                context_section = (
+                    "\n\n## Project Context Files\n"
+                    "The following key project files are provided for context:\n\n"
+                    + "\n\n".join(injected)
+                )
+
         return (
             f"Current working directory: {self.working_directory}\n"
             f"Project root: {self.working_directory}\n\n"
@@ -505,6 +533,7 @@ class Repl:
             f"{persona}"
             f"{coding_agent_rules}"
             f"{restart_instruction}"
+            f"{context_section}"
         )
 
     def _on_tool_call(self, name: str, args: dict[str, object]) -> None:
