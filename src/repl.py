@@ -108,6 +108,7 @@ HELP_TEXT = f"""\
   /profile save <name>    Save current config as a profile
   /profile delete <name>  Delete a configuration profile
   /changes                Show session change log (audit trail)
+  /open <filename>         Fuzzy-find and open a file by partial name
 
 {bold('Multi-line input')}
   End a line with \\  to continue typing on the next line.
@@ -834,6 +835,85 @@ class Repl:
             if summary:
                 print(f"  {' ' * 20} {yellow(summary[:100])}")
 
+    def _handle_open(self, parts: list[str]) -> None:
+        """Handle /open command — fuzzy find files by partial name."""
+        if len(parts) < 2:
+            print(f"  {dim('Usage: /open <partial-filename>')}")
+            print(f"  {dim('Searches the project tree for files matching the given name.')}")
+            return
+
+        query = " ".join(parts[1:]).strip()
+        if not query:
+            print(f"  {dim('Usage: /open <partial-filename>')}")
+            return
+
+        query_lower = query.lower()
+        matches: list[tuple[str, str]] = []
+
+        try:
+            for root, dirs, files in os.walk(self.working_directory):
+                # Skip hidden directories
+                dirs[:] = [d for d in dirs if not d.startswith(".")]
+                for filename in files:
+                    if query_lower in filename.lower():
+                        full_path = os.path.join(root, filename)
+                        rel_path = os.path.relpath(full_path, self.working_directory)
+                        matches.append((rel_path, full_path))
+                        if len(matches) >= 50:
+                            break
+                if len(matches) >= 50:
+                    break
+        except (OSError, PermissionError) as exc:
+            print(f"  {red('✗ Error searching:')} {exc}")
+            return
+
+        if not matches:
+            print(f"  {dim('No files found matching:')} {cyan(query)}")
+            return
+
+        # Sort: name starts-with-query first, then alphabetical
+        def _sort_key(item: tuple[str, str]) -> tuple[int, str]:
+            relpath = item[0]
+            basename = os.path.basename(relpath)
+            # Priority 0 if filename starts with query, 1 if just contains
+            priority = 0 if basename.lower().startswith(query_lower) else 1
+            return (priority, relpath.lower())
+
+        matches.sort(key=_sort_key)
+
+        # Auto-open if exactly 1 match
+        if len(matches) == 1:
+            rel_path, full_path = matches[0]
+            print(f"  {green('✓')} {dim('Opened:')} {cyan(rel_path)}")
+            print()
+            self._display_file_preview(full_path)
+            return
+
+        # Show top 20 matches
+        print(f"  {bold(f'Files matching \"{query}\":')} {dim(f'({len(matches)} matches)')}")
+        print()
+        for i, (rel_path, _) in enumerate(matches[:20]):
+            print(f"  {dim(str(i + 1).rjust(3))}  {cyan(rel_path)}")
+        if len(matches) > 20:
+            print(f"  {dim(f'... and {len(matches) - 20} more matches')}")
+
+    def _display_file_preview(self, filepath: str) -> None:
+        """Display the first 30 lines of a file."""
+        try:
+            with open(filepath, "r", encoding="utf-8", errors="replace") as f:
+                lines: list[str] = []
+                for _ in range(30):
+                    line = f.readline()
+                    if not line:
+                        break
+                    lines.append(line.rstrip("\n"))
+            for line in lines:
+                print(f"  {dim('│')} {line}")
+            if len(lines) >= 30:
+                print(f"  {dim('└─── [+ more lines]')}")
+        except (OSError, IOError) as exc:
+            print(f"  {red('✗ Error reading file:')} {exc}")
+
     def _handle_profile(self, cmd: str) -> None:
         """Handle /profile command — save, load, list, delete configuration profiles."""
         parts = cmd.strip().split(maxsplit=2)
@@ -1378,6 +1458,8 @@ class Repl:
                 self._handle_profile(cmd)
             case "/changes":
                 self._handle_changes()
+            case "/open":
+                self._handle_open(parts)
             case "/save":
                 self._handle_session_save(parts)
             case "/load":
