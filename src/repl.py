@@ -100,6 +100,7 @@ HELP_TEXT = f"""\
   /reload                 Re-discover and re-register all tools from disk (no restart needed)
   /restart                Reset session to turn 1 (clear messages)
   /cost                   Show token usage and estimated API cost
+  /stats                  Show detailed session statistics
   /export [md|json] [path]  Export conversation as Markdown or JSON
   /search <pattern>        Search conversation history
   /search -r <regex>       Search conversation with regex
@@ -468,6 +469,9 @@ class Repl:
         self._notifications_enabled = notifications_enabled
         self._notifications_min_duration = notifications_min_duration
         self._tool_start_time: float = 0.0
+        self._tool_usage: dict[str, int] = {}
+        self._mode_switches: int = 0
+        self._turns_by_mode: dict[str, int] = {"code": 0, "plan": 0, "ask": 0}
 
         # Cost tracking
         self._input_tokens_total = 0
@@ -774,6 +778,8 @@ class Repl:
 
         messages_before = len(self.messages)
         self.messages.append({"role": "user", "content": user_input})
+        # Track turns by mode
+        self._turns_by_mode[self.mode] = self._turns_by_mode.get(self.mode, 0) + 1
         system_prompt = self._get_system_prompt()
         current_system_tokens = estimate_tokens(system_prompt)
         trimmed = trim_messages(self.messages, self.max_tokens, current_system_tokens)
@@ -958,6 +964,9 @@ class Repl:
 
         # ── Track start time for notification timing ──────────────────────
         self._tool_start_time = time.time()
+
+        # ── Track tool usage for statistics ───────────────────────────────
+        self._tool_usage[name] = self._tool_usage.get(name, 0) + 1
 
         # ── Log file modifications for audit trail ─────────────────────────
         if name in ("write_file", "edit_file", "replace_in_files"):
@@ -1230,6 +1239,59 @@ class Repl:
         in_cost = (self._input_tokens_total / 1_000_000) * pricing["input"]
         out_cost = (self._output_tokens_total / 1_000_000) * pricing["output"]
         return in_cost + out_cost
+
+    def _handle_stats(self) -> None:
+        """Handle /stats command — show session statistics."""
+        elapsed = time.time() - self._start_time
+        hours, remainder = divmod(int(elapsed), 3600)
+        minutes, seconds = divmod(remainder, 60)
+        uptime_str = f"{hours}h {minutes}m {seconds}s" if hours else f"{minutes}m {seconds}s"
+
+        total_turns = sum(self._turns_by_mode.values())
+        total_tokens = sum(
+            estimate_tokens(str(m.get("content", "")))
+            for m in self.messages
+        )
+        system_prompt = self._get_system_prompt()
+        system_tokens = estimate_tokens(system_prompt)
+        avg_tokens_per_turn = total_tokens // max(total_turns, 1)
+
+        print(f"  {bold('Session Statistics')}")
+        print()
+        print(f"  {dim('Session duration:')}  {cyan(uptime_str)}")
+        print(f"  {dim('Total turns:')}      {cyan(str(total_turns))}")
+        print(f"  {dim('Total messages:')}   {cyan(str(len(self.messages)))}")
+        print(f"  {dim('Total tokens:')}     {cyan(str(total_tokens + system_tokens))} ({dim('~' + str(avg_tokens_per_turn) + ' avg/turn')})")
+        print(f"  {dim('Mode switches:')}    {cyan(str(self._mode_switches))}")
+        print()
+
+        # Turns per mode
+        print(f"  {bold('Turns by Mode')}")
+        for mode_name in ("code", "plan", "ask"):
+            count = self._turns_by_mode.get(mode_name, 0)
+            if mode_name == "code":
+                color_fn = green
+            elif mode_name == "plan":
+                color_fn = yellow
+            else:
+                color_fn = magenta
+            bar_len = max(1, count) if count > 0 else 0
+            bar = "█" * min(bar_len, 30)
+            print(f"  {color_fn(mode_name.upper().ljust(6))} {dim(bar)} {cyan(str(count))}")
+        print()
+
+        # Tool usage
+        if self._tool_usage:
+            print(f"  {bold('Tool Usage')}")
+            max_count = max(self._tool_usage.values())
+            for tool_name, count in sorted(self._tool_usage.items(), key=lambda x: -x[1]):
+                bar_len = int((count / max(1, max_count)) * 20)
+                bar = "█" * bar_len
+                print(f"  {cyan(tool_name.ljust(20))} {dim(bar)} {cyan(str(count))}")
+        else:
+            print(f"  {dim('No tools have been called yet.')}")
+        print()
+        print(f"  {dim('Estimated cost:')}  {dim(f'${self._estimated_cost():.4f}')}")
 
     def _handle_changes(self) -> None:
         """Handle /changes command — show session change log."""
@@ -1940,6 +2002,7 @@ class Repl:
                         print(f"  {dim('Already in plan mode.')}")
                     else:
                         self.mode = "plan"
+                        self._mode_switches += 1
                         logger.info("Switched to PLAN mode")
                         print(f"  {yellow('●')} {bold('PLAN mode')} {dim('— read-only exploration. Only read-only tools are available.')}")
                         print(f"  {dim('Use /code to switch back to CODE mode.')}")
@@ -1956,6 +2019,7 @@ class Repl:
                     print(f"  {dim('Already in ask mode.')}")
                 else:
                     self.mode = "ask"
+                    self._mode_switches += 1
                     logger.info("Switched to ASK mode")
                     print(f"  {magenta('●')} {bold('ASK mode')} {dim('— read-only Q&A. Only read-only tools are available.')}")
                     print(f"  {dim('Use /code to switch back to CODE mode.')}")
@@ -1964,6 +2028,7 @@ class Repl:
                     print(f"  {dim('Already in code mode.')}")
                 else:
                     self.mode = "code"
+                    self._mode_switches += 1
                     logger.info("Switched to CODE mode")
                     print(f"  {green('●')} {bold('CODE mode')} {dim('— all tools available (read, write, execute).')}")
                     print(f"  {dim('Use /plan to switch to PLAN mode, or /ask for Q&A mode.')}")
@@ -1976,6 +2041,8 @@ class Repl:
                 self._handle_retry()
             case "/cost":
                 self._handle_cost()
+            case "/stats":
+                self._handle_stats()
             case "/cd":
                 self._handle_cd(parts)
             case "/rollback":
