@@ -93,6 +93,7 @@ HELP_TEXT = f"""\
   /search <pattern>        Search conversation history
   /search -r <regex>       Search conversation with regex
   /model [name]            Show or switch the active model
+  /cd [path]               Change working directory
   /config                 Show current configuration
 
 {bold('Multi-line input')}
@@ -795,6 +796,28 @@ class Repl:
             preview = preview[:117] + "..."
         return dim(preview)
 
+    def _handle_cd(self, parts: list[str]) -> None:
+        """Handle /cd command — change working directory."""
+        if len(parts) < 2:
+            wd = self.working_directory.replace(os.environ.get("HOME", "~"), "~") if "HOME" in os.environ else self.working_directory
+            print(f"  {dim('Current directory:')} {cyan(wd)}")
+            return
+
+        path_str = " ".join(parts[1:]).strip()
+        if not path_str:
+            return
+
+        new_path = os.path.abspath(os.path.join(self.working_directory, path_str))
+        if not os.path.isdir(new_path):
+            print(f"  {red('✗')} {dim('Not a directory:')} {cyan(path_str)}")
+            return
+
+        old_wd = self.working_directory
+        self.working_directory = new_path
+        logger.info("Working directory changed: %s -> %s", old_wd, new_path)
+        display_new = new_path.replace(os.environ.get("HOME", "~"), "~") if "HOME" in os.environ else new_path
+        print(f"  {green('✓')} {dim('Changed directory:')} {cyan(display_new)}")
+
     def _handle_model(self, parts: list[str]) -> None:
         """Handle /model command — show or switch the active model."""
         if len(parts) < 2:
@@ -1098,6 +1121,8 @@ class Repl:
                 self._handle_retry()
             case "/cost":
                 self._handle_cost()
+            case "/cd":
+                self._handle_cd(parts)
             case "/model":
                 self._handle_model(parts)
             case "/search":
