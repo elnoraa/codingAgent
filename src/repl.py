@@ -30,6 +30,7 @@ from tools.url_fetch import url_fetch_tool
 from tools.think_tool import think_tool
 from tools.restart_session import restart_session_tool
 from tools.web_search import web_search_tool
+from tools.undo_tool import undo_tool
 from .session import save_session, load_session, list_sessions
 from typing import cast
 
@@ -94,6 +95,8 @@ HELP_TEXT = f"""\
   /search -r <regex>       Search conversation with regex
   /model [name]            Show or switch the active model
   /cd [path]               Change working directory
+  /rollback                Ask agent to undo file changes
+  undo                     List/revert file snapshots (tool)
   /config                 Show current configuration
 
 {bold('Multi-line input')}
@@ -164,6 +167,8 @@ class Repl:
         self._start_time = time.time()
         self._custom_persona = custom_persona
         self._auto_save_interval = auto_save_interval
+        self._file_snapshots: dict[str, list[tuple[str, str]]] = {}
+        self._change_log: list[dict[str, object]] = []
 
         # Cost tracking
         self._input_tokens_total = 0
@@ -206,6 +211,7 @@ class Repl:
         self.tools.register(restart_session_tool)
         self.tools.register(think_tool)
         self.tools.register(web_search_tool)
+        self.tools.register(undo_tool)
 
     def start(self) -> None:
         print()
@@ -354,7 +360,10 @@ class Repl:
         self.messages = trimmed
 
         try:
-            context = ToolContext(working_directory=self.working_directory)
+            context = ToolContext(
+                working_directory=self.working_directory,
+                file_snapshots=self._file_snapshots,
+            )
 
             thinking_shown = False
             text_started = False
@@ -1123,6 +1132,9 @@ class Repl:
                 self._handle_cost()
             case "/cd":
                 self._handle_cd(parts)
+            case "/rollback":
+                print(f"  {dim('Use the undo tool to rollback changes.')}")
+                print(f"  {dim('The agent can list and revert file snapshots automatically.')}")
             case "/model":
                 self._handle_model(parts)
             case "/search":

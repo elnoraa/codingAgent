@@ -10,7 +10,7 @@ from src.logging_config import get_logger
 logger = get_logger(__name__)
 
 
-def execute(args: dict[str, Any], _ctx: ToolContext) -> str:
+def execute(args: dict[str, Any], ctx: ToolContext) -> str:
     path = args.get("path")
     old_text = args.get("oldText")
     new_text = args.get("newText")
@@ -21,6 +21,9 @@ def execute(args: dict[str, Any], _ctx: ToolContext) -> str:
         return 'Error: missing required argument "oldText".'
     if new_text is None:
         return 'Error: missing required argument "newText".'
+
+    # Snapshot existing content before editing
+    ctx.snapshot_file(path)
 
     try:
         with open(path, encoding="utf-8") as f:

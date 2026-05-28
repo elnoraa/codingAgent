@@ -11,7 +11,7 @@ from src.logging_config import get_logger
 logger = get_logger(__name__)
 
 
-def execute(args: dict[str, Any], _ctx: ToolContext) -> str:
+def execute(args: dict[str, Any], ctx: ToolContext) -> str:
     path = args.get("path")
     content = args.get("content")
     content_len = len(content) if isinstance(content, str) else 0
@@ -20,6 +20,9 @@ def execute(args: dict[str, Any], _ctx: ToolContext) -> str:
         return 'Error: missing required argument "path".'
     if content is None:
         return 'Error: missing required argument "content".'
+
+    # Snapshot existing content before overwriting
+    ctx.snapshot_file(path)
 
     try:
         Path(path).parent.mkdir(parents=True, exist_ok=True)

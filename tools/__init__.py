@@ -18,6 +18,47 @@ if TYPE_CHECKING:
 class ToolContext:
     working_directory: str
     restart_requested: bool = False
+    file_snapshots: dict[str, list[tuple[str, str]]] | None = None
+
+    def snapshot_file(self, path: str) -> None:
+        """Read the current file content and store a snapshot before modification."""
+        import os as _os
+        if self.file_snapshots is None:
+            return
+        try:
+            with open(path, "r", encoding="utf-8") as _f:
+                content = _f.read()
+        except FileNotFoundError:
+            content = ""
+        except Exception:
+            return
+        timestamp = str(__import__("time").time())
+        if path not in self.file_snapshots:
+            self.file_snapshots[path] = []
+        self.file_snapshots[path].append((timestamp, content))
+
+    def get_snapshots(self, path: str | None = None) -> dict[str, list[tuple[str, str]]]:
+        """Get snapshots for a specific path or all paths."""
+        if self.file_snapshots is None:
+            return {}
+        if path is not None:
+            return {path: self.file_snapshots.get(path, [])}
+        return dict(self.file_snapshots)
+
+    def revert_to_snapshot(self, path: str, index: int = -1) -> bool:
+        """Restore a file from a snapshot by index (default: last). Returns True on success."""
+        if self.file_snapshots is None or path not in self.file_snapshots:
+            return False
+        snapshots = self.file_snapshots[path]
+        if not snapshots:
+            return False
+        try:
+            _, content = snapshots[index]
+            with open(path, "w", encoding="utf-8") as _f:
+                _f.write(content)
+            return True
+        except (IndexError, OSError):
+            return False
 
 
 @dataclass
