@@ -12,15 +12,15 @@ logger = get_logger(__name__)
 
 def execute(args: dict[str, Any], ctx: ToolContext) -> str:
     path = args.get("path")
-    old_text = args.get("oldText")
-    new_text = args.get("newText")
+    old_text = args.get("oldText") or args.get("old_string")
+    new_text = args.get("newText") or args.get("new_string")
     logger.info("execute: path=%s, oldText_len=%d, newText_len=%d", path, len(old_text or ""), len(new_text or ""))
     if not path:
         return 'Error: missing required argument "path".'
     if not old_text:
-        return 'Error: missing required argument "oldText".'
+        return 'Error: missing required argument "oldText" (or "old_string").'
     if new_text is None:
-        return 'Error: missing required argument "newText".'
+        return 'Error: missing required argument "newText" (or "new_string").'
 
     # Snapshot existing content before editing
     ctx.snapshot_file(path)
@@ -70,7 +70,7 @@ edit_file_tool = Tool(
     name="edit_file",
     description=(
         "Make targeted edits to a file by finding an exact block of text "
-        "and replacing it with new content. The oldText must match exactly, "
+        "and replacing it with new content. The oldText (or old_string) must match exactly, "
         "including whitespace. If the text is found more than once, the edit "
         "is rejected to avoid ambiguity."
     ),
@@ -80,9 +80,9 @@ edit_file_tool = Tool(
             "path": {"type": "string", "description": "Absolute path to the file to edit"},
             "oldText": {
                 "type": "string",
-                "description": "Exact text to search for (must match exactly, including whitespace)",
+                "description": "Exact text to search for (must match exactly, including whitespace). Also accepts 'old_string' as an alias.",
             },
-            "newText": {"type": "string", "description": "Text to replace it with"},
+            "newText": {"type": "string", "description": "Text to replace it with. Also accepts 'new_string' as an alias."},
         },
         "required": ["path", "oldText", "newText"],
     },

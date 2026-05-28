@@ -18,8 +18,8 @@ IGNORE_DIRS = frozenset({
 
 
 def execute(args: dict[str, Any], _ctx: ToolContext) -> str:
-    old_text = args.get("oldText")
-    new_text = args.get("newText")
+    old_text = args.get("oldText") or args.get("old_string")
+    new_text = args.get("newText") or args.get("new_string")
     search_dir = args.get("path") or os.getcwd()
     file_pattern = args.get("filePattern") or ""
     max_replacements = int(args.get("maxReplacements", 100))
@@ -29,9 +29,9 @@ def execute(args: dict[str, Any], _ctx: ToolContext) -> str:
         search_dir, len(old_text or ""), len(new_text or ""), file_pattern, max_replacements, confirm_each,
     )
     if not old_text:
-        return 'Error: missing required argument "oldText".'
+        return 'Error: missing required argument "oldText" (or "old_string").'
     if new_text is None:
-        return 'Error: missing required argument "newText".'
+        return 'Error: missing required argument "newText" (or "new_string").'
 
     # Build list of files to process
     files_to_search: list[str] = []
@@ -137,11 +137,11 @@ replace_in_files_tool = Tool(
         "properties": {
             "oldText": {
                 "type": "string",
-                "description": "Exact text to find and replace",
+                "description": "Exact text to find and replace. Also accepts 'old_string' as an alias.",
             },
             "newText": {
                 "type": "string",
-                "description": "Text to replace it with",
+                "description": "Text to replace it with. Also accepts 'new_string' as an alias.",
             },
             "path": {
                 "type": "string",
