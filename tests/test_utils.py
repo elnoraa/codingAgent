@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 
-from utils import (
+from src.utils import (
     CHARS_PER_TOKEN,
     TRIM_THRESHOLD,
     _message_token_count,

@@ -11,7 +11,7 @@ from typing import cast
 
 import pytest
 
-from session import save_session, load_session, list_sessions, delete_session
+from src.session import save_session, load_session, list_sessions, delete_session
 
 
 @pytest.fixture

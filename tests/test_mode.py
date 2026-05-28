@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from mode import PLAN_MODE_SYSTEM_PROMPT
+from src.mode import PLAN_MODE_SYSTEM_PROMPT
 
 
 def test_plan_mode_prompt_exists() -> None:

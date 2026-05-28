@@ -10,7 +10,7 @@ from unittest.mock import patch
 
 import pytest
 
-from main import load_config, DEFAULT_SYSTEM_PROMPT
+from src.main import load_config, DEFAULT_SYSTEM_PROMPT
 
 
 @pytest.fixture

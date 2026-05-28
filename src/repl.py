@@ -4,8 +4,8 @@ import os
 import time
 from pathlib import Path
 
-from client import LlmClient
-from mode import PLAN_MODE_SYSTEM_PROMPT
+from .client import LlmClient
+from .mode import PLAN_MODE_SYSTEM_PROMPT
 from tools import ToolContext, ToolRegistry
 from tools.read_file import read_file_tool
 from tools.write_file import write_file_tool
@@ -25,17 +25,17 @@ from tools.git_status import git_status_tool
 from tools.url_fetch import url_fetch_tool
 from tools.think_tool import think_tool
 from tools.web_search import web_search_tool
-from session import save_session, load_session, list_sessions
+from .session import save_session, load_session, list_sessions
 from typing import cast
 
-from plan import (
+from .plan import (
     complete_plan,
     generate_plan_template,
     list_completed_plans,
     list_pending_plans,
     save_pending_plan,
 )
-from utils import bold, dim, green, yellow, cyan, red, color_json, estimate_tokens, trim_messages, blue, magenta
+from .utils import bold, dim, green, yellow, cyan, red, color_json, estimate_tokens, trim_messages, blue, magenta
 
 # ── Readline (command history with arrow keys) ──────────────────────────
 _readline_available = False
