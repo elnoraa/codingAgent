@@ -92,6 +92,7 @@ HELP_TEXT = f"""\
   /export [md|json] [path]  Export conversation as Markdown or JSON
   /search <pattern>        Search conversation history
   /search -r <regex>       Search conversation with regex
+  /model [name]            Show or switch the active model
   /config                 Show current configuration
 
 {bold('Multi-line input')}
@@ -794,6 +795,28 @@ class Repl:
             preview = preview[:117] + "..."
         return dim(preview)
 
+    def _handle_model(self, parts: list[str]) -> None:
+        """Handle /model command — show or switch the active model."""
+        if len(parts) < 2:
+            print(f"  {bold('Current Model:')} {cyan(self.llm.model)}")
+            print(f"  {dim('Usage: /model <model-name> to switch')}")
+            print(f"  {dim('Example: /model claude-3-5-sonnet-20241022')}")
+            return
+
+        new_model = parts[1].strip()
+        if not new_model:
+            print(f"  {dim('Usage: /model <model-name>')}")
+            return
+
+        if new_model == self.llm.model:
+            print(f"  {dim('Already using')} {cyan(new_model)}")
+            return
+
+        old_model = self.llm.model
+        self.llm.model = new_model
+        logger.info("Model switched: %s -> %s", old_model, new_model)
+        print(f"  {green('✓')} {dim('Model switched:')} {cyan(old_model)} {dim('→')} {cyan(new_model)}")
+
     def _handle_export(self, parts: list[str]) -> None:
         """Handle /export command — export conversation as Markdown or JSON."""
         fmt = "md"
@@ -1075,6 +1098,8 @@ class Repl:
                 self._handle_retry()
             case "/cost":
                 self._handle_cost()
+            case "/model":
+                self._handle_model(parts)
             case "/search":
                 self._handle_search(parts)
             case "/export":
