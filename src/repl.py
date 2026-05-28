@@ -7,7 +7,7 @@ import time
 
 from .client import LlmClient
 from .logging_config import get_logger
-from .mode import PLAN_MODE_SYSTEM_PROMPT
+from .mode import ASK_MODE_SYSTEM_PROMPT, PLAN_MODE_SYSTEM_PROMPT
 from tools import ToolContext, ToolRegistry
 
 logger = get_logger(__name__)
@@ -70,8 +70,9 @@ HELP_TEXT = f"""\
   /tools                  List available tools
   /history                Show detailed message/token/role breakdown
   /status, /s             Show session status (tokens, model, mode, uptime)
-  /mode                   Show current mode (code/plan)
+  /mode                   Show current mode (code/plan/ask)
   /plan, /p               Switch to plan mode (read-only exploration)
+  /ask, /a                Switch to ask mode (read-only Q&A)
   /code                   Switch to code mode (all tools available)
   /plan save <name>       Save last assistant response as a plan file
   /plan create <topic>    Create a structured plan template for a task
@@ -116,6 +117,7 @@ HELP_TEXT = f"""\
 {bold('Modes')}
   CODE mode  {green('●')}  All tools available (read + write + execute)
   PLAN mode  {yellow('●')}  Read-only exploration & planning (read-only tools only)
+  ASK mode   {magenta('●')}  Read-only Q&A & explanation (read-only tools only)
 
 {bold('Plan-First Enforcement')}
   In CODE mode, the first turn is automatically read-only (planning phase).
@@ -259,7 +261,11 @@ class Repl:
 
     def _turn_separator_color(self):
         """Return the color function for the current mode's separator."""
-        return yellow if self.mode == "plan" else dim
+        if self.mode == "plan":
+            return yellow
+        if self.mode == "ask":
+            return magenta
+        return dim
 
     def _print_separator(self) -> None:
         """Print a mode-aware separator line."""
@@ -303,7 +309,11 @@ class Repl:
             print()
 
             try:
-                mode_tag = f"{cyan(self.mode.upper())}" if self.mode == "code" else f"{yellow(self.mode.upper())}"
+                mode_tag = (
+                    f"{magenta(self.mode.upper())}" if self.mode == "ask"
+                    else f"{yellow(self.mode.upper())}" if self.mode == "plan"
+                    else f"{cyan(self.mode.upper())}"
+                )
                 wd = self.working_directory.replace(os.environ.get("HOME", "~"), "~") if "HOME" in os.environ else self.working_directory
                 line = self._read_multiline(mode_tag, wd)
             except (EOFError, KeyboardInterrupt):
@@ -394,10 +404,12 @@ class Repl:
 
             # Determine read-only status:
             # - Plan mode is always read-only
+            # - Ask mode is always read-only
             # - First code-mode turn forces read-only (plan-first)
             # - Pending approval keeps read-only
             is_read_only = (
                 self.mode == "plan"
+                or self.mode == "ask"
                 or (self.mode == "code" and not self._first_code_turn_done)
                 or self._plan_pending_approval
             )
@@ -506,7 +518,12 @@ class Repl:
         print(f"  {yellow('⚠')} {dim(f'{dropped} earlier {label} removed to stay within context limits.')}")
 
     def _get_system_prompt(self) -> str:
-        base = PLAN_MODE_SYSTEM_PROMPT if self.mode == "plan" else self.system_prompt
+        if self.mode == "plan":
+            base = PLAN_MODE_SYSTEM_PROMPT
+        elif self.mode == "ask":
+            base = ASK_MODE_SYSTEM_PROMPT
+        else:
+            base = self.system_prompt
         persona = f"\n\n{self._custom_persona}" if self._custom_persona else ""
 
         # ── Load coding-agent.md instructions (if present) ─────────────────
@@ -684,7 +701,11 @@ class Repl:
         print()
 
         try:
-            mode_tag = f"{cyan(self.mode.upper())}" if self.mode == "code" else f"{yellow(self.mode.upper())}"
+            mode_tag = (
+                f"{magenta(self.mode.upper())}" if self.mode == "ask"
+                else f"{yellow(self.mode.upper())}" if self.mode == "plan"
+                else f"{cyan(self.mode.upper())}"
+            )
             wd = self.working_directory.replace(os.environ.get("HOME", "~"), "~") if "HOME" in os.environ else self.working_directory
             prompt = f"  {bold(mode_tag)} {cyan(wd)} {green('❯')} "
             new_line = input(prompt)
@@ -891,7 +912,7 @@ class Repl:
                 self.messages.clear()
                 print(f"  {dim('Conversation history cleared.')}")
             case "/tools":
-                tools_to_show = self.tools.get_read_only() if self.mode == "plan" else self.tools.get_all()
+                tools_to_show = self.tools.get_read_only() if self.mode in ("plan", "ask") else self.tools.get_all()
                 for t in tools_to_show:
                     print(f"  {bold(t.name)}{dim(f' — {t.description}')}")
                 print(f"  {dim(f'[{self.mode.upper()} mode — {len(tools_to_show)} tools available]')}")
@@ -1003,6 +1024,15 @@ class Repl:
                     print(f"  {dim('  /plan create <topic> — create a structured plan template')}")
                     print(f"  {dim('  /plan list         — list pending plans')}")
                     print(f"  {dim('  /plan list completed — list completed plans')}")
+                    print(f"  {dim('  /ask               — switch to ask mode (Q&A)')}")
+            case "/ask" | "/a":
+                if self.mode == "ask":
+                    print(f"  {dim('Already in ask mode.')}")
+                else:
+                    self.mode = "ask"
+                    logger.info("Switched to ASK mode")
+                    print(f"  {magenta('●')} {bold('ASK mode')} {dim('— read-only Q&A. Only read-only tools are available.')}")
+                    print(f"  {dim('Use /code to switch back to CODE mode.')}")
             case "/code":
                 if self.mode == "code":
                     print(f"  {dim('Already in code mode.')}")
@@ -1010,7 +1040,7 @@ class Repl:
                     self.mode = "code"
                     logger.info("Switched to CODE mode")
                     print(f"  {green('●')} {bold('CODE mode')} {dim('— all tools available (read, write, execute).')}")
-                    print(f"  {dim('Use /plan to switch to PLAN mode.')}")
+                    print(f"  {dim('Use /plan to switch to PLAN mode, or /ask for Q&A mode.')}")
             case "/mode":
                 logger.info("Mode check: current mode=%s", self.mode)
                 print(f"  {bold('Mode:')} {bold(self.mode.upper())}")
