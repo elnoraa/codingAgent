@@ -316,7 +316,8 @@ class Repl:
             if self._is_approval(user_input):
                 # User approved — unlock write tools
                 self._plan_pending_approval = False
-                self._first_code_turn_done = False  # Allow a fresh start
+                # Keep _first_code_turn_done=True so the execution turn is write-enabled
+                self._plan_auto_saved = True  # Suppress auto-save of the upcoming summary response
                 # Move plan from pending to completed
                 if self._plan_current_name:
                     cplan_name = self._plan_current_name
@@ -394,8 +395,12 @@ class Repl:
                 print("\r" + " " * 70, end="", flush=True)
                 print("\r", end="", flush=True)
 
-            # ── Post-turn plan enforcement (code mode, first real turn) ────
-            if self.mode == "code" and not self._first_code_turn_done and not self._plan_pending_approval:
+            # ── Post-turn plan enforcement (code mode) ──────────────────────
+            if self.mode == "code" and self._plan_auto_saved:
+                # Just finished an approved execution turn — reset for plan-first on next task
+                self._plan_auto_saved = False
+                self._first_code_turn_done = False
+            elif self.mode == "code" and not self._first_code_turn_done and not self._plan_pending_approval:
                 self._first_code_turn_done = True
                 self._plan_pending_approval = True
 
