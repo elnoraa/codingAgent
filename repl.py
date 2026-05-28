@@ -26,6 +26,13 @@ from tools.web_search import web_search_tool
 from session import save_session, load_session, list_sessions
 from typing import cast
 
+from plan import (
+    complete_plan,
+    generate_plan_template,
+    list_completed_plans,
+    list_pending_plans,
+    save_pending_plan,
+)
 from utils import bold, dim, green, yellow, cyan, red, color_json, estimate_tokens, trim_messages, blue, magenta
 
 # ── Readline (command history with arrow keys) ──────────────────────────
@@ -60,6 +67,9 @@ HELP_TEXT = f"""\
   /plan, /p               Switch to plan mode (read-only exploration)
   /code                   Switch to code mode (all tools available)
   /plan save <name>       Save last assistant response as a plan file
+  /plan create <topic>    Create a structured plan template for a task
+  /plan list              List pending plans awaiting approval
+  /plan list completed    List completed plans
   /edit                   Edit and re-send the last user message
   /retry, /r              Re-send the last user message (e.g. after API error)
   /save <name>            Save the current session
@@ -95,10 +105,67 @@ HELP_TEXT = f"""\
 
 {bold('Modes')}
   CODE mode  {green('●')}  All tools available (read + write + execute)
-  PLAN mode  {yellow('●')}  Read-only exploration & planning (read-only tools only)"""
+  PLAN mode  {yellow('●')}  Read-only exploration & planning (read-only tools only)
+
+{bold('Plan-First Enforcement')}
+  In CODE mode, the first turn is automatically read-only (planning phase).
+  After the assistant presents a plan, type {green('proceed')} to approve it.
+  Write tools (write_file, edit_file, bash, etc.) are BLOCKED until you approve.
+  Plans are auto-saved to plans/pending/ and moved to plans/completed/ after approval."""
+
+
+def _plan_name_from_text(text: str) -> str:
+    """Extract a safe plan name from the first meaningful line of text."""
+    text = text.strip()
+    if not text:
+        return f"plan-{int(time.time())}"
+    # Take the first line
+    first_line = text.split("\n")[0].strip()
+    # Remove markdown heading markers and common prefixes
+    name = first_line.lstrip("#").strip()
+    # Limit length and sanitize
+    name = name[:50]
+    safe = "".join(c for c in name if c.isalnum() or c in " -_")
+    safe = safe.strip().replace(" ", "-")
+    if not safe:
+        return f"plan-{int(time.time())}"
+    return safe.lower()
 
 
 class Repl:
+
+    # ── Plan-first enforcement helpers ────────────────────────────────────
+
+    @staticmethod
+    def _is_approval(text: str) -> bool:
+        """Check if user input is an approval to proceed with execution."""
+        lowered = text.strip().lower()
+        approval_phrases = {
+            "proceed",
+            "go ahead",
+            "approved",
+            "approve",
+            "yes proceed",
+            "yes, proceed",
+            "let's go",
+            "lets go",
+            "let's proceed",
+            "lets proceed",
+            "do it",
+            "execute",
+            "y",
+            "yes",
+            "ok",
+            "okay",
+            "sure",
+            "looks good",
+            "looks good, proceed",
+            "approved, proceed",
+        }
+        return lowered in approval_phrases or any(
+            lowered.startswith(p) for p in ("proceed", "go ahead", "approved")
+        )
+
     def __init__(
         self,
         llm: LlmClient,
@@ -119,6 +186,12 @@ class Repl:
         # Cost tracking
         self._input_tokens_total = 0
         self._output_tokens_total = 0
+
+        # Plan-first enforcement
+        self._plan_pending_approval: bool = False
+        self._plan_current_name: str | None = None
+        self._plan_auto_saved: bool = False
+        self._first_code_turn_done: bool = False
 
         self.tools = ToolRegistry()
         self._register_all_tools()
@@ -237,6 +310,26 @@ class Repl:
 
     def _process_turn(self, user_input: str, color_fn: object) -> None:
         """Send a user message to the LLM, stream the response, and show token usage."""
+
+        # ── Plan approval check ────────────────────────────────────────────
+        if self._plan_pending_approval and self.mode == "code":
+            if self._is_approval(user_input):
+                # User approved — unlock write tools
+                self._plan_pending_approval = False
+                self._first_code_turn_done = False  # Allow a fresh start
+                # Move plan from pending to completed
+                if self._plan_current_name:
+                    cplan_name = self._plan_current_name
+                    completed = complete_plan(cplan_name, self.working_directory)
+                    if completed:
+                        print(f"  {green('✓')} {dim('Plan completed:')} {cyan(cplan_name)}")
+                    self._plan_current_name = None
+                print(f"  {green('✓')} {bold('Plan approved!')} {dim('Write tools are now available.')}")
+                print()
+            else:
+                # User didn't approve — keep read-only mode, this refines the plan
+                pass  # Will use read-only mode below
+
         messages_before = len(self.messages)
         self.messages.append({"role": "user", "content": user_input})
         system_prompt = self._get_system_prompt()
@@ -275,6 +368,16 @@ class Repl:
             # Show thinking indicator
             print(f"  {dim('⟳ thinking...')}", end="", flush=True)
 
+            # Determine read-only status:
+            # - Plan mode is always read-only
+            # - First code-mode turn forces read-only (plan-first)
+            # - Pending approval keeps read-only
+            is_read_only = (
+                self.mode == "plan"
+                or (self.mode == "code" and not self._first_code_turn_done)
+                or self._plan_pending_approval
+            )
+
             self.llm.chat_with_tools(
                 messages=self.messages,
                 system=system_prompt,
@@ -283,13 +386,35 @@ class Repl:
                 on_text=_on_text,
                 on_tool_call=self._on_tool_call,
                 on_tool_result=lambda _name, r: self._on_tool_result(r),
-                read_only=(self.mode == "plan"),
+                read_only=is_read_only,
             )
 
             # If we never got text, clear thinking indicator
             if not thinking_shown:
                 print("\r" + " " * 70, end="", flush=True)
                 print("\r", end="", flush=True)
+
+            # ── Post-turn plan enforcement (code mode, first real turn) ────
+            if self.mode == "code" and not self._first_code_turn_done and not self._plan_pending_approval:
+                self._first_code_turn_done = True
+                self._plan_pending_approval = True
+
+                # Auto-save the assistant response as a plan
+                plan_text = self._get_last_assistant_text()
+                if plan_text:
+                    # Generate a unique plan name from the first line or a timestamp
+                    first_line = plan_text.strip().split("\n")[0][:50]
+                    plan_name = _plan_name_from_text(first_line)
+                    try:
+                        fpath = save_pending_plan(plan_name, plan_text, self.working_directory)
+                        self._plan_current_name = plan_name
+                        print(f"\n  {dim('📋 Plan auto-saved to')} {cyan(fpath)}")
+                    except Exception as exc:
+                        print(f"\n  {dim(f'⚠ Could not auto-save plan: {exc}')}")
+
+                # Show approval prompt
+                print(f"\n  {yellow('●')} {bold('Plan is ready for review.')}")
+                print(f"  {dim('Type')} {green('proceed')} {dim('to approve and execute, or keep refining the plan.')}")
 
             # ── Show token usage for this turn ──────────────────────────────
             tokens_after = sum(
@@ -316,6 +441,20 @@ class Repl:
     def _get_system_prompt(self) -> str:
         base = PLAN_MODE_SYSTEM_PROMPT if self.mode == "plan" else self.system_prompt
         persona = f"\n\n{self._custom_persona}" if self._custom_persona else ""
+
+        # Phase-specific instructions
+        phase_instruction = ""
+        if self._plan_pending_approval and self.mode == "code":
+            phase_instruction = (
+                "\n\n## IMPORTANT: You are in the PLAN REVIEW phase\n"
+                "The user has NOT yet approved your plan. You can ONLY use read-only tools "
+                "(directory_tree, list_directory, read_file, grep, file_search, think, url_fetch, web_search).\n"
+                "Write tools (write_file, edit_file, replace_in_files, bash, run_tests, git_commit) are BLOCKED.\n"
+                "If the user is asking you to refine or clarify the plan, do so using only read-only tools.\n"
+                "If the user approves your plan (says 'proceed', 'go ahead', 'approved', etc.), "
+                "you may then use write tools to implement the plan."
+            )
+
         return (
             f"Current working directory: {self.working_directory}\n"
             f"Available project directories: /app (this agent), /projects/ (sibling projects)\n\n"
@@ -323,6 +462,7 @@ class Repl:
             f"Remember: Always plan before you act. Explore the codebase, reason with the think tool, "
             f"present your plan, and only then execute changes."
             f"{persona}"
+            f"{phase_instruction}"
         )
 
     def _on_tool_call(self, name: str, args: dict[str, object]) -> None:
@@ -361,15 +501,52 @@ class Repl:
             print(f"  {dim('No assistant response to save. Send a message first.')}")
             return
 
-        plans_dir = Path(self.working_directory) / "plans"
-        plans_dir.mkdir(parents=True, exist_ok=True)
+        try:
+            filepath = save_pending_plan(name, text, self.working_directory)
+            print(f"  {green('✓')} {dim('Plan saved to')} {cyan(filepath)}")
+        except Exception as exc:
+            print(f"  {red('✗ Error saving plan:')} {exc}")
 
-        safe_name = name.replace(" ", "-")
-        safe_name = "".join(c for c in safe_name if c.isalnum() or c in "-_.")
-        filepath = plans_dir / f"{safe_name}.md"
+    def _handle_plan_create(self, parts: list[str]) -> None:
+        """Handle /plan create <topic> — generate a structured plan template."""
+        topic_parts = parts[1:] if len(parts) > 1 else []
+        if not topic_parts:
+            print(f"  {dim('Usage: /plan create <topic description>')}")
+            print(f"  {dim('Example: /plan create Add user authentication')}")
+            return
 
-        filepath.write_text(text + "\n", encoding="utf-8")
-        print(f"  {green('✓')} {dim('Plan saved to')} {cyan(str(filepath))}")
+        topic = " ".join(topic_parts)
+        template = generate_plan_template(topic)
+
+        # Save the template as a pending plan
+        safe_name = _plan_name_from_text(topic)
+        try:
+            filepath = save_pending_plan(safe_name, template, self.working_directory)
+            print(f"  {green('✓')} {bold('Plan template created:')} {cyan(filepath)}")
+            print(f"  {dim('You can now edit it or ask the agent to follow this plan.')}")
+        except Exception as exc:
+            print(f"  {red('✗ Error creating plan:')} {exc}")
+
+    def _handle_plan_list(self, subcommand: str = "") -> None:
+        """Handle /plan list and /plan list completed."""
+        show_completed = subcommand == "completed"
+        if show_completed:
+            plans = list_completed_plans(self.working_directory)
+            title = "Completed Plans"
+        else:
+            plans = list_pending_plans(self.working_directory)
+            title = "Pending Plans"
+
+        if not plans:
+            print(f"  {dim(f'No {title.lower()}.')}")
+            return
+
+        print(f"  {bold(title)}")
+        print()
+        for p in plans:
+            display_time = p.created_at[:19] if len(p.created_at) > 19 else p.created_at
+            status_tag = f"{green('✓ completed')}" if p.status == "completed" else f"{yellow('○ pending')}"
+            print(f"  {cyan(p.name.ljust(25))} {status_tag} {dim(display_time)}")
 
     def _get_last_assistant_text(self) -> str:
         for msg in reversed(self.messages):
@@ -607,10 +784,6 @@ class Repl:
         print(f"  {green('✓')} {dim('Custom persona set. It will be appended to the system prompt for all future turns.')}")
 
     def _handle_command(self, cmd: str) -> None:
-        if cmd.startswith("/plan save"):
-            self._handle_plan_save(cmd)
-            return
-
         parts = cmd.lower().split(maxsplit=1)
         match parts[0]:
             case "/help" | "/h":
@@ -705,12 +878,31 @@ class Repl:
                     print(f"  {dim('Persona:')}  {cyan(self._custom_persona)}")
                 print(f"  {dim('Cost:')}    {dim(f'${self._estimated_cost():.4f} estimated (in: {self._input_tokens_total}, out: {self._output_tokens_total})')}")
             case "/plan" | "/p":
-                if self.mode == "plan":
-                    print(f"  {dim('Already in plan mode.')}")
+                # Check for subcommands first
+                full_cmd = cmd.lower().strip()
+                if full_cmd.startswith("/plan save"):
+                    self._handle_plan_save(cmd)
+                elif full_cmd.startswith("/plan create"):
+                    parts_create = cmd.split(maxsplit=2)
+                    self._handle_plan_create(parts_create)
+                elif full_cmd.startswith("/plan list"):
+                    parts_list = cmd.split(maxsplit=2)
+                    sub = parts_list[2].strip() if len(parts_list) > 2 else ""
+                    self._handle_plan_list(sub)
+                elif full_cmd == "/plan" or full_cmd == "/p":
+                    if self.mode == "plan":
+                        print(f"  {dim('Already in plan mode.')}")
+                    else:
+                        self.mode = "plan"
+                        print(f"  {yellow('●')} {bold('PLAN mode')} {dim('— read-only exploration. Only read-only tools are available.')}")
+                        print(f"  {dim('Use /code to switch back to CODE mode.')}")
                 else:
-                    self.mode = "plan"
-                    print(f"  {yellow('●')} {bold('PLAN mode')} {dim('— read-only exploration. Only read-only tools are available.')}")
-                    print(f"  {dim('Use /code to switch back to CODE mode.')}")
+                    print(f"  {dim('Unknown plan command. Usage:')}")
+                    print(f"  {dim('  /plan              — switch to plan mode')}")
+                    print(f"  {dim('  /plan save <name>  — save last response as plan')}")
+                    print(f"  {dim('  /plan create <topic> — create a structured plan template')}")
+                    print(f"  {dim('  /plan list         — list pending plans')}")
+                    print(f"  {dim('  /plan list completed — list completed plans')}")
             case "/code":
                 if self.mode == "code":
                     print(f"  {dim('Already in code mode.')}")
