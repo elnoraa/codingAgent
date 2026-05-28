@@ -17,6 +17,7 @@ if TYPE_CHECKING:
 @dataclass
 class ToolContext:
     working_directory: str
+    restart_requested: bool = False
 
 
 @dataclass

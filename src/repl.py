@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import logging
 import os
 import time
@@ -28,6 +29,7 @@ from tools.git_push import git_push_tool
 from tools.git_status import git_status_tool
 from tools.url_fetch import url_fetch_tool
 from tools.think_tool import think_tool
+from tools.restart_session import restart_session_tool
 from tools.web_search import web_search_tool
 from .session import save_session, load_session, list_sessions
 from typing import cast
@@ -236,6 +238,7 @@ class Repl:
         self.tools.register(git_push_tool)
         self.tools.register(git_status_tool)
         self.tools.register(url_fetch_tool)
+        self.tools.register(restart_session_tool)
         self.tools.register(think_tool)
         self.tools.register(web_search_tool)
 
@@ -411,6 +414,18 @@ class Repl:
                 read_only=is_read_only,
             )
 
+            # ── Check for restart signal from restart_session tool ──────────
+            if context.restart_requested:
+                self.messages.clear()
+                self._turn_number = 0
+                self._first_code_turn_done = False
+                self._plan_pending_approval = False
+                self._plan_current_name = None
+                self._plan_auto_saved = False
+                print(f"\n  {green('✓')} {bold('Restarted.')} {dim('Session reset to turn 1.')}")
+                print()
+                return
+
             # If we never got text, clear thinking indicator
             if not thinking_shown:
                 print("\r" + " " * 70, end="", flush=True)
@@ -474,7 +489,15 @@ class Repl:
             self._output_tokens_total += estimated_output
             print(f"  {dim(f'┄ {turn_tokens} tokens used this turn')}")
 
+        except json.JSONDecodeError:
+            last_msgs = self.messages[-3:] if len(self.messages) >= 3 else self.messages
+            logger.error("JSON decode error in LLM response stream")
+            print(f"\n  {red('✗ JSON Error:')} {dim('Failed to parse API response.')}")
+            print(f"  {dim('This may indicate a transient API issue or malformed response data.')}")
+            print(f"  {dim(f'Last {len(last_msgs)} message(s) preserved.')}")
+            print(f"  {dim('Type')} {cyan('/retry')} {dim('to re-send your last message.')}")
         except Exception as exc:
+            logger.error("Unexpected error in _process_turn: %s", exc, exc_info=True)
             print(f"\n  {red('✗ Error:')} {exc}")
         print()
 
@@ -516,6 +539,16 @@ class Repl:
                 "you may then use write tools to implement the plan."
             )
 
+        # Restart instruction (CODE mode only)
+        restart_instruction = ""
+        if self.mode == "code":
+            restart_instruction = (
+                "\n\n## Automatic Session Restart\n"
+                "After you complete a task, present a summary of what was done, "
+                "and the user is satisfied, call the `restart_session` tool to reset "
+                "the session back to turn 1 for the next task."
+            )
+
         return (
             f"Current working directory: {self.working_directory}\n"
             f"Project root: {self.working_directory}\n\n"
@@ -525,6 +558,7 @@ class Repl:
             f"{persona}"
             f"{coding_agent_rules}"
             f"{phase_instruction}"
+            f"{restart_instruction}"
         )
 
     def _on_tool_call(self, name: str, args: dict[str, object]) -> None:
