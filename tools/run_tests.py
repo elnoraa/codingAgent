@@ -1,16 +1,22 @@
 from __future__ import annotations
 
+import logging
 import os
 import subprocess
 from typing import Any
 
 from tools import Tool, ToolContext
 
+from src.logging_config import get_logger
+
+logger = get_logger(__name__)
+
 
 def execute(args: dict[str, Any], _ctx: ToolContext) -> str:
     root_dir = args.get("path") or os.getcwd()
     command = args.get("command") or ""
     timeout = int(args.get("timeout", 120))
+    logger.info("execute: path=%s, command=%s, timeout=%d", root_dir, command, timeout)
 
     # If no explicit command, try to auto-detect test framework
     if not command:

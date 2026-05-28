@@ -1,10 +1,15 @@
 from __future__ import annotations
 
+import logging
 import os
 import re
 from typing import Any
 
 from tools import Tool, ToolContext
+
+from src.logging_config import get_logger
+
+logger = get_logger(__name__)
 
 IGNORE_DIRS = frozenset({
     "node_modules", ".git", ".svn", ".hg", "dist", "build", ".next", "__pycache__", ".venv",
@@ -13,11 +18,11 @@ IGNORE_DIRS = frozenset({
 
 def execute(args: dict[str, Any], _ctx: ToolContext) -> str:
     raw_pattern = args.get("pattern")
-    if not raw_pattern:
-        return 'Error: missing required argument "pattern".'
-
     search_dir = args.get("path") or os.getcwd()
     max_results = int(args.get("maxResults", 100))
+    logger.info("execute: pattern=%s, path=%s, maxResults=%d", raw_pattern, search_dir, max_results)
+    if not raw_pattern:
+        return 'Error: missing required argument "pattern".'
 
     try:
         regex = re.compile(raw_pattern, re.IGNORECASE)
@@ -50,12 +55,14 @@ def execute(args: dict[str, Any], _ctx: ToolContext) -> str:
             break
 
     if not results:
+        logger.info("No matches found for pattern=%s", raw_pattern)
         return f'No matches found for "{raw_pattern}" in {search_dir}'
 
     lines: list[str] = []
     for path, num, text in results:
         lines.append(f"{path}\n  {num}:\t{text}")
 
+    logger.info("Found %d matches for pattern=%s", len(results), raw_pattern)
     return f"Found {len(results)} match{'es' if len(results) != 1 else ''}:\n" + "\n".join(lines)
 
 

@@ -1,17 +1,22 @@
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 from tools import Tool, ToolContext
+
+from src.logging_config import get_logger
+
+logger = get_logger(__name__)
 
 
 def execute(args: dict[str, Any], _ctx: ToolContext) -> str:
     """Execute a web search using DuckDuckGo's HTML-based search (no API key needed)."""
     query = args.get("query")
+    max_results = min(int(args.get("maxResults", 5)), 20)
+    logger.info("execute: query=%s, maxResults=%d", query, max_results)
     if not query:
         return 'Error: missing required argument "query".'
-
-    max_results = min(int(args.get("maxResults", 5)), 20)
 
     try:
         import urllib.request

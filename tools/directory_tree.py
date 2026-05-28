@@ -1,9 +1,14 @@
 from __future__ import annotations
 
+import logging
 import os
 from typing import Any
 
 from tools import Tool, ToolContext
+
+from src.logging_config import get_logger
+
+logger = get_logger(__name__)
 
 IGNORE_DIRS = frozenset({
     "node_modules", ".git", ".svn", ".hg", "dist", "build", ".next",
@@ -14,6 +19,7 @@ IGNORE_DIRS = frozenset({
 def execute(args: dict[str, Any], _ctx: ToolContext) -> str:
     root_dir = args.get("path") or os.getcwd()
     max_depth = min(int(args.get("depth", 3)), 10)
+    logger.info("execute: path=%s, depth=%d", root_dir, max_depth)
 
     lines: list[str] = [root_dir + "/"]
 

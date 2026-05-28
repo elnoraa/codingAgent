@@ -7,12 +7,16 @@ Each session captures: messages, mode, working_directory, model, timestamp.
 from __future__ import annotations
 
 import json
+import logging
 import os
 import time
 from datetime import datetime
 from pathlib import Path
 from typing import cast
 
+from .logging_config import get_logger
+
+logger = get_logger(__name__)
 
 SESSION_DIR = "sessions"
 
@@ -51,6 +55,7 @@ def save_session(
     with open(filepath, "w", encoding="utf-8") as f:
         json.dump(session_data, f, indent=2, ensure_ascii=False)
 
+    logger.info("Session saved: name=%s, mode=%s, messages=%d, file=%s", safe_name, mode, len(messages), filepath)
     return filepath
 
 
@@ -69,8 +74,11 @@ def load_session(name: str, working_directory: str) -> dict[str, object] | None:
     try:
         with open(filepath, "r", encoding="utf-8") as f:
             data: dict[str, object] = json.load(f)
+        msg_count = len(cast("list[object]", data.get("messages", [])))
+        logger.info("Session loaded: name=%s, messages=%d, mode=%s", safe_name, msg_count, data.get("mode", "?"))
         return data
-    except (json.JSONDecodeError, OSError):
+    except (json.JSONDecodeError, OSError) as exc:
+        logger.warning("Failed to load session %s: %s", safe_name, exc)
         return None
 
 
@@ -101,6 +109,7 @@ def list_sessions(working_directory: str) -> list[dict[str, object]]:
 
     # Sort newest first
     sessions.sort(key=lambda s: s.get("saved_at", ""), reverse=True)  # type: ignore[arg-type, return-value]
+    logger.debug("Listed %d sessions from %s", len(sessions), s_dir)
     return sessions
 
 
@@ -112,5 +121,7 @@ def delete_session(name: str, working_directory: str) -> bool:
     filepath = os.path.join(s_dir, f"{safe_name}.json")
     if os.path.isfile(filepath):
         os.remove(filepath)
+        logger.info("Session deleted: %s", safe_name)
         return True
+    logger.warning("Session not found for deletion: %s", safe_name)
     return False

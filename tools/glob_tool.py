@@ -1,26 +1,33 @@
 from __future__ import annotations
 
 import glob as glob_mod
+import logging
 import os
 
 from typing import Any
 
 from tools import Tool, ToolContext
 
+from src.logging_config import get_logger
+
+logger = get_logger(__name__)
+
 
 def execute(args: dict[str, Any], _ctx: ToolContext) -> str:
     pattern = args.get("pattern")
+    search_dir = args.get("path") or os.getcwd()
+    logger.info("execute: pattern=%s, path=%s", pattern, search_dir)
     if not pattern:
         return 'Error: missing required argument "pattern".'
-
-    search_dir = args.get("path") or os.getcwd()
 
     try:
         matches = glob_mod.glob(pattern, root_dir=search_dir, recursive=True)
     except Exception as exc:
+        logger.error("Glob search failed: %s", exc)
         return f'Error searching for "{pattern}": {exc}'
 
     if not matches:
+        logger.info("No matches found for pattern=%s", pattern)
         return f'No files found matching "{pattern}" in {search_dir}'
 
     matches.sort()
@@ -28,6 +35,7 @@ def execute(args: dict[str, Any], _ctx: ToolContext) -> str:
         matches = matches[:200]
         matches.append(f"... and {len(matches) - 200} more")
 
+    logger.info("Found %d matches for pattern=%s", len(matches), pattern)
     return f'Found {len(matches)} result{"s" if len(matches) != 1 else ""} for "{pattern}":\n' + "\n".join(matches)
 
 

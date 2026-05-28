@@ -1,16 +1,22 @@
 from __future__ import annotations
 
+import logging
 import os
 import subprocess
 from typing import Any
 
 from tools import Tool, ToolContext
 
+from src.logging_config import get_logger
+
+logger = get_logger(__name__)
+
 
 def execute(args: dict[str, Any], _ctx: ToolContext) -> str:
     root_dir = args.get("path") or os.getcwd()
     staged = bool(args.get("staged", False))
     max_lines = int(args.get("maxLines", 200))
+    logger.info("execute: path=%s, staged=%s, maxLines=%d", root_dir, staged, max_lines)
 
     # Check if we're in a git repo
     try:

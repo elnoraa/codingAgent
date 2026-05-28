@@ -1,20 +1,25 @@
 from __future__ import annotations
 
+import logging
 import subprocess
 from typing import Any
 
 from tools import Tool, ToolContext
+
+from src.logging_config import get_logger
+
+logger = get_logger(__name__)
 
 DEFAULT_TIMEOUT = 30
 
 
 def execute(args: dict[str, Any], _ctx: ToolContext) -> str:
     command = args.get("command")
-    if not command:
-        return 'Error: missing required argument "command".'
-
     timeout = int(args.get("timeout", DEFAULT_TIMEOUT))
     workdir = args.get("workdir") or None
+    logger.info("execute: command=%s, timeout=%s, workdir=%s", command, timeout, workdir)
+    if not command:
+        return 'Error: missing required argument "command".'
 
     try:
         result = subprocess.run(
@@ -28,8 +33,10 @@ def execute(args: dict[str, Any], _ctx: ToolContext) -> str:
             cwd=workdir,
         )
     except subprocess.TimeoutExpired:
+        logger.warning("Command timed out after %ds: %s", timeout, command)
         return f"[Error] Command timed out after {timeout}s"
     except Exception as exc:
+        logger.error("Command failed: %s", exc)
         return f"[Error] {exc}"
 
     parts: list[str] = []
@@ -40,6 +47,7 @@ def execute(args: dict[str, Any], _ctx: ToolContext) -> str:
     if result.returncode != 0:
         parts.append(f"\n[Exit code: {result.returncode}]")
 
+    logger.info("Command completed (exit_code=%d, stdout_len=%d, stderr_len=%d)", result.returncode, len(result.stdout or ""), len(result.stderr or ""))
     return "\n".join(parts) if parts else "Command completed with no output."
 
 

@@ -1,15 +1,21 @@
 from __future__ import annotations
 
+import logging
 import os
 from typing import Any, cast
 
 from tools import Tool, ToolContext
+
+from src.logging_config import get_logger
+
+logger = get_logger(__name__)
 
 MAX_LINES = 1000
 
 
 def execute(args: dict[str, Any], _ctx: ToolContext) -> str:
     path = args.get("path")
+    logger.info("execute: path=%s, offset=%s, limit=%s", path, args.get("offset"), args.get("limit"))
     if not path:
         return 'Error: missing required argument "path".'
 

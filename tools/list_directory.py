@@ -1,9 +1,14 @@
 from __future__ import annotations
 
+import logging
 import os
 from typing import Any
 
 from tools import Tool, ToolContext
+
+from src.logging_config import get_logger
+
+logger = get_logger(__name__)
 
 IGNORE_DIRS = frozenset({
     "node_modules", ".git", ".svn", ".hg", "dist", "build", ".next",
@@ -15,6 +20,7 @@ def execute(args: dict[str, Any], _ctx: ToolContext) -> str:
     root_dir = args.get("path") or os.getcwd()
     show_hidden = bool(args.get("showHidden", False))
     max_items = int(args.get("maxItems", 100))
+    logger.info("execute: path=%s, showHidden=%s, maxItems=%d", root_dir, show_hidden, max_items)
 
     try:
         entries = sorted(os.scandir(root_dir), key=lambda e: (not e.is_dir(), e.name.lower()))

@@ -1,11 +1,16 @@
 from __future__ import annotations
 
+import logging
 from collections.abc import Callable
 from typing import Any, cast
 
 from anthropic import Anthropic
 from anthropic.types import MessageParam, ToolParam
 from tools import ToolContext, ToolRegistry
+
+from .logging_config import get_logger
+
+logger = get_logger(__name__)
 
 
 class LlmClient:
@@ -23,6 +28,13 @@ class LlmClient:
         self.max_tokens = max_tokens
         self.temperature = temperature
         self.top_p = top_p
+        logger.info(
+            "Client initialized: model=%s, max_tokens=%s, temperature=%s, top_p=%s",
+            model,
+            max_tokens,
+            temperature,
+            top_p,
+        )
 
     def chat_stream(
         self,
@@ -62,7 +74,13 @@ class LlmClient:
         if self.top_p != 1.0:
             extra["top_p"] = self.top_p
 
+        logger.info("Starting chat (read_only=%s, messages=%d, tools=%d)", read_only, len(messages), len(tool_defs))
+        loop_count = 0
+
         while True:
+            loop_count += 1
+            logger.debug("API request loop=%d (messages=%d)", loop_count, len(messages))
+
             with self.client.messages.stream(
                 model=self.model,
                 max_tokens=self.max_tokens,
@@ -79,7 +97,10 @@ class LlmClient:
 
             tool_blocks = [b for b in response.content if b.type == "tool_use"]
             if not tool_blocks:
+                logger.info("Chat completed (loop=%d, no more tool calls)", loop_count)
                 return
+
+            logger.info("Tool call round %d: %d tool(s) requested", loop_count, len(tool_blocks))
 
             tool_results: list[dict[str, object]] = []
             for block in tool_blocks:
@@ -91,11 +112,15 @@ class LlmClient:
                 if tool is None:
                     available = ", ".join(t.name for t in tools.get_all())
                     result = f'Error: unknown tool "{name}". Available tools: {available}'
+                    logger.warning("Unknown tool called: %s", name)
                 else:
                     try:
+                        logger.debug("Executing tool: %s with args=%s", name, _summarize_args(args))
                         result = tool.execute(args, context)
+                        logger.info("Tool %s completed (result_len=%d)", name, len(result))
                     except Exception as exc:
                         result = f"Error executing {name}: {exc}"
+                        logger.error("Tool %s raised exception: %s", name, exc)
 
                 on_tool_result(name, result)
                 tool_results.append(
@@ -107,3 +132,17 @@ class LlmClient:
                 )
 
             messages.append({"role": "user", "content": tool_results})
+
+
+def _summarize_args(args: dict[str, object]) -> str:
+    """Return a concise summary of tool arguments (for logging)."""
+    parts: list[str] = []
+    for k, v in args.items():
+        if isinstance(v, str):
+            if len(v) > 80:
+                parts.append(f"{k}={v[:80]}...")
+            else:
+                parts.append(f"{k}={v}")
+        else:
+            parts.append(f"{k}={v!r}")
+    return ", ".join(parts)

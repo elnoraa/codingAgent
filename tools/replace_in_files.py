@@ -1,10 +1,15 @@
 from __future__ import annotations
 
+import logging
 import os
 import re
 from typing import Any
 
 from tools import Tool, ToolContext
+
+from src.logging_config import get_logger
+
+logger = get_logger(__name__)
 
 IGNORE_DIRS = frozenset({
     "node_modules", ".git", ".svn", ".hg", "dist", "build", ".next",
@@ -15,15 +20,18 @@ IGNORE_DIRS = frozenset({
 def execute(args: dict[str, Any], _ctx: ToolContext) -> str:
     old_text = args.get("oldText")
     new_text = args.get("newText")
-    if not old_text:
-        return 'Error: missing required argument "oldText".'
-    if new_text is None:
-        return 'Error: missing required argument "newText".'
-
     search_dir = args.get("path") or os.getcwd()
     file_pattern = args.get("filePattern") or ""
     max_replacements = int(args.get("maxReplacements", 100))
     confirm_each = bool(args.get("confirm", False))
+    logger.info(
+        "execute: search_dir=%s, oldText_len=%d, newText_len=%d, filePattern=%s, maxReplacements=%d, confirm=%s",
+        search_dir, len(old_text or ""), len(new_text or ""), file_pattern, max_replacements, confirm_each,
+    )
+    if not old_text:
+        return 'Error: missing required argument "oldText".'
+    if new_text is None:
+        return 'Error: missing required argument "newText".'
 
     # Build list of files to process
     files_to_search: list[str] = []

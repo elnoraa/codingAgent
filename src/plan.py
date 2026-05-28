@@ -9,6 +9,7 @@ Each plan is a Markdown file with YAML front-matter containing metadata.
 
 from __future__ import annotations
 
+import logging
 import os
 import re
 import time
@@ -16,6 +17,10 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
+
+from .logging_config import get_logger
+
+logger = get_logger(__name__)
 
 
 PLANS_DIR = "plans"
@@ -71,6 +76,7 @@ created_at: {timestamp}
 """
     filepath = pending_dir / f"{safe_name}.md"
     filepath.write_text(plan_content, encoding="utf-8")
+    logger.info("Plan saved as pending: name=%s, file=%s", safe_name, filepath)
     return str(filepath)
 
 
@@ -84,6 +90,7 @@ def complete_plan(name: str, working_directory: str) -> bool:
         # Try to find a matching file
         matches = list(pending_dir.glob(f"{safe_name}*"))
         if not matches:
+            logger.warning("Plan not found for completion: name=%s", safe_name)
             return False
         src = matches[0]
 
@@ -100,6 +107,7 @@ def complete_plan(name: str, working_directory: str) -> bool:
     dst = completed_dir / src.name
     dst.write_text(updated, encoding="utf-8")
     src.unlink()
+    logger.info("Plan completed: name=%s, moved to %s", safe_name, dst)
     return True
 
 

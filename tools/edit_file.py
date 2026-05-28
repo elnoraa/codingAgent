@@ -1,14 +1,20 @@
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 from tools import Tool, ToolContext
+
+from src.logging_config import get_logger
+
+logger = get_logger(__name__)
 
 
 def execute(args: dict[str, Any], _ctx: ToolContext) -> str:
     path = args.get("path")
     old_text = args.get("oldText")
     new_text = args.get("newText")
+    logger.info("execute: path=%s, oldText_len=%d, newText_len=%d", path, len(old_text or ""), len(new_text or ""))
     if not path:
         return 'Error: missing required argument "path".'
     if not old_text:
@@ -52,6 +58,7 @@ def execute(args: dict[str, Any], _ctx: ToolContext) -> str:
 
     old_preview = old_text if len(old_text) <= 80 else old_text[:80] + "..."
     result = f'Applied edit to {path}. Replaced:\n"""\n{old_preview}\n"""'
+    logger.info("Edit applied to %s: replaced %d chars with %d chars", path, len(old_text), len(new_text))
 
     return result
 

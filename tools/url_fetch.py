@@ -1,18 +1,23 @@
 from __future__ import annotations
 
+import logging
 import subprocess
 from typing import Any
 
 from tools import Tool, ToolContext
 
+from src.logging_config import get_logger
+
+logger = get_logger(__name__)
+
 
 def execute(args: dict[str, Any], _ctx: ToolContext) -> str:
     url = args.get("url")
-    if not url:
-        return 'Error: missing required argument "url".'
-
     max_length = int(args.get("maxLength", 10000))
     timeout = int(args.get("timeout", 15))
+    logger.info("execute: url=%s, maxLength=%d, timeout=%d", url, max_length, timeout)
+    if not url:
+        return 'Error: missing required argument "url".'
 
     # Use curl to fetch the URL
     try:

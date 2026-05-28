@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import argparse
 import json
+import logging
 import os
 import signal
 import sys
@@ -9,7 +11,10 @@ from typing import Any
 from dotenv import load_dotenv
 
 from .client import LlmClient
+from .logging_config import get_logger, setup_logging
 from .repl import Repl
+
+logger = get_logger(__name__)
 
 load_dotenv()
 
@@ -101,6 +106,20 @@ def load_config() -> dict[str, Any]:
 
 
 def main() -> None:
+    # ── Parse CLI arguments ──────────────────────────────────────────────
+    parser = argparse.ArgumentParser(description="Coding Agent — AI-assisted development")
+    parser.add_argument(
+        "--log-level",
+        default=os.environ.get("LOG_LEVEL", "INFO"),
+        choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
+        help="Set the logging level (default: INFO, or LOG_LEVEL env var)",
+    )
+    args = parser.parse_args()
+
+    # ── Initialize logging ───────────────────────────────────────────────
+    setup_logging(level=args.log_level)
+    logger.info("Starting Coding Agent session (log_level=%s)", args.log_level)
+
     config = load_config()
     llm = LlmClient(
         api_key=config["api_key"],

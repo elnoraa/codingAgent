@@ -1,10 +1,15 @@
 from __future__ import annotations
 
+import logging
 import os
 import subprocess
 from typing import Any
 
 from tools import Tool, ToolContext
+
+from src.logging_config import get_logger
+
+logger = get_logger(__name__)
 
 
 def execute(args: dict[str, Any], _ctx: ToolContext) -> str:
@@ -12,6 +17,7 @@ def execute(args: dict[str, Any], _ctx: ToolContext) -> str:
     message = args.get("message") or ""
     auto_message = bool(args.get("autoMessage", True))
     all_files = bool(args.get("all", False))
+    logger.info("execute: path=%s, message=%s, autoMessage=%s, all=%s", root_dir, message, auto_message, all_files)
 
     # Check if we're in a git repo
     try:

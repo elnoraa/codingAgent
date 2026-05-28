@@ -1,10 +1,15 @@
 from __future__ import annotations
 
+import logging
 import os
 import subprocess
 from typing import Any
 
 from tools import Tool, ToolContext
+
+from src.logging_config import get_logger
+
+logger = get_logger(__name__)
 
 # Type alias for command arguments
 CmdArgs: type = list[str]
@@ -17,12 +22,12 @@ IGNORE_DIRS = frozenset({
 
 def execute(args: dict[str, Any], _ctx: ToolContext) -> str:
     pattern = args.get("pattern")
-    if not pattern:
-        return 'Error: missing required argument "pattern".'
-
     search_dir = args.get("path") or os.getcwd()
     max_results = int(args.get("maxResults", 100))
     file_pattern = args.get("filePattern") or ""
+    logger.info("execute: pattern=%s, path=%s, maxResults=%d, filePattern=%s", pattern, search_dir, max_results, file_pattern)
+    if not pattern:
+        return 'Error: missing required argument "pattern".'
 
     # Try ripgrep first (much faster), fall back to grep -r
     rg_cmd = ["rg", "-n", "--no-heading", "--max-count", "20", "-i"]

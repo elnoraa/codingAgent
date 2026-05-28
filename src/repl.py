@@ -1,12 +1,16 @@
 from __future__ import annotations
 
+import logging
 import os
 import time
 from pathlib import Path
 
 from .client import LlmClient
+from .logging_config import get_logger
 from .mode import PLAN_MODE_SYSTEM_PROMPT
 from tools import ToolContext, ToolRegistry
+
+logger = get_logger(__name__)
 from tools.read_file import read_file_tool
 from tools.write_file import write_file_tool
 from tools.edit_file import edit_file_tool
@@ -203,6 +207,11 @@ class Repl:
 
         self.tools = ToolRegistry()
         self._register_all_tools()
+        logger.info(
+            "REPL initialized: mode=%s, model=%s, max_tokens=%d, persona=%s",
+            self.mode, self.llm.model, self.max_tokens,
+            bool(self._custom_persona),
+        )
 
     def _register_all_tools(self) -> None:
         """Register all available tools into the registry.
@@ -325,6 +334,7 @@ class Repl:
         if self._plan_pending_approval and self.mode == "code":
             if self._is_approval(user_input):
                 # User approved — unlock write tools
+                logger.info("Plan approved by user: plan=%s", self._plan_current_name)
                 self._plan_pending_approval = False
                 # Keep _first_code_turn_done=True so the execution turn is write-enabled
                 self._plan_auto_saved = True  # Suppress auto-save of the upcoming summary response
@@ -339,6 +349,7 @@ class Repl:
                 print()
             else:
                 # User didn't approve — keep read-only mode, this refines the plan
+                logger.info("Plan refinement requested (not yet approved): plan=%s", self._plan_current_name)
                 pass  # Will use read-only mode below
 
         messages_before = len(self.messages)
@@ -408,11 +419,13 @@ class Repl:
             # ── Post-turn plan enforcement (code mode) ──────────────────────
             if self.mode == "code" and self._plan_auto_saved:
                 # Just finished an approved execution turn — reset for next plan-first cycle
+                logger.info("Execution turn completed, resetting plan-first cycle")
                 self._plan_auto_saved = False
                 self._first_code_turn_done = False
             elif self.mode == "code" and not self._first_code_turn_done and not self._plan_pending_approval:
                 self._first_code_turn_done = True
                 self._plan_pending_approval = True
+                logger.info("First code turn completed, entering plan review phase")
 
                 # Auto-save the assistant response as a plan
                 plan_text = self._get_last_assistant_text()
@@ -423,8 +436,10 @@ class Repl:
                     try:
                         fpath = save_pending_plan(plan_name, plan_text, self.working_directory)
                         self._plan_current_name = plan_name
+                        logger.info("Plan auto-saved: %s -> %s", plan_name, fpath)
                         print(f"\n  {dim('📋 Plan auto-saved to')} {cyan(fpath)}")
                     except Exception as exc:
+                        logger.error("Failed to auto-save plan: %s", exc)
                         print(f"\n  {dim(f'⚠ Could not auto-save plan: {exc}')}")
 
                 # Show approval prompt
@@ -436,8 +451,10 @@ class Repl:
                 if plan_text and self._plan_current_name:
                     try:
                         fpath = save_pending_plan(self._plan_current_name, plan_text, self.working_directory)
+                        logger.info("Plan updated: %s -> %s", self._plan_current_name, fpath)
                         print(f"\n  {dim('📋 Plan updated:')} {cyan(fpath)}")
                     except Exception as exc:
+                        logger.error("Failed to update plan: %s", exc)
                         print(f"\n  {dim(f'⚠ Could not update plan: {exc}')}")
 
                 # Show approval prompt again
@@ -756,8 +773,10 @@ class Repl:
             model=self.llm.model,
         )
         if result.startswith("Error:"):
+            logger.warning("Session save failed: %s", result)
             print(f"  {red('✗')} {result}")
         else:
+            logger.info("Session saved: %s -> %s", name, result)
             print(f"  {green('✓')} {dim('Session saved to')} {cyan(result)}")
 
     def _handle_session_load(self, parts: list[str]) -> None:
@@ -784,6 +803,7 @@ class Repl:
             self.mode = loaded_mode
 
         msg_count = len(self.messages)
+        logger.info("Session loaded: %s (%d messages, %s mode)", name, msg_count, loaded_mode)
         print(f"  {green('✓')} {dim('Loaded session:')} {cyan(name)} {dim(f'({msg_count} messages, {loaded_mode} mode)')}")
 
     def _handle_session_list(self) -> None:
@@ -826,6 +846,7 @@ class Repl:
             return
 
         self._custom_persona = text
+        logger.info("Custom persona set (length=%d)", len(text))
         print(f"  {green('✓')} {dim('Custom persona set. It will be appended to the system prompt for all future turns.')}")
 
     def _handle_command(self, cmd: str) -> None:
@@ -939,6 +960,7 @@ class Repl:
                         print(f"  {dim('Already in plan mode.')}")
                     else:
                         self.mode = "plan"
+                        logger.info("Switched to PLAN mode")
                         print(f"  {yellow('●')} {bold('PLAN mode')} {dim('— read-only exploration. Only read-only tools are available.')}")
                         print(f"  {dim('Use /code to switch back to CODE mode.')}")
                 else:
@@ -953,9 +975,11 @@ class Repl:
                     print(f"  {dim('Already in code mode.')}")
                 else:
                     self.mode = "code"
+                    logger.info("Switched to CODE mode")
                     print(f"  {green('●')} {bold('CODE mode')} {dim('— all tools available (read, write, execute).')}")
                     print(f"  {dim('Use /plan to switch to PLAN mode.')}")
             case "/mode":
+                logger.info("Mode check: current mode=%s", self.mode)
                 print(f"  {bold('Mode:')} {bold(self.mode.upper())}")
             case "/edit":
                 self._handle_edit()
@@ -980,6 +1004,7 @@ class Repl:
                 self._plan_current_name = None
                 self._plan_auto_saved = False
                 self._turn_number = 0
+                logger.info("Session restarted (messages cleared, plan cycle reset)")
                 print(f"  {green('✓')} {bold('Restarted.')} {dim('Session reset to turn 1 (plan-first cycle).')}")
             case "/q":
                 print(f"  {dim('Exiting...')}")
