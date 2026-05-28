@@ -31,8 +31,12 @@ from tools.think_tool import think_tool
 from tools.restart_session import restart_session_tool
 from tools.web_search import web_search_tool
 from tools.undo_tool import undo_tool
+from tools.python_tool import python_tool
 from .session import save_session, load_session, list_sessions
-from typing import cast
+from typing import cast, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from src.python_repl import PythonRepl
 
 from .plan import (
     complete_plan,
@@ -109,6 +113,8 @@ HELP_TEXT = f"""\
   /profile delete <name>  Delete a configuration profile
   /changes                Show session change log (audit trail)
   /open <filename>         Fuzzy-find and open a file by partial name
+  /python                 Show Python REPL state
+  /reset-python           Reset the Python REPL (clear all variables)
 
 {bold('Multi-line input')}
   End a line with \\  to continue typing on the next line.
@@ -182,6 +188,7 @@ class Repl:
         self._file_snapshots: dict[str, list[tuple[str, str]]] = {}
         self._change_log: list[dict[str, object]] = []
         self._context_files = context_files or []
+        self._python_repl: "PythonRepl | None" = None
 
         # Cost tracking
         self._input_tokens_total = 0
@@ -225,6 +232,7 @@ class Repl:
         self.tools.register(think_tool)
         self.tools.register(web_search_tool)
         self.tools.register(undo_tool)
+        self.tools.register(python_tool)
 
     def start(self) -> None:
         print()
@@ -994,6 +1002,31 @@ class Repl:
         except (OSError, IOError) as exc:
             print(f"  {red('✗ Error reading file:')} {exc}")
 
+    def _get_or_create_python_repl(self) -> "PythonRepl":
+        """Get or create the shared Python REPL instance."""
+        if self._python_repl is None:
+            from src.python_repl import PythonRepl
+            self._python_repl = PythonRepl()
+        return self._python_repl
+
+    def _handle_python(self) -> None:
+        """Handle /python command — show Python REPL state."""
+        repl = self._get_or_create_python_repl()
+        print(f"  {bold('Python REPL')}")
+        print(f"  {dim('Executions:')} {cyan(str(repl.execution_count))}")
+        print(f"  {dim('Errors:')}     {cyan(str(repl.error_count))}")
+        print(f"  {dim('Variables:')}  {cyan(str(len(repl.get_variables())))}")
+        print()
+        print(f"  {dim('The python tool is available to the agent.')}")
+        print(f"  {dim('Use the tool with: {\"code\": \"print(1+1)\"}')}")
+        print(f"  {dim('Type /reset-python to clear REPL state.')}")
+
+    def _handle_reset_python(self) -> None:
+        """Handle /reset-python command — reset the Python REPL."""
+        repl = self._get_or_create_python_repl()
+        repl.reset()
+        print(f"  {green('✓')} {dim('Python REPL reset. All variables cleared.')}")
+
     def _handle_profile(self, cmd: str) -> None:
         """Handle /profile command — save, load, list, delete configuration profiles."""
         parts = cmd.strip().split(maxsplit=2)
@@ -1540,6 +1573,10 @@ class Repl:
                 self._handle_changes()
             case "/open":
                 self._handle_open(parts)
+            case "/python":
+                self._handle_python()
+            case "/reset-python":
+                self._handle_reset_python()
             case "/save":
                 self._handle_session_save(parts)
             case "/load":
