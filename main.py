@@ -43,6 +43,8 @@ When you need to use a tool, explain what you're doing briefly before calling it
 
 Always use directory_tree or list_directory to explore the project structure before reading or editing files. Do not guess file paths -- verify they exist first by listing the directory.
 
+If a "coding-agent.md" file exists in the project root, read it first -- it contains MANDATORY rules you must follow.
+
 PYLANCE TYPE CHECKING: This project uses Pylance/Pyright for static type analysis at "standard" level. After editing any Python files, review your changes to avoid introducing type errors. Common issues to watch for:
 - Missing imports -- ensure all imported symbols are actually imported
 - Type mismatches -- don't pass wrong argument types to functions

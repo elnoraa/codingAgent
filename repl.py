@@ -442,6 +442,22 @@ class Repl:
         base = PLAN_MODE_SYSTEM_PROMPT if self.mode == "plan" else self.system_prompt
         persona = f"\n\n{self._custom_persona}" if self._custom_persona else ""
 
+        # ── Load coding-agent.md instructions (if present) ─────────────────
+        coding_agent_rules = ""
+        coding_agent_path = os.path.join(self.working_directory, "coding-agent.md")
+        if os.path.isfile(coding_agent_path):
+            try:
+                with open(coding_agent_path, "r", encoding="utf-8") as f:
+                    rules_text = f.read().strip()
+                if rules_text:
+                    coding_agent_rules = (
+                        "\n\n## CODING AGENT RULES (MANDATORY)\n"
+                        "The following rules are MANDATORY and MUST be followed at all times:\n"
+                        f"{rules_text}"
+                    )
+            except (OSError, IOError):
+                pass  # If we can't read it, silently skip
+
         # Phase-specific instructions
         phase_instruction = ""
         if self._plan_pending_approval and self.mode == "code":
@@ -462,6 +478,7 @@ class Repl:
             f"Remember: Always plan before you act. Explore the codebase, reason with the think tool, "
             f"present your plan, and only then execute changes."
             f"{persona}"
+            f"{coding_agent_rules}"
             f"{phase_instruction}"
         )
 
