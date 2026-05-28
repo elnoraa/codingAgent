@@ -15,10 +15,15 @@ These are MANDATORY rules. The coding agent MUST follow all instructions in this
 
 4. After successfully implementing a plan from `plans/pending/`, you MUST:
    a. Move the plan to `plans/completed/` by calling the `complete_plan` tool
-      with the plan's name. This updates its front-matter and relocates it.
+      with the plan's name. This will also automatically restart the session
+      for the next task.
 
 5. When starting a new task, check `plans/pending/` first — if a plan exists
    there that matches the task, implement it and then move it to `plans/completed/`.
+
+6. Before calling `restart_session` to reset the session, you MUST first call
+   `complete_plan` to move any pending plan to `plans/completed/`. Always call
+   `complete_plan` before `restart_session`, never after.
 
 ## Resilience & Stability Rules
 

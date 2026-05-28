@@ -978,6 +978,18 @@ class Repl:
                 if self._spinner is not None:
                     self._spinner.stop()
                     self._spinner = None
+
+                # ── Auto-complete any pending plans (safety net) ─────────────
+                pending = list_pending_plans(self.working_directory)
+                if len(pending) == 1:
+                    plan_name = pending[0].name
+                    complete_plan(plan_name, self.working_directory)
+                    logger.info("Auto-completed pending plan on restart: name=%s", plan_name)
+                    print(f"  {dim(f'📋 Auto-completed plan: {plan_name}')}")
+                elif len(pending) > 1:
+                    names = ", ".join(p.name for p in pending)
+                    print(f"  {yellow('⚠')} {dim(f'{len(pending)} pending plans remain: {names}.')}")
+
                 self.messages.clear()
                 self._turn_number = 0
                 print(f"\n  {green('✓')} {bold('Restarted.')} {dim('Session reset to turn 1.')}")
