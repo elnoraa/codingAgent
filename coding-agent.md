@@ -34,3 +34,9 @@ These are MANDATORY rules. The coding agent MUST follow all instructions in this
 4. Run tests after making changes to confirm nothing is broken.
 5. If you encounter an unexpected error, report it clearly and suggest a next step.
 6. Break complex tasks into numbered sub-steps and complete them sequentially.
+
+## File Operations Rules
+
+1. When moving or renaming files, do NOT use `write_file` (reading content and writing to a new path).
+   Instead, use `bash` with `mv`, `rename`, or `git mv` to move/rename files.
+   Using `write_file` for moves is inefficient, loses file metadata, and leaves the original file behind.
