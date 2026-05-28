@@ -43,6 +43,7 @@ from .plan import (
 )
 from .utils import bold, dim, green, yellow, cyan, red, color_json, estimate_tokens, trim_messages, blue, magenta
 from .exporter import export_as_markdown, export_as_json
+from .profiles import Profile, delete_profile, list_profiles, load_profile, save_profile
 from .prompts import list_prompts, load_prompt, save_prompt
 
 # ── Readline (command history with arrow keys) ──────────────────────────
@@ -102,6 +103,10 @@ HELP_TEXT = f"""\
   /prompt list            List all prompt templates
   /prompt load <name>     Load a prompt template
   /prompt save <name>     Save last assistant response as a prompt
+  /profile list           List all saved configuration profiles
+  /profile load <name>    Load a configuration profile
+  /profile save <name>    Save current config as a profile
+  /profile delete <name>  Delete a configuration profile
 
 {bold('Multi-line input')}
   End a line with \\  to continue typing on the next line.
@@ -752,6 +757,93 @@ class Repl:
         out_cost = (self._output_tokens_total / 1_000_000) * pricing["output"]
         return in_cost + out_cost
 
+    def _handle_profile(self, cmd: str) -> None:
+        """Handle /profile command — save, load, list, delete configuration profiles."""
+        parts = cmd.strip().split(maxsplit=2)
+        subcommand = parts[1].lower() if len(parts) > 1 else "list"
+
+        if subcommand == "save":
+            if len(parts) < 3:
+                print(f"  {dim('Usage: /profile save <name>')}")
+                return
+            name = parts[2].strip()
+            profile_data = {
+                "model": self.llm.model,
+                "max_tokens": self.max_tokens,
+                "temperature": self.llm.temperature,
+                "top_p": self.llm.top_p,
+                "system_prompt": self.system_prompt,
+                "custom_persona": self._custom_persona,
+            }
+            try:
+                filepath = save_profile(name, profile_data, self.working_directory)
+                print(f"  {green('✓')} {dim('Profile saved to')} {cyan(filepath)}")
+            except Exception as exc:
+                print(f"  {red('✗ Error saving profile:')} {exc}")
+
+        elif subcommand == "load":
+            if len(parts) < 3:
+                print(f"  {dim('Usage: /profile load <name>')}")
+                return
+            name = parts[2].strip()
+            profile = load_profile(name, self.working_directory)
+            if profile is None:
+                print(f"  {dim('Profile not found:')} {cyan(name)}")
+                print(f"  {dim('Use /profile list to see available profiles.')}")
+                return
+            # Apply profile values (only non-default fields)
+            applied: list[str] = []
+            if profile.model:
+                self.llm.model = profile.model
+                applied.append(f"model={profile.model}")
+            if profile.max_tokens > 0:
+                self.max_tokens = profile.max_tokens
+                applied.append(f"max_tokens={profile.max_tokens}")
+            if profile.temperature > 0:
+                self.llm.temperature = profile.temperature
+                applied.append(f"temperature={profile.temperature}")
+            if profile.top_p > 0:
+                self.llm.top_p = profile.top_p
+                applied.append(f"top_p={profile.top_p}")
+            if profile.system_prompt:
+                self.system_prompt = profile.system_prompt
+                applied.append("system_prompt=✓")
+            if profile.custom_persona:
+                self._custom_persona = profile.custom_persona
+                applied.append("persona=✓")
+            print(f"  {green('✓')} {bold(f'Profile loaded: {profile.name}')}")
+            for item in applied:
+                print(f"    {dim('•')} {cyan(item)}")
+
+        elif subcommand == "list":
+            profiles = list_profiles(self.working_directory)
+            if not profiles:
+                print(f"  {dim('No saved profiles found.')}")
+                print(f"  {dim('Use /profile save <name> to save the current configuration.')}")
+                return
+            print(f"  {bold('Saved Profiles')}")
+            print()
+            for p in profiles:
+                model_str = p.model if p.model else "(default)"
+                print(f"  {cyan(p.name.ljust(20))} {dim(model_str)}")
+
+        elif subcommand == "delete":
+            if len(parts) < 3:
+                print(f"  {dim('Usage: /profile delete <name>')}")
+                return
+            name = parts[2].strip()
+            if delete_profile(name, self.working_directory):
+                print(f"  {green('✓')} {dim('Profile deleted:')} {cyan(name)}")
+            else:
+                print(f"  {dim('Profile not found:')} {cyan(name)}")
+
+        else:
+            print(f"  {dim('Unknown profile command. Usage:')}")
+            print(f"  {dim('  /profile list              — list all profiles')}")
+            print(f"  {dim('  /profile load <name>       — load a configuration profile')}")
+            print(f"  {dim('  /profile save <name>       — save current config as profile')}")
+            print(f"  {dim('  /profile delete <name>     — delete a profile')}")
+
     def _handle_cost(self) -> None:
         """Show detailed cost breakdown."""
         system_prompt = self._get_system_prompt()
@@ -1205,6 +1297,8 @@ class Repl:
                 self._handle_config()
             case "/prompt":
                 self._handle_prompt(cmd)
+            case "/profile":
+                self._handle_profile(cmd)
             case "/save":
                 self._handle_session_save(parts)
             case "/load":
