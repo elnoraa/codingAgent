@@ -77,6 +77,7 @@ HELP_TEXT = f"""\
 {bold('Commands')}
   exit, /q                Exit the agent
   /help, /h               Show this help
+  /help <command>         Show detailed help for a specific command
   /clear, /c              Clear conversation history
   /tools                  List available tools
   /history                Show detailed message/token/role breakdown
@@ -149,6 +150,271 @@ HELP_TEXT = f"""\
   CODE mode  {green('●')}  All tools available (read + write + execute)
   PLAN mode  {yellow('●')}  Read-only exploration & planning (read-only tools only)
   ASK mode   {magenta('●')}  Read-only Q&A & explanation (read-only tools only)"""
+
+COMMAND_HELP: dict[str, str] = {
+    "save": """\
+Usage: /save <name>
+
+Saves the current session (messages, mode, model, working directory)
+to a JSON file in the sessions/ directory.
+
+Examples:
+  /save my-session       Save as "my-session"
+  /save project-analysis Save as "project-analysis"
+
+See also: /load, /sessions""",
+    "load": """\
+Usage: /load <name>
+
+Loads a previously saved session from the sessions/ directory.
+Restores messages, mode, and working directory.
+
+Examples:
+  /load my-session
+
+See also: /save, /sessions""",
+    "sessions": """\
+Usage: /sessions
+
+Lists all saved sessions with timestamps, message count, and mode.
+Sessions are stored as JSON files in the sessions/ directory.
+
+See also: /save, /load""",
+    "help": """\
+Usage: /help [<command>]
+
+With no arguments: shows the full list of available commands and tools.
+With a command name: shows detailed help for that specific command.
+
+Examples:
+  /help              Show all commands
+  /help save         Show detailed help for /save
+  /help /prompt      Also works with leading slash""",
+    "clear": """\
+Usage: /clear or /c
+
+Clears the conversation history (all messages).
+Does not affect mode, model, or other settings.
+
+See also: /restart""",
+    "tools": """\
+Usage: /tools
+
+Lists all tools available in the current mode.
+- In CODE mode: all tools are available (read + write + execute)
+- In PLAN mode: only read-only tools
+- In ASK mode: only read-only tools""",
+    "history": """\
+Usage: /history
+
+Shows a detailed breakdown of all messages in the current session,
+including role (user/assistant), estimated tokens, and preview text.
+
+See also: /status""",
+    "status": """\
+Usage: /status or /s
+
+Shows the current session status: mode, model, max tokens,
+message count, estimated tokens, uptime, working directory,
+custom persona (if set), and estimated cost.
+
+See also: /history, /cost""",
+    "mode": """\
+Usage: /mode
+
+Shows the current mode: CODE, PLAN, or ASK.
+
+Modes:
+  CODE  - All tools available (read + write + execute)
+  PLAN  - Read-only exploration & planning
+  ASK   - Read-only Q&A & explanation
+
+See also: /plan, /ask, /code""",
+    "plan": """\
+Usage: /plan or /p
+
+Switches to PLAN mode (read-only exploration and planning).
+
+Subcommands:
+  /plan save <name>       Save last assistant response as a plan file
+  /plan create <topic>    Create a structured plan template for a task
+  /plan list              List pending plans
+  /plan list completed    List completed plans
+
+See also: /ask, /code""",
+    "ask": """\
+Usage: /ask or /a
+
+Switches to ASK mode (read-only Q&A). In this mode, only
+read-only tools are available for asking questions about the codebase.
+
+See also: /plan, /code""",
+    "code": """\
+Usage: /code
+
+Switches to CODE mode where all tools are available, including
+read, write, and execute operations.
+
+See also: /plan, /ask""",
+    "edit": """\
+Usage: /edit
+
+Edits the last user message and re-sends it. Shows the previous
+message content, then prompts for the new content.
+
+See also: /retry""",
+    "retry": """\
+Usage: /retry or /r
+
+Re-sends the last user message with the same content.
+Useful after an API error or when you want the LLM to try again.
+
+See also: /edit""",
+    "persona": """\
+Usage: /persona <text>
+       /persona clear
+
+Sets a custom persona that gets appended to the system prompt.
+Use /persona clear to remove the custom persona.
+
+Examples:
+  /persona You are an expert Python developer
+  /persona clear""",
+    "reload": """\
+Usage: /reload
+
+Re-discovers and re-registers all tools from disk. Useful after
+adding new tool modules without restarting the agent.
+
+See also: /restart""",
+    "restart": """\
+Usage: /restart
+
+Resets the session to turn 1 by clearing all messages.
+Does not change mode, model, or other settings.
+
+See also: /clear""",
+    "cost": """\
+Usage: /cost
+
+Shows detailed cost breakdown: model pricing, input/output tokens,
+system prompt tokens, and estimated total cost in USD.
+
+Pricing is based on the MODEL_PRICING dict in src/repl.py.""",
+    "export": """\
+Usage: /export [md|json] [path]
+
+Exports the conversation history as Markdown or JSON.
+Default format is Markdown. If no path is given, creates a
+timestamped file in the exports/ directory.
+
+Examples:
+  /export                  Export as Markdown (default)
+  /export json             Export as JSON
+  /export json ./chat.json Export to a specific path""",
+    "search": """\
+Usage: /search <pattern>
+       /search -r <regex>
+
+Searches the conversation history for a text pattern or regex.
+
+Examples:
+  /search error            Find messages containing "error"
+  /search -r \\d+\\.\\d+     Find messages matching a regex pattern""",
+    "model": """\
+Usage: /model [name]
+
+Shows the current model, or switches to a different model.
+
+Examples:
+  /model                   Show current model
+  /model claude-3-5-sonnet-20241022  Switch model""",
+    "cd": """\
+Usage: /cd [path]
+
+Changes the working directory. With no arguments, shows the
+current working directory.
+
+Examples:
+  /cd                      Show current directory
+  /cd src                  Change to src/ directory
+  /cd ..                   Go up one directory""",
+    "rollback": """\
+Usage: /rollback
+
+Asks the agent to undo file changes. The agent can list and
+revert file snapshots automatically using the undo tool.
+
+See also: undo (tool)""",
+    "config": """\
+Usage: /config
+
+Shows the current configuration: model, max tokens, temperature,
+top-p, base URL, and custom persona (if set).""",
+    "prompt": """\
+Usage:
+  /prompt list              List all prompt templates
+  /prompt load <name>       Load a prompt template
+  /prompt save <name>       Save last assistant response as a prompt
+
+Includes built-in templates: refactor, fix-bug, add-feature,
+write-tests, code-review. Custom templates are stored in prompts/.""",
+    "profile": """\
+Usage:
+  /profile list             List all saved configuration profiles
+  /profile load <name>      Load a configuration profile
+  /profile save <name>      Save current config as a profile
+  /profile delete <name>    Delete a configuration profile
+
+Profiles store model, max_tokens, temperature, top_p, and persona.""",
+    "changes": """\
+Usage: /changes
+
+Shows the session change log (audit trail) of all file modifications
+made during the session via write_file, edit_file, and replace_in_files.
+
+The log is in-memory only and is lost when the session ends.""",
+    "open": """\
+Usage: /open <partial-filename>
+
+Fuzzy-finds and opens a file by partial name. Walks the project tree
+(skipping hidden directories) and shows matching files.
+If exactly one match is found, it is auto-opened with a preview.
+
+Examples:
+  /open main               Find files with "main" in the name
+  /open utils              Find files with "utils" in the name""",
+    "python": """\
+Usage: /python
+
+Shows the Python REPL state: number of executions, errors, and
+defined variables. The python tool is available to the agent for
+executing code snippets.
+
+See also: /reset-python""",
+    "reset-python": """\
+Usage: /reset-python
+
+Resets the Python REPL, clearing all variables, execution history,
+and error count.
+
+See also: /python""",
+    "deps": """\
+Usage: /deps <file>
+
+Shows what a Python file imports (its dependencies). Uses static
+analysis with the ast module. Only shows project-internal
+dependencies (standard library and third-party imports are excluded).
+
+See also: /impact""",
+    "impact": """\
+Usage: /impact <file>
+
+Shows what files import the given file (impact analysis). This
+helps understand the blast radius of changes to a file.
+
+See also: /deps""",
+}
 
 
 def _plan_name_from_text(text: str) -> str:
@@ -1517,7 +1783,21 @@ class Repl:
         parts = cmd.lower().split(maxsplit=1)
         match parts[0]:
             case "/help" | "/h":
-                print(HELP_TEXT)
+                # Check for subcommand
+                cmd_lower = cmd.lower().strip()
+                parts_help = cmd_lower.split(maxsplit=1)
+                if len(parts_help) > 1:
+                    topic = parts_help[1].lstrip("/")
+                    if topic in COMMAND_HELP:
+                        print(f"  {bold(f'Help: /{topic}')}")
+                        print()
+                        for line in COMMAND_HELP[topic].split("\n"):
+                            print(f"  {line}")
+                    else:
+                        print(f"  {dim('No detailed help available for:')} {cyan('/' + topic)}")
+                        print(f"  {dim('Use /help to see all available commands.')}")
+                else:
+                    print(HELP_TEXT)
             case "/clear" | "/c":
                 self.messages.clear()
                 print(f"  {dim('Conversation history cleared.')}")
