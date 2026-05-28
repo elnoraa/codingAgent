@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import cast
+from typing import Any, cast
 
 from anthropic import Anthropic
 from anthropic.types import MessageParam, ToolParam
@@ -15,10 +15,14 @@ class LlmClient:
         base_url: str,
         model: str,
         max_tokens: int,
+        temperature: float = 0.7,
+        top_p: float = 1.0,
     ) -> None:
         self.client = Anthropic(api_key=api_key, base_url=base_url)
         self.model = model
         self.max_tokens = max_tokens
+        self.temperature = temperature
+        self.top_p = top_p
 
     def chat_stream(
         self,
@@ -51,6 +55,13 @@ class LlmClient:
     ) -> None:
         tool_defs = tools.to_anthropic_tools(read_only=read_only)
 
+        # Build extra body params if non-default
+        extra: dict[str, Any] = {}
+        if self.temperature != 0.7:
+            extra["temperature"] = self.temperature
+        if self.top_p != 1.0:
+            extra["top_p"] = self.top_p
+
         while True:
             with self.client.messages.stream(
                 model=self.model,
@@ -58,6 +69,7 @@ class LlmClient:
                 system=system,
                 messages=cast("list[MessageParam]", messages),
                 tools=cast("list[ToolParam]", tool_defs),
+                **extra,  # type: ignore[arg-type]
             ) as stream:
                 for text in stream.text_stream:
                     on_text(text)

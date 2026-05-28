@@ -74,6 +74,9 @@ def load_config() -> dict[str, Any]:
         "model": cfg.get("model") or os.environ.get("ANTHROPIC_MODEL", "deepseek-chat"),
         "max_tokens": cfg.get("maxTokens") or int(os.environ.get("MAX_TOKENS", "4096")),
         "system_prompt": cfg.get("systemPrompt", DEFAULT_SYSTEM_PROMPT),
+        "temperature": cfg.get("temperature", 0.7),
+        "top_p": cfg.get("topP", 1.0),
+        "custom_persona": cfg.get("customPersona", ""),
     }
 
 
@@ -84,8 +87,15 @@ def main() -> None:
         base_url=config["base_url"],
         model=config["model"],
         max_tokens=config["max_tokens"],
+        temperature=config["temperature"],
+        top_p=config["top_p"],
     )
-    repl = Repl(llm=llm, system_prompt=config["system_prompt"], max_tokens=config["max_tokens"])
+    repl = Repl(
+        llm=llm,
+        system_prompt=config["system_prompt"],
+        max_tokens=config["max_tokens"],
+        custom_persona=config["custom_persona"],
+    )
     repl.start()
 
 

@@ -22,6 +22,8 @@ from tools.run_tests import run_tests_tool
 from tools.git_commit import git_commit_tool
 from tools.url_fetch import url_fetch_tool
 from tools.think_tool import think_tool
+from tools.web_search import web_search_tool
+from session import save_session, load_session, list_sessions
 from typing import cast
 
 from utils import bold, dim, green, yellow, cyan, red, color_json, estimate_tokens, trim_messages, blue, magenta
@@ -38,6 +40,14 @@ except ImportError:
     except ImportError:
         pass
 
+# ── Cost estimates per 1M tokens (in USD) ─────────────────────────────
+MODEL_PRICING: dict[str, dict[str, float]] = {
+    "deepseek-chat": {"input": 0.14, "output": 0.28},
+    "claude-3-5-sonnet-20241022": {"input": 3.00, "output": 15.00},
+    "claude-3-5-haiku-20241022": {"input": 0.80, "output": 4.00},
+    "claude-3-opus-20240229": {"input": 15.00, "output": 75.00},
+}
+
 HELP_TEXT = f"""\
 {bold('Commands')}
   exit, /q                Exit the agent
@@ -52,6 +62,13 @@ HELP_TEXT = f"""\
   /plan save <name>       Save last assistant response as a plan file
   /edit                   Edit and re-send the last user message
   /retry, /r              Re-send the last user message (e.g. after API error)
+  /save <name>            Save the current session
+  /load <name>            Load a saved session
+  /sessions               List all saved sessions
+  /persona <text>         Set a custom persona (appended to system prompt)
+  /persona clear          Clear the custom persona
+  /cost                   Show token usage and estimated API cost
+  /config                 Show current configuration
 
 {bold('Multi-line input')}
   End a line with \\  to continue typing on the next line.
@@ -73,6 +90,7 @@ HELP_TEXT = f"""\
   git_commit      Stage and commit changes
   url_fetch       Fetch a URL's content
   think           Reason step by step (no-op)
+  web_search      Search the web for information
 
 {bold('Modes')}
   CODE mode  {green('●')}  All tools available (read + write + execute)
@@ -85,6 +103,7 @@ class Repl:
         llm: LlmClient,
         system_prompt: str,
         max_tokens: int,
+        custom_persona: str = "",
     ) -> None:
         self.llm = llm
         self.system_prompt = system_prompt
@@ -94,6 +113,11 @@ class Repl:
         self.mode = "code"
         self._turn_number = 0
         self._start_time = time.time()
+        self._custom_persona = custom_persona
+
+        # Cost tracking
+        self._input_tokens_total = 0
+        self._output_tokens_total = 0
 
         self.tools = ToolRegistry()
         self.tools.register(read_file_tool)
@@ -111,6 +135,7 @@ class Repl:
         self.tools.register(git_commit_tool)
         self.tools.register(url_fetch_tool)
         self.tools.register(think_tool)
+        self.tools.register(web_search_tool)
 
     def start(self) -> None:
         print()
@@ -262,6 +287,11 @@ class Repl:
                 for m in self.messages
             )
             turn_tokens = tokens_after - tokens_before
+            # Track cumulative costs (estimated: split 50/50 in/out for simplicity)
+            estimated_input = turn_tokens // 2
+            estimated_output = turn_tokens - estimated_input
+            self._input_tokens_total += estimated_input
+            self._output_tokens_total += estimated_output
             print(f"  {dim(f'┄ {turn_tokens} tokens used this turn')}")
 
         except Exception as exc:
@@ -275,12 +305,14 @@ class Repl:
 
     def _get_system_prompt(self) -> str:
         base = PLAN_MODE_SYSTEM_PROMPT if self.mode == "plan" else self.system_prompt
+        persona = f"\n\n{self._custom_persona}" if self._custom_persona else ""
         return (
             f"Current working directory: {self.working_directory}\n"
             f"Available project directories: /app (this agent), /projects/ (sibling projects)\n\n"
             f"{base}\n\n"
             f"Remember: Always plan before you act. Explore the codebase, reason with the think tool, "
             f"present your plan, and only then execute changes."
+            f"{persona}"
         )
 
     def _on_tool_call(self, name: str, args: dict[str, object]) -> None:
@@ -414,6 +446,143 @@ class Repl:
         print(turn_label)
         self._process_turn(content, color_fn)
 
+    # ── New feature handlers ────────────────────────────────────────────
+
+    def _estimated_cost(self) -> float:
+        """Return estimated total API cost in USD."""
+        pricing = MODEL_PRICING.get(self.llm.model, {"input": 0.50, "output": 0.50})
+        in_cost = (self._input_tokens_total / 1_000_000) * pricing["input"]
+        out_cost = (self._output_tokens_total / 1_000_000) * pricing["output"]
+        return in_cost + out_cost
+
+    def _handle_cost(self) -> None:
+        """Show detailed cost breakdown."""
+        system_prompt = self._get_system_prompt()
+        system_tokens = estimate_tokens(system_prompt)
+
+        pricing = MODEL_PRICING.get(self.llm.model, {"input": 0.50, "output": 0.50})
+        in_cost = (self._input_tokens_total / 1_000_000) * pricing["input"]
+        out_cost = (self._output_tokens_total / 1_000_000) * pricing["output"]
+        total_cost = in_cost + out_cost
+
+        print(f"  {bold('Cost Breakdown')}")
+        print(f"  {dim('Model:')}    {cyan(self.llm.model)}")
+        print(f"  {dim('Pricing:')}  {dim(f'${pricing["input"]}/1M in, ${pricing["output"]}/1M out')}")
+        print()
+        print(f"  {dim('Input tokens:')}  {self._input_tokens_total}")
+        print(f"  {dim('Output tokens:')} {self._output_tokens_total}")
+        print(f"  {dim('System tokens:')} {system_tokens}")
+        print()
+        print(f"  {dim('Input cost:')}   ${in_cost:.6f}")
+        print(f"  {dim('Output cost:')}  ${out_cost:.6f}")
+        print(f"  {bold(f'Total cost:')}  {bold(f'${total_cost:.4f}')}")
+        print()
+        print(f"  {dim('Note: Cost estimates use per-model pricing. Update MODEL_PRICING')}")
+        print(f"  {dim('in repl.py if you use a different model or have custom pricing.')}")
+
+    def _handle_config(self) -> None:
+        """Show current configuration."""
+        print(f"  {bold('Configuration')}")
+        print(f"  {dim('Model:')}       {cyan(self.llm.model)}")
+        print(f"  {dim('Max tokens:')}  {cyan(str(self.max_tokens))}")
+        print(f"  {dim('Temperature:')} {cyan(str(self.llm.temperature))}")
+        print(f"  {dim('Top-p:')}       {cyan(str(self.llm.top_p))}")
+        print(f"  {dim('Base URL:')}    {dim(str(self.llm.client.base_url))}")
+        if self._custom_persona:
+            print(f"  {dim('Persona:')}     {cyan(self._custom_persona)}")
+        else:
+            print(f"  {dim('Persona:')}     {dim('(none)')}")
+
+    def _handle_session_save(self, parts: list[str]) -> None:
+        """Save the current session."""
+        if len(parts) < 2:
+            print(f"  {dim('Usage: /save <name>')}")
+            return
+        name = parts[1].strip()
+        if not name:
+            print(f"  {dim('Usage: /save <name>')}")
+            return
+
+        result = save_session(
+            name=name,
+            messages=self.messages,
+            mode=self.mode,
+            working_directory=self.working_directory,
+            model=self.llm.model,
+        )
+        if result.startswith("Error:"):
+            print(f"  {red('✗')} {result}")
+        else:
+            print(f"  {green('✓')} {dim('Session saved to')} {cyan(result)}")
+
+    def _handle_session_load(self, parts: list[str]) -> None:
+        """Load a saved session."""
+        if len(parts) < 2:
+            print(f"  {dim('Usage: /load <name>')}")
+            return
+        name = parts[1].strip()
+        if not name:
+            print(f"  {dim('Usage: /load <name>')}")
+            return
+
+        session = load_session(name, self.working_directory)
+        if session is None:
+            print(f"  {red('✗')} {dim('Session not found:')} {cyan(name)}")
+            print(f"  {dim('Use /sessions to list available sessions.')}")
+            return
+
+        loaded_msgs = session.get("messages", [])
+        if isinstance(loaded_msgs, list):
+            self.messages = cast("list[dict[str, object]]", loaded_msgs)
+        loaded_mode = session.get("mode", "code")
+        if isinstance(loaded_mode, str):
+            self.mode = loaded_mode
+
+        msg_count = len(self.messages)
+        print(f"  {green('✓')} {dim('Loaded session:')} {cyan(name)} {dim(f'({msg_count} messages, {loaded_mode} mode)')}")
+
+    def _handle_session_list(self) -> None:
+        """List all saved sessions."""
+        sessions = list_sessions(self.working_directory)
+        if not sessions:
+            print(f"  {dim('No saved sessions found.')}")
+            print(f"  {dim('Use /save <name> to save the current session.')}")
+            return
+
+        print(f"  {bold('Saved Sessions')}")
+        print()
+        for s in sessions:
+            name = cast("str", s.get("name", "?"))
+            saved_at = cast("str", s.get("saved_at", "?"))
+            mode = cast("str", s.get("mode", "?"))
+            msg_count = cast("int", s.get("message_count", 0))
+            # Truncate ISO timestamp for display
+            display_time = saved_at[:19] if len(saved_at) > 19 else saved_at
+            print(f"  {cyan(name.rjust(20))}  {dim(display_time)}  {dim(f'({msg_count} msgs, {mode})')}")
+
+    def _handle_persona(self, parts: list[str]) -> None:
+        """Set or clear the custom persona."""
+        if len(parts) < 2:
+            print(f"  {dim('Usage: /persona <text>')}")
+            print(f"  {dim('       /persona clear')}")
+            return
+
+        text = parts[1].strip()
+        if text.lower() == "clear":
+            if self._custom_persona:
+                self._custom_persona = ""
+                print(f"  {green('✓')} {dim('Custom persona cleared.')}")
+            else:
+                print(f"  {dim('No custom persona to clear.')}")
+            return
+
+        if not text:
+            print(f"  {dim('Usage: /persona <text>')}")
+            return
+
+        self._custom_persona = text
+        print(f"  {green('✓')} {dim('Custom persona set. It will be appended to the system prompt for all future turns.')}")
+
     def _handle_command(self, cmd: str) -> None:
         if cmd.startswith("/plan save"):
             self._handle_plan_save(cmd)
@@ -507,6 +676,9 @@ class Repl:
                 print(f"  {dim('Tokens:')}   ~{total_tokens + system_tokens} total (~{system_tokens} system)")
                 print(f"  {dim('Uptime:')}   {cyan(uptime_str)}")
                 print(f"  {dim('WD:')}       {dim(self.working_directory)}")
+                if self._custom_persona:
+                    print(f"  {dim('Persona:')}  {cyan(self._custom_persona)}")
+                print(f"  {dim('Cost:')}    {dim(f'${self._estimated_cost():.4f} estimated (in: {self._input_tokens_total}, out: {self._output_tokens_total})')}")
             case "/plan" | "/p":
                 if self.mode == "plan":
                     print(f"  {dim('Already in plan mode.')}")
@@ -527,6 +699,18 @@ class Repl:
                 self._handle_edit()
             case "/retry" | "/r":
                 self._handle_retry()
+            case "/cost":
+                self._handle_cost()
+            case "/config":
+                self._handle_config()
+            case "/save":
+                self._handle_session_save(parts)
+            case "/load":
+                self._handle_session_load(parts)
+            case "/sessions":
+                self._handle_session_list()
+            case "/persona":
+                self._handle_persona(parts)
             case "/q":
                 print(f"  {dim('Exiting...')}")
                 # Trigger clean exit
