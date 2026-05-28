@@ -6,11 +6,10 @@ runs independently with its own message history and tools.
 
 from __future__ import annotations
 
-import logging
-
 from tools import Tool, ToolContext
+from src.logging_config import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 def _execute_spawn_agent(args: dict[str, object], context: ToolContext) -> str:

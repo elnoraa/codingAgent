@@ -7,11 +7,10 @@ preview of their result.
 
 from __future__ import annotations
 
-import logging
-
 from tools import Tool, ToolContext
+from src.logging_config import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 def _execute_list_agents(args: dict[str, object], context: ToolContext) -> str:

@@ -124,7 +124,6 @@ HELP_TEXT = f"""\
   /model [name]            Show or switch the active model
   /cd [path]               Change working directory
   /rollback                Ask agent to undo file changes
-  undo                     List/revert file snapshots (tool)
   /config                 Show current configuration
   /prompt list            List all prompt templates
   /prompt load <name>     Load a prompt template
@@ -151,6 +150,7 @@ HELP_TEXT = f"""\
   glob            Search for files by pattern
   grep            Search file contents for text
   bash            Run shell commands
+  complete_plan   Move a plan from pending to completed
   directory_tree  Show project directory structure
   list_directory  List a directory's contents
   file_search     Full-text search via ripgrep/grep
@@ -161,8 +161,12 @@ HELP_TEXT = f"""\
   git_push        Push commits to a remote repository
   git_status      Show git status (branch, changes, unpushed commits)
   url_fetch       Fetch a URL's content
+  python          Execute Python code snippets in an embedded REPL
+  restart_session Reset session to turn 1 (clears messages)
   think           Reason step by step (no-op)
+  undo            List/revert file snapshots
   web_search      Search the web for information
+  write_plan      Save a plan to plans/pending/
   ask_user        Ask for clarification when instructions are ambiguous
   syntax_check    Validate Python files for syntax errors
   verify_content  Verify file contains/omits expected text
@@ -341,7 +345,7 @@ Usage: /cost
 Shows detailed cost breakdown: model pricing, input/output tokens,
 system prompt tokens, and estimated total cost in USD.
 
-Pricing is based on the MODEL_PRICING dict in src/repl.py.""",
+Pricing is based on the built-in MODEL_PRICING table.""",
     "export": """\
 Usage: /export [md|json] [path]
 
@@ -362,6 +366,13 @@ Searches the conversation history for a text pattern or regex.
 Examples:
   /search error            Find messages containing "error"
   /search -r \\d+\\.\\d+     Find messages matching a regex pattern""",
+    "stats": """\
+Usage: /stats
+
+Shows detailed session statistics: duration, total turns, messages,
+tokens, mode switches, turns by mode, tool usage counts, and estimated cost.
+
+See also: /status, /cost""",
     "model": """\
 Usage: /model [name]
 

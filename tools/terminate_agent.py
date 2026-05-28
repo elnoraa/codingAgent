@@ -5,11 +5,10 @@ Cleans up an agent and all its children from the orchestrator.
 
 from __future__ import annotations
 
-import logging
-
 from tools import Tool, ToolContext
+from src.logging_config import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 def _execute_terminate_agent(args: dict[str, object], context: ToolContext) -> str:
