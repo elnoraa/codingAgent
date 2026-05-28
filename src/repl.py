@@ -46,7 +46,7 @@ from .plan import (
     list_pending_plans,
     save_pending_plan,
 )
-from .utils import bold, dim, green, yellow, cyan, red, color_json, estimate_tokens, trim_messages, blue, magenta
+from .utils import bold, dim, green, yellow, cyan, red, color_json, estimate_tokens, trim_messages, blue, magenta, Spinner
 from .exporter import export_as_markdown, export_as_json
 from .custom_tools import load_custom_tools
 from .dep_analyzer import ImportGraph
@@ -471,6 +471,7 @@ class Repl:
         self._tool_start_time: float = 0.0
         self._tool_usage: dict[str, int] = {}
         self._mode_switches: int = 0
+        self._spinner: Spinner | None = None
         self._turns_by_mode: dict[str, int] = {"code": 0, "plan": 0, "ask": 0}
 
         # Cost tracking
@@ -794,8 +795,8 @@ class Repl:
                 file_snapshots=self._file_snapshots,
             )
 
-            thinking_shown = False
             text_started = False
+            self._spinner = None
             # Track token usage for this turn
             tokens_before = sum(
                 estimate_tokens(str(m.get("content", "")))
@@ -803,12 +804,11 @@ class Repl:
             )
 
             def _on_text(text: str) -> None:
-                nonlocal thinking_shown, text_started
-                if not thinking_shown:
-                    thinking_shown = True
-                    # Clear the thinking indicator line
-                    print("\r" + " " * 70, end="", flush=True)
-                    print("\r", end="", flush=True)
+                nonlocal text_started
+                # Stop spinner if still running (first text from LLM)
+                if self._spinner is not None:
+                    self._spinner.stop()
+                    self._spinner = None
                 if not text_started:
                     text_started = True
                     # Show streaming prefix
@@ -816,8 +816,9 @@ class Repl:
                     print(f"  {color_fn('┃')} ", end="", flush=True)
                 print(text, end="", flush=True)
 
-            # Show thinking indicator
-            print(f"  {dim('⟳ thinking...')}", end="", flush=True)
+            # Start animated spinner
+            self._spinner = Spinner("thinking...")
+            self._spinner.start()
 
             # Determine read-only status:
             # - Plan mode is always read-only
@@ -838,16 +839,20 @@ class Repl:
 
             # ── Check for restart signal from restart_session tool ──────────
             if context.restart_requested:
+                # Stop spinner if still running
+                if self._spinner is not None:
+                    self._spinner.stop()
+                    self._spinner = None
                 self.messages.clear()
                 self._turn_number = 0
                 print(f"\n  {green('✓')} {bold('Restarted.')} {dim('Session reset to turn 1.')}")
                 print()
                 return
 
-            # If we never got text, clear thinking indicator
-            if not thinking_shown:
-                print("\r" + " " * 70, end="", flush=True)
-                print("\r", end="", flush=True)
+            # If we never got text or tool call, clear spinner
+            if self._spinner is not None:
+                self._spinner.stop()
+                self._spinner = None
 
             # ── Show token usage for this turn ──────────────────────────────
             tokens_after = sum(
@@ -866,6 +871,10 @@ class Repl:
             self._auto_save()
 
         except json.JSONDecodeError:
+            # Stop spinner if running
+            if self._spinner is not None:
+                self._spinner.stop()
+                self._spinner = None
             last_msgs = self.messages[-3:] if len(self.messages) >= 3 else self.messages
             logger.error("JSON decode error in LLM response stream")
             print(f"\n  {red('✗ JSON Error:')} {dim('Failed to parse API response.')}")
@@ -873,6 +882,10 @@ class Repl:
             print(f"  {dim(f'Last {len(last_msgs)} message(s) preserved.')}")
             print(f"  {dim('Type')} {cyan('/retry')} {dim('to re-send your last message.')}")
         except Exception as exc:
+            # Stop spinner if running
+            if self._spinner is not None:
+                self._spinner.stop()
+                self._spinner = None
             logger.error("Unexpected error in _process_turn: %s", exc, exc_info=True)
             print(f"\n  {red('✗ Error:')} {exc}")
         print()
@@ -955,6 +968,11 @@ class Repl:
         )
 
     def _on_tool_call(self, name: str, args: dict[str, object]) -> None:
+        # Stop spinner if still running (LLM called a tool before generating text)
+        if self._spinner is not None:
+            self._spinner.stop()
+            self._spinner = None
+
         args_str = color_json(args)
         color_fn = self._turn_separator_color()
         print(f"\n  {cyan('⚡')} {bold(name)}")
@@ -995,10 +1013,17 @@ class Repl:
         suffix = ""
         if truncated:
             suffix = f" {dim(f'[+{len(result) - 250} more chars]')}"
+
+        # Show elapsed time for the tool
+        elapsed_str = ""
+        if self._tool_start_time > 0:
+            elapsed = time.time() - self._tool_start_time
+            elapsed_str = f" {dim(f'┄ {elapsed:.1f}s')}"
+
         if is_error:
-            print(f"  {red('✗')} {red(preview)}{suffix}")
+            print(f"  {red('✗')} {red(preview)}{suffix}{elapsed_str}")
         else:
-            print(f"  {green('✓')} {dim(preview)}{suffix}")
+            print(f"  {green('✓')} {dim(preview)}{suffix}{elapsed_str}")
 
         # ── Desktop notification for long-running tools ───────────────────
         if self._notifications_enabled and hasattr(self, "_tool_start_time"):
@@ -1220,16 +1245,17 @@ class Repl:
 
     def _handle_reload(self) -> None:
         """Re-discover and re-register all tools from disk."""
-        print(f"  {dim('⟳ Reloading tools...')}", end="", flush=True)
+        spinner = Spinner("Reloading tools...")
+        spinner.start()
         try:
             count = self.tools.rebuild()
-            print(f"\r  {green('✓')} {dim(f'Reloaded {count} tools.')}")
+            spinner.stop(f"  {green('✓')} {dim(f'Reloaded {count} tools.')}")
             # Show the freshly loaded tools
             for t in self.tools.get_all():
                 ro = f" {dim('(read-only)')}" if t.read_only else ""
                 print(f"    {bold(t.name)}{dim(f' — {t.description}')}{ro}")
         except Exception as exc:
-            print(f"\r  {red('✗ Error reloading tools:')} {exc}")
+            spinner.stop(f"  {red('✗ Error reloading tools:')} {exc}")
 
     # ── New feature handlers ────────────────────────────────────────────
 
@@ -1427,13 +1453,14 @@ class Repl:
     def _ensure_import_graph_built(self) -> None:
         """Build the import graph if it hasn't been built yet."""
         if not self._import_graph._built:
-            print(f"  {dim('⟳ Building import graph...')}", end="", flush=True)
+            spinner = Spinner("Building import graph...")
+            spinner.start()
             try:
                 self._import_graph.build(self.working_directory)
                 files = len(self._import_graph.get_all_files())
-                print(f"\r  {green('✓')} {dim(f'Import graph built ({files} files).')}")
+                spinner.stop(f"  {green('✓')} {dim(f'Import graph built ({files} files).')}")
             except Exception as exc:
-                print(f"\r  {red('✗ Error building import graph:')} {exc}")
+                spinner.stop(f"  {red('✗ Error building import graph:')} {exc}")
 
     def _handle_deps(self, parts: list[str]) -> None:
         """Handle /deps command — show what a file imports."""

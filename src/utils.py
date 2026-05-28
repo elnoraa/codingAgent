@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import json
-from typing import cast
+import sys
+import threading
+import time
+from typing import TextIO, cast
 
 # ── ANSI color helpers ─────────────────────────────────────────────────────
 
@@ -163,3 +166,92 @@ def _strip_orphaned_tool_results(
                 continue
         cleaned.append(msg)
     return cleaned
+
+
+# ── Animated Spinner ────────────────────────────────────────────────────────
+
+
+class Spinner:
+    """An animated terminal spinner that runs in a background thread.
+
+    Displays a rotating animation with a message while work is in progress.
+    Automatically cleans up its display line on stop.
+
+    Usage:
+        spinner = Spinner("thinking...")
+        spinner.start()
+        # ... do work ...
+        spinner.stop("  ✓ Done!")
+
+    Can also be used as a context manager:
+        with Spinner("working...") as spinner:
+            # ... do work ...
+            spinner.stop("  ✓ Done!")
+    """
+
+    # Braille dots (smooth animation) — preferred when terminal supports UTF-8
+    SPINNER_CHARS_BRAILLE = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
+    # Classic ASCII fallback for terminals that don't support Unicode
+    SPINNER_CHARS_ASCII = "|/-\\"
+
+    def __init__(
+        self,
+        message: str = "",
+        *,
+        stream: TextIO = sys.stdout,
+        delay: float = 0.1,
+    ) -> None:
+        self._message = message
+        self._stream = stream
+        self._delay = delay
+        self._running = False
+        self._thread: threading.Thread | None = None
+
+        # Auto-detect best spinner characters based on stream encoding
+        try:
+            encoding = stream.encoding or "utf-8"
+            # Test if the terminal supports braille characters
+            "⠋".encode(encoding)
+            self._chars = self.SPINNER_CHARS_BRAILLE
+        except (UnicodeEncodeError, UnicodeDecodeError):
+            self._chars = self.SPINNER_CHARS_ASCII
+
+    @property
+    def running(self) -> bool:
+        """Whether the spinner is currently animating."""
+        return self._running
+
+    def start(self) -> None:
+        """Start the spinner animation in a daemon background thread."""
+        if self._running:
+            return
+        self._running = True
+        self._thread = threading.Thread(target=self._spin, daemon=True)
+        self._thread.start()
+
+    def _spin(self) -> None:
+        i = 0
+        while self._running:
+            char = self._chars[i % len(self._chars)]
+            self._stream.write(f"\r  {bold(char)} {dim(self._message)}")
+            self._stream.flush()
+            time.sleep(self._delay)
+            i += 1
+
+    def stop(self, final_message: str = "") -> None:
+        """Stop the spinner and clear its line. Optionally write a final message."""
+        self._running = False
+        if self._thread:
+            self._thread.join(timeout=0.5)
+        # Clear the spinner line entirely
+        self._stream.write("\r" + " " * 80 + "\r")
+        if final_message:
+            self._stream.write(final_message)
+            self._stream.flush()
+
+    def __enter__(self) -> Spinner:
+        self.start()
+        return self
+
+    def __exit__(self, *args: object) -> None:
+        self.stop()
