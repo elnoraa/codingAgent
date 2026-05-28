@@ -43,6 +43,7 @@ from .plan import (
 )
 from .utils import bold, dim, green, yellow, cyan, red, color_json, estimate_tokens, trim_messages, blue, magenta
 from .exporter import export_as_markdown, export_as_json
+from .prompts import list_prompts, load_prompt, save_prompt
 
 # ── Readline (command history with arrow keys) ──────────────────────────
 _readline_available = False
@@ -98,6 +99,9 @@ HELP_TEXT = f"""\
   /rollback                Ask agent to undo file changes
   undo                     List/revert file snapshots (tool)
   /config                 Show current configuration
+  /prompt list            List all prompt templates
+  /prompt load <name>     Load a prompt template
+  /prompt save <name>     Save last assistant response as a prompt
 
 {bold('Multi-line input')}
   End a line with \\  to continue typing on the next line.
@@ -580,6 +584,62 @@ class Repl:
             display_time = p.created_at[:19] if len(p.created_at) > 19 else p.created_at
             status_tag = f"{green('✓ completed')}" if p.status == "completed" else f"{yellow('○ pending')}"
             print(f"  {cyan(p.name.ljust(25))} {status_tag} {dim(display_time)}")
+
+    def _handle_prompt(self, cmd: str) -> None:
+        """Handle /prompt command — save, load, list prompt templates."""
+        parts = cmd.strip().split(maxsplit=2)
+        subcommand = parts[1].lower() if len(parts) > 1 else "list"
+
+        if subcommand == "save":
+            if len(parts) < 3:
+                print(f"  {dim('Usage: /prompt save <name>')}")
+                print(f"  {dim('Saves the last assistant response as a prompt template.')}")
+                return
+            name = parts[2].strip()
+            text = self._get_last_assistant_text()
+            if not text:
+                print(f"  {dim('No assistant response to save. Send a message first.')}")
+                return
+            try:
+                filepath = save_prompt(name, text, self.working_directory)
+                print(f"  {green('✓')} {dim('Prompt saved to')} {cyan(filepath)}")
+            except Exception as exc:
+                print(f"  {red('✗ Error saving prompt:')} {exc}")
+
+        elif subcommand == "load":
+            if len(parts) < 3:
+                print(f"  {dim('Usage: /prompt load <name>')}")
+                return
+            name = parts[2].strip()
+            prompt = load_prompt(name, self.working_directory)
+            if prompt is None:
+                print(f"  {dim('Prompt not found:')} {cyan(name)}")
+                print(f"  {dim('Use /prompt list to see available prompts.')}")
+                return
+            tag = f"{green('built-in')}" if prompt.is_builtin else f"{yellow('custom')}"
+            print(f"  {bold(prompt.name)} {tag}")
+            print(f"  {dim('─' * 40)}")
+            for line in prompt.content.strip().split("\n"):
+                print(f"  {line}")
+
+        elif subcommand == "list":
+            prompts = list_prompts(self.working_directory)
+            if not prompts:
+                print(f"  {dim('No prompts available.')}")
+                return
+            print(f"  {bold('Prompt Templates')}")
+            print()
+            for p in prompts:
+                tag = f"{green('built-in')}" if p.is_builtin else f"{yellow('custom')}"
+                name_str = cyan(p.name.ljust(20))
+                preview = p.content[:60].replace("\n", " ") + "..."
+                print(f"  {name_str} {tag} {dim(preview)}")
+
+        else:
+            print(f"  {dim('Unknown prompt command. Usage:')}")
+            print(f"  {dim('  /prompt list              — list all prompts')}")
+            print(f"  {dim('  /prompt load <name>       — load a prompt template')}")
+            print(f"  {dim('  /prompt save <name>       — save last response as prompt')}")
 
     def _get_last_assistant_text(self) -> str:
         for msg in reversed(self.messages):
@@ -1143,6 +1203,8 @@ class Repl:
                 self._handle_export(parts)
             case "/config":
                 self._handle_config()
+            case "/prompt":
+                self._handle_prompt(cmd)
             case "/save":
                 self._handle_session_save(parts)
             case "/load":
