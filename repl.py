@@ -403,9 +403,9 @@ class Repl:
 
             # ── Post-turn plan enforcement (code mode) ──────────────────────
             if self.mode == "code" and self._plan_auto_saved:
-                # Just finished an approved execution turn — reset for plan-first on next task
+                # Just finished an approved execution turn — stay in execution mode
                 self._plan_auto_saved = False
-                self._first_code_turn_done = False
+                self._first_code_turn_done = True
             elif self.mode == "code" and not self._first_code_turn_done and not self._plan_pending_approval:
                 self._first_code_turn_done = True
                 self._plan_pending_approval = True

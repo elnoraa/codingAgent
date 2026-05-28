@@ -24,5 +24,8 @@ Thumbs.db
 
 .env*
 
+# Plans — auto-generated, not part of source
+plans/
+
 # Test
 .pytest_cache/
