@@ -59,10 +59,39 @@ def _sanitize_name(name: str) -> str:
     return safe
 
 
+def _get_next_plan_number(working_directory: str) -> int:
+    """Return the next available plan number (highest existing + 1, default 1).
+
+    Scans both plans/pending/ and plans/completed/ for .md files with
+    a leading numeric prefix (e.g. "01-", "23-") and returns max + 1.
+    """
+    _, pending_dir, completed_dir = _ensure_dirs(working_directory)
+    max_num = 0
+
+    for directory in (pending_dir, completed_dir):
+        if not directory.is_dir():
+            continue
+        for f in directory.iterdir():
+            if f.suffix != ".md":
+                continue
+            match = re.match(r"^(\d+)", f.stem)
+            if match:
+                num = int(match.group(1))
+                if num > max_num:
+                    max_num = num
+    return max_num + 1
+
+
 def save_pending_plan(name: str, content: str, working_directory: str) -> str:
-    """Save a plan to plans/pending/. Returns the file path."""
+    """Save a plan to plans/pending/. Returns the file path.
+
+    Automatically prepends a sequential numeric prefix (e.g., "01-", "02-")
+    based on the highest existing plan number in both pending/ and completed/.
+    """
     _, pending_dir, _ = _ensure_dirs(working_directory)
-    safe_name = _sanitize_name(name)
+    next_num = _get_next_plan_number(working_directory)
+    prefixed_name = f"{next_num:02d}-{name}"
+    safe_name = _sanitize_name(prefixed_name)
     timestamp = datetime.now().isoformat()
 
     # Build the Markdown file with front-matter
