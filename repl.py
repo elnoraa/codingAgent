@@ -531,5 +531,3 @@ class Repl:
                 raise EOFError()
             case _:
                 print(f"  {dim(f'Unknown command: {parts[0]}. Type /help for available commands.')}")
-
-

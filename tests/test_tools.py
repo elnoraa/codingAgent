@@ -1,0 +1,61 @@
+"""Tests for the tool registry."""
+
+from __future__ import annotations
+
+from tools import Tool, ToolContext, ToolRegistry
+
+
+def test_register_and_get() -> None:
+    def _execute(args: dict[str, object], ctx: ToolContext) -> str:
+        return "done"
+
+    registry = ToolRegistry()
+    tool = Tool(name="test_tool", description="A test tool", input_schema={}, execute=_execute)
+    registry.register(tool)
+    assert registry.get("test_tool") is tool
+    assert registry.get("nonexistent") is None
+
+
+def test_get_all() -> None:
+    registry = ToolRegistry()
+    t1 = Tool(name="t1", description="", input_schema={}, execute=lambda a, c: "")
+    t2 = Tool(name="t2", description="", input_schema={}, execute=lambda a, c: "")
+    registry.register(t1)
+    registry.register(t2)
+    assert len(registry.get_all()) == 2
+
+
+def test_get_read_only() -> None:
+    registry = ToolRegistry()
+    ro = Tool(name="read_only_tool", description="", input_schema={}, execute=lambda a, c: "", read_only=True)
+    rw = Tool(name="read_write_tool", description="", input_schema={}, execute=lambda a, c: "", read_only=False)
+    registry.register(ro)
+    registry.register(rw)
+    ro_tools = registry.get_read_only()
+    assert len(ro_tools) == 1
+    assert ro_tools[0].name == "read_only_tool"
+
+
+def test_to_anthropic_tools() -> None:
+    registry = ToolRegistry()
+    t = Tool(name="my_tool", description="Does stuff", input_schema={"type": "object"}, execute=lambda a, c: "")
+    registry.register(t)
+    result = registry.to_anthropic_tools()
+    assert len(result) == 1
+    assert result[0]["name"] == "my_tool"
+    assert result[0]["description"] == "Does stuff"
+    assert result[0]["input_schema"] == {"type": "object"}
+
+
+def test_to_anthropic_tools_read_only() -> None:
+    registry = ToolRegistry()
+    registry.register(Tool(name="ro", description="", input_schema={}, execute=lambda a, c: "", read_only=True))
+    registry.register(Tool(name="rw", description="", input_schema={}, execute=lambda a, c: "", read_only=False))
+    ro_tools = registry.to_anthropic_tools(read_only=True)
+    assert len(ro_tools) == 1
+    assert ro_tools[0]["name"] == "ro"
+
+
+def test_tool_context() -> None:
+    ctx = ToolContext(working_directory="/test/dir")
+    assert ctx.working_directory == "/test/dir"

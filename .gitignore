@@ -23,3 +23,6 @@ Thumbs.db
 *.log
 
 .env*
+
+# Test
+.pytest_cache/
