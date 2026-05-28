@@ -86,7 +86,7 @@ HELP_TEXT = f"""\
   /persona <text>         Set a custom persona (appended to system prompt)
   /persona clear          Clear the custom persona
   /reload                 Re-discover and re-register all tools from disk (no restart needed)
-  /restart                Reset session to turn 1 (clear messages, restart plan-first cycle)
+  /restart                Reset session to turn 1 (clear messages)
   /cost                   Show token usage and estimated API cost
   /config                 Show current configuration
 
@@ -117,16 +117,7 @@ HELP_TEXT = f"""\
 {bold('Modes')}
   CODE mode  {green('●')}  All tools available (read + write + execute)
   PLAN mode  {yellow('●')}  Read-only exploration & planning (read-only tools only)
-  ASK mode   {magenta('●')}  Read-only Q&A & explanation (read-only tools only)
-
-{bold('Plan-First Enforcement')}
-  In CODE mode, the first turn is automatically read-only (planning phase).
-  After the assistant presents a plan, type {green('proceed')} to approve it.
-  Write tools (write_file, edit_file, bash, etc.) are BLOCKED until you approve.
-  Plans are auto-saved to plans/pending/ and moved to plans/completed/ after approval.
-  Type {cyan('/restart')} to reset the session and start a fresh plan cycle from turn 1.
-  If you ask the assistant to refine the plan (instead of approving), the updated plan
-  is re-saved and the approval prompt is shown again."""
+  ASK mode   {magenta('●')}  Read-only Q&A & explanation (read-only tools only)"""
 
 
 def _plan_name_from_text(text: str) -> str:
@@ -149,38 +140,6 @@ def _plan_name_from_text(text: str) -> str:
 
 class Repl:
 
-    # ── Plan-first enforcement helpers ────────────────────────────────────
-
-    @staticmethod
-    def _is_approval(text: str) -> bool:
-        """Check if user input is an approval to proceed with execution."""
-        lowered = text.strip().lower()
-        approval_phrases = {
-            "proceed",
-            "go ahead",
-            "approved",
-            "approve",
-            "yes proceed",
-            "yes, proceed",
-            "let's go",
-            "lets go",
-            "let's proceed",
-            "lets proceed",
-            "do it",
-            "execute",
-            "y",
-            "yes",
-            "ok",
-            "okay",
-            "sure",
-            "looks good",
-            "looks good, proceed",
-            "approved, proceed",
-        }
-        return lowered in approval_phrases or any(
-            lowered.startswith(p) for p in ("proceed", "go ahead", "approved")
-        )
-
     def __init__(
         self,
         llm: LlmClient,
@@ -201,12 +160,6 @@ class Repl:
         # Cost tracking
         self._input_tokens_total = 0
         self._output_tokens_total = 0
-
-        # Plan-first enforcement
-        self._plan_pending_approval: bool = False
-        self._plan_current_name: str | None = None
-        self._plan_auto_saved: bool = False
-        self._first_code_turn_done: bool = False
 
         self.tools = ToolRegistry()
         self._register_all_tools()
@@ -342,28 +295,6 @@ class Repl:
     def _process_turn(self, user_input: str, color_fn: object) -> None:
         """Send a user message to the LLM, stream the response, and show token usage."""
 
-        # ── Plan approval check ────────────────────────────────────────────
-        if self._plan_pending_approval and self.mode == "code":
-            if self._is_approval(user_input):
-                # User approved — unlock write tools
-                logger.info("Plan approved by user: plan=%s", self._plan_current_name)
-                self._plan_pending_approval = False
-                # Keep _first_code_turn_done=True so the execution turn is write-enabled
-                self._plan_auto_saved = True  # Suppress auto-save of the upcoming summary response
-                # Move plan from pending to completed
-                if self._plan_current_name:
-                    cplan_name = self._plan_current_name
-                    completed = complete_plan(cplan_name, self.working_directory)
-                    if completed:
-                        print(f"  {green('✓')} {dim('Plan completed:')} {cyan(cplan_name)}")
-                    self._plan_current_name = None
-                print(f"  {green('✓')} {bold('Plan approved!')} {dim('Write tools are now available.')}")
-                print()
-            else:
-                # User didn't approve — keep read-only mode, this refines the plan
-                logger.info("Plan refinement requested (not yet approved): plan=%s", self._plan_current_name)
-                pass  # Will use read-only mode below
-
         messages_before = len(self.messages)
         self.messages.append({"role": "user", "content": user_input})
         system_prompt = self._get_system_prompt()
@@ -405,14 +336,8 @@ class Repl:
             # Determine read-only status:
             # - Plan mode is always read-only
             # - Ask mode is always read-only
-            # - First code-mode turn forces read-only (plan-first)
-            # - Pending approval keeps read-only
-            is_read_only = (
-                self.mode == "plan"
-                or self.mode == "ask"
-                or (self.mode == "code" and not self._first_code_turn_done)
-                or self._plan_pending_approval
-            )
+            # - Code mode has all tools available
+            is_read_only = self.mode == "plan" or self.mode == "ask"
 
             self.llm.chat_with_tools(
                 messages=self.messages,
@@ -429,10 +354,6 @@ class Repl:
             if context.restart_requested:
                 self.messages.clear()
                 self._turn_number = 0
-                self._first_code_turn_done = False
-                self._plan_pending_approval = False
-                self._plan_current_name = None
-                self._plan_auto_saved = False
                 print(f"\n  {green('✓')} {bold('Restarted.')} {dim('Session reset to turn 1.')}")
                 print()
                 return
@@ -441,51 +362,6 @@ class Repl:
             if not thinking_shown:
                 print("\r" + " " * 70, end="", flush=True)
                 print("\r", end="", flush=True)
-
-            # ── Post-turn plan enforcement (code mode) ──────────────────────
-            if self.mode == "code" and self._plan_auto_saved:
-                # Just finished an approved execution turn — reset for next plan-first cycle
-                logger.info("Execution turn completed, resetting plan-first cycle")
-                self._plan_auto_saved = False
-                self._first_code_turn_done = False
-            elif self.mode == "code" and not self._first_code_turn_done and not self._plan_pending_approval:
-                self._first_code_turn_done = True
-                self._plan_pending_approval = True
-                logger.info("First code turn completed, entering plan review phase")
-
-                # Auto-save the assistant response as a plan
-                plan_text = self._get_last_assistant_text()
-                if plan_text:
-                    # Generate a unique plan name from the first line or a timestamp
-                    first_line = plan_text.strip().split("\n")[0][:50]
-                    plan_name = _plan_name_from_text(first_line)
-                    try:
-                        fpath = save_pending_plan(plan_name, plan_text, self.working_directory)
-                        self._plan_current_name = plan_name
-                        logger.info("Plan auto-saved: %s -> %s", plan_name, fpath)
-                        print(f"\n  {dim('📋 Plan auto-saved to')} {cyan(fpath)}")
-                    except Exception as exc:
-                        logger.error("Failed to auto-save plan: %s", exc)
-                        print(f"\n  {dim(f'⚠ Could not auto-save plan: {exc}')}")
-
-                # Show approval prompt
-                print(f"\n  {yellow('●')} {bold('Plan is ready for review.')}")
-                print(f"  {dim('Type')} {green('proceed')} {dim('to approve and execute, or keep refining the plan.')}")
-            elif self.mode == "code" and self._plan_pending_approval and self._first_code_turn_done:
-                # Plan was refined (user didn't approve) — re-save and re-prompt
-                plan_text = self._get_last_assistant_text()
-                if plan_text and self._plan_current_name:
-                    try:
-                        fpath = save_pending_plan(self._plan_current_name, plan_text, self.working_directory)
-                        logger.info("Plan updated: %s -> %s", self._plan_current_name, fpath)
-                        print(f"\n  {dim('📋 Plan updated:')} {cyan(fpath)}")
-                    except Exception as exc:
-                        logger.error("Failed to update plan: %s", exc)
-                        print(f"\n  {dim(f'⚠ Could not update plan: {exc}')}")
-
-                # Show approval prompt again
-                print(f"\n  {yellow('●')} {bold('Updated plan is ready for review.')}")
-                print(f"  {dim('Type')} {green('proceed')} {dim('to approve and execute, or keep refining the plan.')}")
 
             # ── Show token usage for this turn ──────────────────────────────
             tokens_after = sum(
@@ -542,19 +418,6 @@ class Repl:
             except (OSError, IOError):
                 pass  # If we can't read it, silently skip
 
-        # Phase-specific instructions
-        phase_instruction = ""
-        if self._plan_pending_approval and self.mode == "code":
-            phase_instruction = (
-                "\n\n## IMPORTANT: You are in the PLAN REVIEW phase\n"
-                "The user has NOT yet approved your plan. You can ONLY use read-only tools "
-                "(directory_tree, list_directory, read_file, grep, file_search, think, url_fetch, web_search).\n"
-                "Write tools (write_file, edit_file, replace_in_files, bash, run_tests, git_commit) are BLOCKED.\n"
-                "If the user is asking you to refine or clarify the plan, do so using only read-only tools.\n"
-                "If the user approves your plan (says 'proceed', 'go ahead', 'approved', etc.), "
-                "you may then use write tools to implement the plan."
-            )
-
         # Restart instruction (CODE mode only)
         restart_instruction = ""
         if self.mode == "code":
@@ -569,11 +432,9 @@ class Repl:
             f"Current working directory: {self.working_directory}\n"
             f"Project root: {self.working_directory}\n\n"
             f"{base}\n\n"
-            f"Remember: Always plan before you act. Explore the codebase, reason with the think tool, "
-            f"present your plan, and only then execute changes."
+            f"Remember to explore the codebase with read-only tools before making changes."
             f"{persona}"
             f"{coding_agent_rules}"
-            f"{phase_instruction}"
             f"{restart_instruction}"
         )
 
@@ -1062,13 +923,9 @@ class Repl:
                 self._handle_persona(parts)
             case "/restart":
                 self.messages.clear()
-                self._first_code_turn_done = False
-                self._plan_pending_approval = False
-                self._plan_current_name = None
-                self._plan_auto_saved = False
                 self._turn_number = 0
-                logger.info("Session restarted (messages cleared, plan cycle reset)")
-                print(f"  {green('✓')} {bold('Restarted.')} {dim('Session reset to turn 1 (plan-first cycle).')}")
+                logger.info("Session restarted (messages cleared)")
+                print(f"  {green('✓')} {bold('Restarted.')} {dim('Session reset to turn 1.')}")
             case "/q":
                 print(f"  {dim('Exiting...')}")
                 # Trigger clean exit
