@@ -501,6 +501,8 @@ class Repl:
         self._recovery_mode: bool = False
         self._tool_execution_timeout: int = 120  # seconds
         self._consecutive_tool_failures: int = 0
+        self._last_mode: str = "code"  # track for mode-change announcements
+        self._mode_changed_via_command: bool = False
 
         self.tools = ToolRegistry()
         self._register_all_tools()
@@ -795,6 +797,20 @@ class Repl:
             self._turn_number += 1
             color_fn = self._turn_separator_color()
             print()
+
+            # ── Mode-change announcement (only for non-command mode changes) ─
+            if self.mode != self._last_mode and not self._mode_changed_via_command:
+                old_mode = self._last_mode.upper()
+                new_mode = self.mode.upper()
+                mode_dot = {
+                    "code": green("●"),
+                    "plan": yellow("●"),
+                    "ask": magenta("●"),
+                }.get(self.mode, "●")
+                print(f"  {mode_dot} {bold(f'{new_mode} mode')} {dim(f'(previously: {old_mode})')}")
+                print()
+            self._last_mode = self.mode
+            self._mode_changed_via_command = False
 
             try:
                 mode_tag = (
@@ -2202,6 +2218,7 @@ class Repl:
                     else:
                         self.mode = "plan"
                         self._mode_switches += 1
+                        self._mode_changed_via_command = True
                         logger.info("Switched to PLAN mode")
                         print(f"  {yellow('●')} {bold('PLAN mode')} {dim('— read-only exploration. Only read-only tools are available.')}")
                         print(f"  {dim('Use /code to switch back to CODE mode.')}")
@@ -2219,6 +2236,7 @@ class Repl:
                 else:
                     self.mode = "ask"
                     self._mode_switches += 1
+                    self._mode_changed_via_command = True
                     logger.info("Switched to ASK mode")
                     print(f"  {magenta('●')} {bold('ASK mode')} {dim('— read-only Q&A. Only read-only tools are available.')}")
                     print(f"  {dim('Use /code to switch back to CODE mode.')}")
@@ -2228,6 +2246,7 @@ class Repl:
                 else:
                     self.mode = "code"
                     self._mode_switches += 1
+                    self._mode_changed_via_command = True
                     logger.info("Switched to CODE mode")
                     print(f"  {green('●')} {bold('CODE mode')} {dim('— all tools available (read, write, execute).')}")
                     print(f"  {dim('Use /plan to switch to PLAN mode, or /ask for Q&A mode.')}")
