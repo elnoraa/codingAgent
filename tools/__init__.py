@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib
 import inspect
+import logging
 import os
 import pkgutil
 import sys
@@ -71,6 +72,36 @@ class Tool:
     interactive: bool = False
 
 
+def _reload_src_modules() -> None:
+    """Reload src.* modules in dependency order so tool modules see fresh code.
+
+    When the agent modifies its own source code (e.g., src/plan.py) and then
+    triggers a reload (via /reload or restart_session), the changes exist only
+    on disk. Python's module cache still holds the old version. This function
+    force-reloads the commonly-modified modules in dependency order so that
+    subsequent tool module reloads import from the updated code.
+    """
+    # Reload in dependency order (modules with no src.* deps first)
+    _modules = [
+        "src.logging_config",   # no src.* dependencies
+        "src.mode",             # no src.* dependencies
+        "src.plan",             # depends on src.logging_config
+        "src.session",          # depends on src.logging_config
+        "src.profiles",         # depends on src.logging_config
+        "src.notifications",    # depends on src.logging_config
+        "src.prompts",          # depends on src.mode
+        "src.python_repl",      # depends on src.logging_config
+        "src.client",           # depends on src.logging_config
+    ]
+    for mod_name in _modules:
+        if mod_name in sys.modules:
+            try:
+                importlib.reload(sys.modules[mod_name])
+            except Exception:
+                _logger = logging.getLogger(__name__)
+                _logger.warning("Failed to reload module: %s", mod_name, exc_info=True)
+
+
 def reload_tools() -> list[Tool]:
     """Re-import all tool modules from the tools/ directory and return their Tool objects.
 
@@ -78,6 +109,8 @@ def reload_tools() -> list[Tool]:
     force-reloads them, and collects any module-level variable ending in ``_tool``
     that is an instance of ``Tool``.
     """
+    _reload_src_modules()
+
     discovered: list[Tool] = []
     pkg_path = Path(__file__).parent.resolve()
 
