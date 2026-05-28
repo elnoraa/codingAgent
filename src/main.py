@@ -82,6 +82,8 @@ def load_config() -> dict[str, Any]:
         "custom_persona": cfg.get("customPersona", ""),
         "context_files": cfg.get("contextFiles", ["README*", "CONTRIBUTING*", "Makefile", "setup.py", "pyproject.toml"]),
         "custom_tools_config": cfg.get("customToolsConfig", ""),
+        "notifications_enabled": cfg.get("notifications", {}).get("enabled", False),
+        "notifications_min_duration": cfg.get("notifications", {}).get("minDuration", 10),
     }
 
 
@@ -127,6 +129,8 @@ def main() -> None:
         auto_save_interval=auto_save_interval,
         context_files=config["context_files"],
         custom_tools_config=config["custom_tools_config"],
+        notifications_enabled=config["notifications_enabled"],
+        notifications_min_duration=config["notifications_min_duration"],
     )
     repl.start()
 

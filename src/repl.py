@@ -8,6 +8,7 @@ import time
 from .client import LlmClient
 from .logging_config import get_logger
 from .mode import ASK_MODE_SYSTEM_PROMPT, PLAN_MODE_SYSTEM_PROMPT
+from .notifications import notify, should_notify
 from tools import ToolContext, ToolRegistry
 
 logger = get_logger(__name__)
@@ -179,6 +180,8 @@ class Repl:
         auto_save_interval: int = 0,
         context_files: list[str] | None = None,
         custom_tools_config: str | None = None,
+        notifications_enabled: bool = False,
+        notifications_min_duration: int = 10,
     ) -> None:
         self.llm = llm
         self.system_prompt = system_prompt
@@ -196,6 +199,9 @@ class Repl:
         self._custom_tools_config = custom_tools_config
         self._python_repl: "PythonRepl | None" = None
         self._import_graph = ImportGraph()
+        self._notifications_enabled = notifications_enabled
+        self._notifications_min_duration = notifications_min_duration
+        self._tool_start_time: float = 0.0
 
         # Cost tracking
         self._input_tokens_total = 0
@@ -518,7 +524,7 @@ class Repl:
                 context=context,
                 on_text=_on_text,
                 on_tool_call=self._on_tool_call,
-                on_tool_result=lambda _name, r: self._on_tool_result(r),
+                on_tool_result=lambda _name, r: self._on_tool_result(r, tool_name=_name),
                 read_only=is_read_only,
             )
 
@@ -648,6 +654,9 @@ class Repl:
         if len(str(args)) > 4:  # more than just "{}"
             print(f"  {color_fn('│')}   {args_str}")
 
+        # ── Track start time for notification timing ──────────────────────
+        self._tool_start_time = time.time()
+
         # ── Log file modifications for audit trail ─────────────────────────
         if name in ("write_file", "edit_file", "replace_in_files"):
             from datetime import datetime as _dt
@@ -668,7 +677,7 @@ class Repl:
                 "summary": summary,
             })
 
-    def _on_tool_result(self, result: str) -> None:
+    def _on_tool_result(self, result: str, tool_name: str = "") -> None:
         is_error = result.startswith("Error:")
         truncated = len(result) > 250
         preview = result if not truncated else result[:250]
@@ -679,6 +688,16 @@ class Repl:
             print(f"  {red('✗')} {red(preview)}{suffix}")
         else:
             print(f"  {green('✓')} {dim(preview)}{suffix}")
+
+        # ── Desktop notification for long-running tools ───────────────────
+        if self._notifications_enabled and hasattr(self, "_tool_start_time"):
+            elapsed = time.time() - self._tool_start_time
+            if should_notify(elapsed, self._notifications_min_duration):
+                tool_display = tool_name or "Tool"
+                notify(
+                    title=f"Coding Agent: {tool_display}",
+                    message=f"Completed in {elapsed:.1f}s",
+                )
 
     def _handle_plan_save(self, cmd: str) -> None:
         parts = cmd.split(maxsplit=2)
