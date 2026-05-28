@@ -107,6 +107,7 @@ HELP_TEXT = f"""\
   /profile load <name>    Load a configuration profile
   /profile save <name>    Save current config as a profile
   /profile delete <name>  Delete a configuration profile
+  /changes                Show session change log (audit trail)
 
 {bold('Multi-line input')}
   End a line with \\  to continue typing on the next line.
@@ -544,6 +545,26 @@ class Repl:
         if len(str(args)) > 4:  # more than just "{}"
             print(f"  {color_fn('│')}   {args_str}")
 
+        # ── Log file modifications for audit trail ─────────────────────────
+        if name in ("write_file", "edit_file", "replace_in_files"):
+            from datetime import datetime as _dt
+            ts = _dt.now().isoformat()
+            path_arg = str(args.get("path", ""))
+            summary = ""
+            if name == "write_file":
+                summary = f"Created/overwrote: {path_arg}"
+            elif name == "edit_file":
+                summary = f"Edited: {path_arg}"
+            elif name == "replace_in_files":
+                old = str(args.get("oldText", ""))[:40]
+                summary = f"Bulk replace '{old}...' in {path_arg}"
+            self._change_log.append({
+                "timestamp": ts,
+                "tool": name,
+                "path": path_arg,
+                "summary": summary,
+            })
+
     def _on_tool_result(self, result: str) -> None:
         is_error = result.startswith("Error:")
         truncated = len(result) > 250
@@ -785,6 +806,33 @@ class Repl:
         in_cost = (self._input_tokens_total / 1_000_000) * pricing["input"]
         out_cost = (self._output_tokens_total / 1_000_000) * pricing["output"]
         return in_cost + out_cost
+
+    def _handle_changes(self) -> None:
+        """Handle /changes command — show session change log."""
+        if not self._change_log:
+            print(f"  {dim('No changes recorded yet.')}")
+            print(f"  {dim('File modifications via write_file, edit_file, or replace_in_files')}")
+            print(f"  {dim('will appear here as they happen.')}")
+            return
+
+        print(f"  {bold('Session Change Log')}  {dim(f'({len(self._change_log)} changes)')}")
+        print()
+        for entry in self._change_log:
+            ts = str(entry.get("timestamp", ""))
+            if len(ts) > 19:
+                ts = ts[:19]
+            tool_name = str(entry.get("tool", "?"))
+            path = str(entry.get("path", ""))
+            summary = str(entry.get("summary", ""))
+            rel_path = path
+            if self.working_directory and path:
+                try:
+                    rel_path = os.path.relpath(str(path), self.working_directory)
+                except (ValueError, OSError):
+                    pass
+            print(f"  {dim(ts)} {cyan(tool_name):<18} {dim(rel_path)}")
+            if summary:
+                print(f"  {' ' * 20} {yellow(summary[:100])}")
 
     def _handle_profile(self, cmd: str) -> None:
         """Handle /profile command — save, load, list, delete configuration profiles."""
@@ -1328,6 +1376,8 @@ class Repl:
                 self._handle_prompt(cmd)
             case "/profile":
                 self._handle_profile(cmd)
+            case "/changes":
+                self._handle_changes()
             case "/save":
                 self._handle_session_save(parts)
             case "/load":
