@@ -31,6 +31,7 @@ def save_session(
     mode: str,
     working_directory: str,
     model: str,
+    is_autosave: bool = False,
 ) -> str:
     """Save the current session to a JSON file. Returns the file path."""
     s_dir = _sessions_dir(working_directory)
@@ -50,6 +51,7 @@ def save_session(
         "working_directory": working_directory,
         "model": model,
         "messages": messages,
+        "is_autosave": is_autosave,
     }
 
     with open(filepath, "w", encoding="utf-8") as f:

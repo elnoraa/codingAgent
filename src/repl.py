@@ -146,6 +146,7 @@ class Repl:
         system_prompt: str,
         max_tokens: int,
         custom_persona: str = "",
+        auto_save_interval: int = 0,
     ) -> None:
         self.llm = llm
         self.system_prompt = system_prompt
@@ -156,6 +157,7 @@ class Repl:
         self._turn_number = 0
         self._start_time = time.time()
         self._custom_persona = custom_persona
+        self._auto_save_interval = auto_save_interval
 
         # Cost tracking
         self._input_tokens_total = 0
@@ -163,6 +165,9 @@ class Repl:
 
         self.tools = ToolRegistry()
         self._register_all_tools()
+        self._auto_save_interval = 0
+        self._turns_since_auto_save = 0
+        self._last_auto_save_path: str | None = None
         logger.info(
             "REPL initialized: mode=%s, model=%s, max_tokens=%d, persona=%s",
             self.mode, self.llm.model, self.max_tokens,
@@ -211,6 +216,21 @@ class Repl:
             print()
         except KeyboardInterrupt:
             print("\nExiting...")
+        finally:
+            # Always auto-save on exit
+            if self._auto_save_interval > 0 and self._last_auto_save_path is not None:
+                try:
+                    path = save_session(
+                        name=f"autosave-exit-{int(time.time())}",
+                        messages=self.messages,
+                        mode=self.mode,
+                        working_directory=self.working_directory,
+                        model=self.llm.model,
+                        is_autosave=True,
+                    )
+                    print(f"  {dim('Auto-saved session:')} {cyan(path)}")
+                except Exception:
+                    pass
 
     def _turn_separator_color(self):
         """Return the color function for the current mode's separator."""
@@ -254,6 +274,28 @@ class Repl:
             break
 
         return "".join(lines)
+
+    def _auto_save(self) -> None:
+        """Auto-save the session if the interval has been reached."""
+        if self._auto_save_interval <= 0:
+            return
+        self._turns_since_auto_save += 1
+        if self._turns_since_auto_save < self._auto_save_interval:
+            return
+        self._turns_since_auto_save = 0
+        try:
+            path = save_session(
+                name=f"autosave-{int(time.time())}",
+                messages=self.messages,
+                mode=self.mode,
+                working_directory=self.working_directory,
+                model=self.llm.model,
+                is_autosave=True,
+            )
+            self._last_auto_save_path = path
+            logger.info("Auto-saved session: %s", path)
+        except Exception as exc:
+            logger.warning("Auto-save failed: %s", exc)
 
     def _run_loop(self) -> None:
         while True:
@@ -375,6 +417,9 @@ class Repl:
             self._input_tokens_total += estimated_input
             self._output_tokens_total += estimated_output
             print(f"  {dim(f'┄ {turn_tokens} tokens used this turn')}")
+
+            # ── Auto-save after successful turn ──────────────────────────
+            self._auto_save()
 
         except json.JSONDecodeError:
             last_msgs = self.messages[-3:] if len(self.messages) >= 3 else self.messages

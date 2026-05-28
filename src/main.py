@@ -107,11 +107,22 @@ def main() -> None:
         temperature=config["temperature"],
         top_p=config["top_p"],
     )
+    # Read auto-save interval from config.json
+    auto_save_interval = 0
+    try:
+        if os.path.exists("config.json"):
+            with open("config.json") as f:
+                raw_cfg: dict[str, object] = json.load(f)
+            auto_save_interval = int(raw_cfg.get("autoSaveInterval", 0))  # type: ignore[arg-type]
+    except Exception:
+        pass
+
     repl = Repl(
         llm=llm,
         system_prompt=config["system_prompt"],
         max_tokens=config["max_tokens"],
         custom_persona=config["custom_persona"],
+        auto_save_interval=auto_save_interval,
     )
     repl.start()
 
