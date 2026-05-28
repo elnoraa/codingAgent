@@ -20,6 +20,8 @@ from tools.diff_tool import diff_tool
 from tools.replace_in_files import replace_in_files_tool
 from tools.run_tests import run_tests_tool
 from tools.git_commit import git_commit_tool
+from tools.git_push import git_push_tool
+from tools.git_status import git_status_tool
 from tools.url_fetch import url_fetch_tool
 from tools.think_tool import think_tool
 from tools.web_search import web_search_tool
@@ -99,6 +101,8 @@ HELP_TEXT = f"""\
   replace_in_files  Bulk find-and-replace across files
   run_tests       Auto-detect and run tests
   git_commit      Stage and commit changes
+  git_push        Push commits to a remote repository
+  git_status      Show git status (branch, changes, unpushed commits)
   url_fetch       Fetch a URL's content
   think           Reason step by step (no-op)
   web_search      Search the web for information
@@ -216,6 +220,8 @@ class Repl:
         self.tools.register(replace_in_files_tool)
         self.tools.register(run_tests_tool)
         self.tools.register(git_commit_tool)
+        self.tools.register(git_push_tool)
+        self.tools.register(git_status_tool)
         self.tools.register(url_fetch_tool)
         self.tools.register(think_tool)
         self.tools.register(web_search_tool)

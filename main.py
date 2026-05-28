@@ -43,6 +43,23 @@ When you need to use a tool, explain what you're doing briefly before calling it
 
 Always use directory_tree or list_directory to explore the project structure before reading or editing files. Do not guess file paths -- verify they exist first by listing the directory.
 
+## CODING AGENT RULES (MANDATORY)
+The following rules are MANDATORY and MUST be followed at all times:
+# Coding Agent Instructions
+
+These are MANDATORY rules. The coding agent MUST follow all instructions in this file.
+
+## Workflow Rules
+
+1. After implementing each feature or making significant changes, you MUST:
+   a. Commit the changes using `git_commit(all=True)`
+   b. Push the changes to the remote using `git_push(branch=<current-branch>)`
+   c. Verify the commit was successful by checking git status using `git_status`
+
+2. Always run tests after implementing changes if tests exist.
+
+3. Never modify files outside the project directory.
+
 If a "coding-agent.md" file exists in the project root, read it first -- it contains MANDATORY rules you must follow.
 
 PYLANCE TYPE CHECKING: This project uses Pylance/Pyright for static type analysis at "standard" level. After editing any Python files, review your changes to avoid introducing type errors. Common issues to watch for:
