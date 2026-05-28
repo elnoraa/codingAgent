@@ -43,6 +43,11 @@ from tools.verify_content import verify_content_tool
 from tools.config_tool import config_tool
 from tools.git_log import git_log_tool
 from tools.environment import environment_tool
+from tools.spawn_agent import spawn_agent_tool
+from tools.list_agents import list_agents_tool
+from tools.send_to_agent import send_to_agent_tool
+from tools.terminate_agent import terminate_agent_tool
+from tools.run_swarm import run_swarm_tool
 from .session import save_session, load_session, list_sessions
 from typing import cast, TYPE_CHECKING
 
@@ -62,6 +67,7 @@ from .custom_tools import load_custom_tools
 from .dep_analyzer import ImportGraph
 from .profiles import Profile, delete_profile, list_profiles, load_profile, save_profile
 from .prompts import list_prompts, load_prompt, save_prompt
+from .orchestrator import Orchestrator
 
 # ── Readline (command history with arrow keys) ──────────────────────────
 _readline_available = False
@@ -163,6 +169,11 @@ HELP_TEXT = f"""\
   config          Show agent's current configuration
   git_log         Show git commit history
   environment     Show runtime environment details
+  spawn_agent     Spawn a sub-agent to complete a task
+  list_agents     List all active sub-agents
+  send_to_agent   Send a message to another agent
+  terminate_agent Stop and remove a sub-agent
+  run_swarm       Run a swarm of agents in a collaboration pattern
 
 {bold('Modes')}
   CODE mode  {green('●')}  All tools available (read + write + execute)
@@ -522,6 +533,14 @@ class Repl:
         self._auto_save_interval = 0
         self._turns_since_auto_save = 0
         self._last_auto_save_path: str | None = None
+
+        # Initialize the agent orchestrator for multi-agent support
+        self._orchestrator = Orchestrator(
+            default_llm=self.llm,
+            default_system_prompt=self._get_orchestrator_system_prompt(),
+            default_working_directory=self.working_directory,
+        )
+
         logger.info(
             "REPL initialized: mode=%s, model=%s, max_tokens=%d, persona=%s",
             self.mode, self.llm.model, self.max_tokens,
@@ -564,6 +583,12 @@ class Repl:
         self.tools.register(config_tool)
         self.tools.register(git_log_tool)
         self.tools.register(environment_tool)
+        # Multi-agent tools
+        self.tools.register(spawn_agent_tool)
+        self.tools.register(list_agents_tool)
+        self.tools.register(send_to_agent_tool)
+        self.tools.register(terminate_agent_tool)
+        self.tools.register(run_swarm_tool)
         # Load custom tools from config
         if self._custom_tools_config:
             custom_tools = load_custom_tools(self._custom_tools_config, self.working_directory)
@@ -910,6 +935,8 @@ class Repl:
             context = ToolContext(
                 working_directory=self.working_directory,
                 file_snapshots=self._file_snapshots,
+                orchestrator=self._orchestrator,
+                agent_id="main",
             )
 
             text_started = False
@@ -1144,6 +1171,26 @@ class Repl:
                 "   cannot proceed, explain the situation clearly so the user can provide guidance.\n"
             )
 
+        # ── Multi-agent instructions (CODE mode only) ─────────────────────────
+        multi_agent_instruction = ""
+        if self.mode == "code":
+            multi_agent_instruction = (
+                "\n\n## Multi-Agent & Swarm Support\n"
+                "You can spawn sub-agents and run agent swarms to handle complex multi-step tasks:\n\n"
+                "1. **spawn_agent** — Create a sub-agent to handle a sub-task independently.\n"
+                "   Give it a clear, self-contained task. Check results with list_agents.\n"
+                "2. **list_agents** — Check the status of your sub-agents (idle/running/completed/error).\n"
+                "3. **send_to_agent** — Send instructions, data, or results to a running agent.\n"
+                "4. **terminate_agent** — Clean up completed or stuck agents.\n"
+                "5. **run_swarm** — Run multiple agents in a collaboration pattern:\n"
+                "   • 'sequential': agents run in order, passing results forward\n"
+                "   • 'debate': multiple agents independently solve, then compare\n"
+                "   • 'broadcast': multiple agents independently solve, best result wins\n\n"
+                "Use sub-agents for: parallel file analysis, independent research tasks,\n"
+                "multi-file refactoring, code review, and any task that benefits from\n"
+                "divide-and-conquer. Always terminate agents after use to free resources."
+            )
+
         # ── Context files injection ────────────────────────────────────────
         context_section = ""
         if self._context_files:
@@ -1179,7 +1226,17 @@ class Repl:
             f"{coding_agent_rules}"
             f"{restart_instruction}"
             f"{resilience_instruction}"
+            f"{multi_agent_instruction}"
             f"{context_section}"
+        )
+
+    def _get_orchestrator_system_prompt(self) -> str:
+        """Return a base system prompt for the orchestrator (less decoration)."""
+        return (
+            f"Current working directory: {self.working_directory}\n"
+            f"Project root: {self.working_directory}\n\n"
+            f"{self.system_prompt}\n\n"
+            f"Remember to explore the codebase with read-only tools before making changes."
         )
 
     def _on_tool_call(self, name: str, args: dict[str, object]) -> None:

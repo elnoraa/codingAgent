@@ -40,3 +40,12 @@ These are MANDATORY rules. The coding agent MUST follow all instructions in this
 1. When moving or renaming files, do NOT use `write_file` (reading content and writing to a new path).
    Instead, use `bash` with `mv`, `rename`, or `git mv` to move/rename files.
    Using `write_file` for moves is inefficient, loses file metadata, and leaves the original file behind.
+
+## Multi-Agent & Swarm Rules
+
+1. When spawning sub-agents, provide clear, self-contained tasks that can be completed independently.
+2. Check agent results with `list_agents` before proceeding with dependent work.
+3. Always terminate completed sub-agents with `terminate_agent` to free resources.
+4. For swarms, prefer the `run_swarm` tool which handles lifecycle automatically.
+5. Sub-agents have a maximum nesting depth of 3 — do not attempt to spawn agents from workers.
+6. When using `send_to_agent`, use `message_type="instruction"` for delegating work and `message_type="result"` for returning data.

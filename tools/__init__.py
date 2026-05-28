@@ -20,6 +20,10 @@ class ToolContext:
     working_directory: str
     restart_requested: bool = False
     file_snapshots: dict[str, list[tuple[str, str]]] | None = None
+    orchestrator: object | None = None
+    """Reference to the Orchestrator for multi-agent support (optional)."""
+    agent_id: str = "main"
+    """ID of the agent executing this tool (default: 'main')."""
 
     def snapshot_file(self, path: str) -> None:
         """Read the current file content and store a snapshot before modification."""
