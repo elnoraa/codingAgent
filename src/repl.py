@@ -90,6 +90,8 @@ HELP_TEXT = f"""\
   /restart                Reset session to turn 1 (clear messages)
   /cost                   Show token usage and estimated API cost
   /export [md|json] [path]  Export conversation as Markdown or JSON
+  /search <pattern>        Search conversation history
+  /search -r <regex>       Search conversation with regex
   /config                 Show current configuration
 
 {bold('Multi-line input')}
@@ -704,6 +706,94 @@ class Repl:
         print(f"  {dim('Note: Cost estimates use per-model pricing. Update MODEL_PRICING')}")
         print(f"  {dim('in repl.py if you use a different model or have custom pricing.')}")
 
+    def _handle_search(self, parts: list[str]) -> None:
+        """Handle /search command — search messages for a pattern."""
+        import re as regex_module
+
+        args = " ".join(parts[1:]) if len(parts) > 1 else ""
+        use_regex = False
+        if args.startswith("-r "):
+            use_regex = True
+            args = args[3:].strip()
+
+        if not args:
+            print(f"  {dim('Usage: /search <pattern>')}")
+            print(f"  {dim('       /search -r <regex>')}")
+            return
+
+        results: list[tuple[int, str, str]] = []
+        for i, msg in enumerate(self.messages):
+            role = str(msg.get("role", "unknown"))
+            content = msg.get("content", "")
+
+            text_to_search = ""
+            if isinstance(content, str):
+                text_to_search = content
+            elif isinstance(content, list):
+                from typing import cast as _cast
+                blocks = _cast("list[dict[str, object]]", content)
+                for block in blocks:
+                    t = block.get("text")
+                    if isinstance(t, str):
+                        text_to_search += t + " "
+                    c = block.get("content")
+                    if isinstance(c, str):
+                        text_to_search += c + " "
+
+            match_found = False
+            if use_regex:
+                try:
+                    match_found = bool(regex_module.search(args, text_to_search))
+                except regex_module.error:
+                    print(f"  {red('✗')} {dim(f'Invalid regex: {args}')}")
+                    return
+            else:
+                match_found = args.lower() in text_to_search.lower()
+
+            if match_found:
+                preview = self._search_preview(text_to_search, args, use_regex)
+                results.append((i, role, preview))
+
+        if not results:
+            print(f"  {dim(f'No matches for: {args}')}")
+            return
+
+        print(f"  {bold(f'Search results for "{args}":')} {dim(f'({len(results)} matches)')}")
+        print()
+        for idx, role, preview in results:
+            role_color = green if role == "user" else cyan
+            print(f"  {dim(f'#{idx + 1}')} {role_color(role.title())} {preview}")
+
+    def _search_preview(self, text: str, pattern: str, use_regex: bool) -> str:
+        """Extract ~120 chars around the match for a preview."""
+        import re as regex_module
+
+        if use_regex:
+            match = regex_module.search(pattern, text)
+            if not match:
+                return text[:120]
+            start = max(0, match.start() - 40)
+            end = min(len(text), match.end() + 80)
+        else:
+            lower_text = text.lower()
+            lower_pattern = pattern.lower()
+            idx = lower_text.find(lower_pattern)
+            if idx == -1:
+                return text[:120]
+            start = max(0, idx - 40)
+            end = min(len(text), idx + len(pattern) + 80)
+
+        preview = text[start:end]
+        if start > 0:
+            preview = "..." + preview
+        if end < len(text):
+            preview = preview + "..."
+        # Replace newlines with spaces for single-line preview
+        preview = preview.replace("\n", " ").strip()
+        if len(preview) > 120:
+            preview = preview[:117] + "..."
+        return dim(preview)
+
     def _handle_export(self, parts: list[str]) -> None:
         """Handle /export command — export conversation as Markdown or JSON."""
         fmt = "md"
@@ -985,6 +1075,8 @@ class Repl:
                 self._handle_retry()
             case "/cost":
                 self._handle_cost()
+            case "/search":
+                self._handle_search(parts)
             case "/export":
                 self._handle_export(parts)
             case "/config":
