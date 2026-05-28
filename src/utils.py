@@ -255,3 +255,43 @@ class Spinner:
 
     def __exit__(self, *args: object) -> None:
         self.stop()
+
+
+# ── Retry / backoff utilities ─────────────────────────────────────────────
+
+import random as _random
+
+DEFAULT_MAX_RETRIES = 3
+DEFAULT_BASE_DELAY = 1.0
+DEFAULT_MAX_DELAY = 30.0
+
+
+def compute_backoff(
+    attempt: int,
+    base_delay: float = DEFAULT_BASE_DELAY,
+    max_delay: float = DEFAULT_MAX_DELAY,
+    jitter: bool = True,
+) -> float:
+    """Compute exponential backoff delay in seconds for a given attempt (0-based).
+
+    delay = min(base_delay * 2^attempt + jitter, max_delay)
+    """
+    delay = base_delay * (2 ** attempt)
+    if jitter:
+        delay += _random.uniform(0, 0.5 * delay)
+    return min(delay, max_delay)
+
+
+def is_transient_error(error: Exception) -> bool:
+    """Return True if the error is likely transient and retryable."""
+    from anthropic import (
+        APIConnectionError,
+        APIStatusError,
+        InternalServerError,
+        RateLimitError,
+    )
+    if isinstance(error, (APIConnectionError, RateLimitError, InternalServerError)):
+        return True
+    if isinstance(error, APIStatusError) and error.status_code in (429, 502, 503, 504):
+        return True
+    return False

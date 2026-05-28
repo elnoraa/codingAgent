@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import time
 from collections.abc import Callable
 from typing import Any, cast
 
@@ -9,6 +10,7 @@ from anthropic.types import MessageParam, ToolParam
 from tools import ToolContext, ToolRegistry
 
 from .logging_config import get_logger
+from .utils import compute_backoff, is_transient_error
 
 logger = get_logger(__name__)
 
@@ -42,17 +44,67 @@ class LlmClient:
         system: str,
         on_text: Callable[[str], None],
     ) -> str:
-        with self.client.messages.stream(
-            model=self.model,
-            max_tokens=self.max_tokens,
-            system=system,
-            messages=cast("list[MessageParam]", messages),
-        ) as stream:
-            full_text = ""
-            for text in stream.text_stream:
-                full_text += text
-                on_text(text)
-            return full_text
+        last_exception: Exception | None = None
+        for attempt in range(3):  # max 3 retries
+            try:
+                with self.client.messages.stream(
+                    model=self.model,
+                    max_tokens=self.max_tokens,
+                    system=system,
+                    messages=cast("list[MessageParam]", messages),
+                ) as stream:
+                    full_text = ""
+                    for text in stream.text_stream:
+                        full_text += text
+                        on_text(text)
+                    return full_text
+            except Exception as exc:
+                if attempt < 2 and is_transient_error(exc):
+                    delay = compute_backoff(attempt)
+                    logger.warning(
+                        "Transient API error (attempt %d/3): %s. Retrying in %.1fs...",
+                        attempt + 1, exc, delay,
+                    )
+                    time.sleep(delay)
+                    last_exception = exc
+                else:
+                    raise
+        raise last_exception  # type: ignore[misc] — will only be None if loop never ran
+
+    def _send_with_retry(
+        self,
+        messages: list[dict[str, object]],
+        system: str,
+        tool_defs: list[dict[str, object]],
+        **extra: Any,
+    ) -> Any:
+        """Send a messages API request with retry on transient errors.
+
+        Returns the stream context manager for use with ``with``.
+        """
+        last_exception: Exception | None = None
+        for attempt in range(3):
+            try:
+                return self.client.messages.stream(
+                    model=self.model,
+                    max_tokens=self.max_tokens,
+                    system=system,
+                    messages=cast("list[MessageParam]", messages),
+                    tools=cast("list[ToolParam]", tool_defs),
+                    **extra,  # type: ignore[arg-type]
+                )
+            except Exception as exc:
+                if attempt < 2 and is_transient_error(exc):
+                    delay = compute_backoff(attempt)
+                    logger.warning(
+                        "Transient API error (attempt %d/3): %s. Retrying in %.1fs...",
+                        attempt + 1, exc, delay,
+                    )
+                    time.sleep(delay)
+                    last_exception = exc
+                else:
+                    raise
+        raise last_exception  # type: ignore[misc]
 
     def chat_with_tools(
         self,
@@ -81,14 +133,7 @@ class LlmClient:
             loop_count += 1
             logger.debug("API request loop=%d (messages=%d)", loop_count, len(messages))
 
-            with self.client.messages.stream(
-                model=self.model,
-                max_tokens=self.max_tokens,
-                system=system,
-                messages=cast("list[MessageParam]", messages),
-                tools=cast("list[ToolParam]", tool_defs),
-                **extra,  # type: ignore[arg-type]
-            ) as stream:
+            with self._send_with_retry(messages, system, tool_defs, **extra) as stream:
                 for text in stream.text_stream:
                     on_text(text)
                 response = stream.get_final_message()

@@ -5,11 +5,13 @@ import logging
 import os
 import time
 
+import anthropic
+
 from .client import LlmClient
 from .logging_config import get_logger
 from .mode import ASK_MODE_SYSTEM_PROMPT, PLAN_MODE_SYSTEM_PROMPT
 from .notifications import notify, should_notify
-from tools import ToolContext, ToolRegistry
+from tools import Tool, ToolContext, ToolRegistry
 
 logger = get_logger(__name__)
 from tools.read_file import read_file_tool
@@ -93,6 +95,7 @@ HELP_TEXT = f"""\
   /plan list completed    List completed plans
   /edit                   Edit and re-send the last user message
   /retry, /r              Re-send the last user message (e.g. after API error)
+  /retry-auto, /ra        Re-send with escalation prompt ("try harder")
   /save <name>            Save the current session
   /load <name>            Load a saved session
   /sessions               List all saved sessions
@@ -272,6 +275,18 @@ Re-sends the last user message with the same content.
 Useful after an API error or when you want the LLM to try again.
 
 See also: /edit""",
+    "retry-auto": """\
+Usage: /retry-auto or /ra
+
+Re-sends the last user message with an escalation prompt that tells
+the agent to "try harder" and use a different approach if previous
+attempts failed. Use this when the agent gave up too early or missed
+parts of your request.
+
+The escalation includes an attempt counter so the agent knows how many
+times this task has been retried.
+
+See also: /retry""",
     "persona": """\
 Usage: /persona <text>
        /persona clear
@@ -479,6 +494,14 @@ class Repl:
         self._input_tokens_total = 0
         self._output_tokens_total = 0
 
+        # Task tracking for resilience
+        self._current_task: str = ""
+        self._task_attempts: int = 0
+        self._max_task_attempts: int = 3
+        self._recovery_mode: bool = False
+        self._tool_execution_timeout: int = 120  # seconds
+        self._consecutive_tool_failures: int = 0
+
         self.tools = ToolRegistry()
         self._register_all_tools()
         self._auto_save_interval = 0
@@ -527,6 +550,34 @@ class Repl:
             if custom_tools:
                 logger.info("Registered %d custom tool(s)", len(custom_tools))
 
+    def _execute_tool_with_timeout(
+        self,
+        tool: Tool,
+        args: dict[str, object],
+        context: ToolContext,
+        timeout: int | None = None,
+    ) -> str:
+        """Execute a tool with a timeout. Returns the result or an error message.
+
+        Uses a thread pool to enforce a maximum execution duration, preventing a
+        single hung tool (e.g. a bash command that hangs indefinitely) from
+        blocking the entire agent.
+        """
+        import concurrent.futures as _futures
+
+        effective_timeout = timeout if timeout is not None else self._tool_execution_timeout
+        try:
+            with _futures.ThreadPoolExecutor(max_workers=1) as executor:
+                future = executor.submit(tool.execute, args, context)
+                try:
+                    return future.result(timeout=effective_timeout)
+                except _futures.TimeoutError:
+                    logger.error("Tool %s timed out after %ds", tool.name, effective_timeout)
+                    return f"Error: Tool '{tool.name}' timed out after {effective_timeout} seconds."
+        except Exception as exc:
+            logger.error("Tool %s execution error: %s", tool.name, exc)
+            return f"Error executing {tool.name}: {exc}"
+
     def _setup_tab_completion(self) -> None:
         """Set up tab completion for commands using readline."""
         if not _readline_available:
@@ -538,7 +589,7 @@ class Repl:
         commands = [
             "/help", "/h", "/clear", "/c", "/tools", "/history", "/status", "/s",
             "/mode", "/plan", "/p", "/ask", "/a", "/code",
-            "/plan", "/edit", "/retry", "/r",
+            "/plan", "/edit", "/retry", "/r", "/retry-auto", "/ra",
             "/save", "/load", "/sessions", "/persona", "/reload", "/restart",
             "/cost", "/export", "/search", "/model", "/cd", "/rollback",
             "/config", "/prompt", "/profile", "/changes", "/open",
@@ -872,6 +923,15 @@ class Repl:
             # ── Auto-save after successful turn ──────────────────────────
             self._auto_save()
 
+            # ── Post-turn verification nudge (for code mode) ─────────────
+            if self.mode == "code" and self._has_recent_file_changes():
+                # Check if the assistant acknowledged doing verification
+                last_asst = self._get_last_assistant_text()
+                if last_asst and not any(
+                    word in last_asst.lower() for word in ["verified", "verification", "check", "test", "confirm"]
+                ):
+                    print(f"  {yellow('💡')} {dim('Tip: Verify your changes with read_file, diff, or run_tests.')}")
+
         except json.JSONDecodeError:
             # Stop spinner if running
             if self._spinner is not None:
@@ -883,6 +943,42 @@ class Repl:
             print(f"  {dim('This may indicate a transient API issue or malformed response data.')}")
             print(f"  {dim(f'Last {len(last_msgs)} message(s) preserved.')}")
             print(f"  {dim('Type')} {cyan('/retry')} {dim('to re-send your last message.')}")
+        except anthropic.APIConnectionError:
+            if self._spinner is not None:
+                self._spinner.stop()
+                self._spinner = None
+            logger.error("API connection error")
+            print(f"\n  {red('✗ Connection Error:')} {dim('Failed to connect to API.')}")
+            print(f"  {dim('Check your internet connection and API endpoint.')}")
+            print(f"  {dim('Type')} {cyan('/retry')} {dim('to re-send your last message.')}")
+        except anthropic.RateLimitError:
+            if self._spinner is not None:
+                self._spinner.stop()
+                self._spinner = None
+            logger.error("Rate limit exceeded")
+            print(f"\n  {red('✗ Rate Limited:')} {dim('API rate limit exceeded.')}")
+            print(f"  {dim('Waiting before retry...')}")
+            import time as _time
+            _time.sleep(5)
+            # Auto-retry the last message
+            self._handle_retry()
+        except anthropic.InternalServerError:
+            if self._spinner is not None:
+                self._spinner.stop()
+                self._spinner = None
+            logger.error("Anthropic internal server error")
+            print(f"\n  {red('✗ Server Error:')} {dim('API internal server error.')}")
+            print(f"  {dim('Waiting before retry...')}")
+            import time as _time
+            _time.sleep(3)
+            self._handle_retry()
+        except anthropic.APIError as api_err:
+            if self._spinner is not None:
+                self._spinner.stop()
+                self._spinner = None
+            logger.error("API error: %s", api_err)
+            print(f"\n  {red('✗ API Error:')} {dim(str(api_err))}")
+            print(f"  {dim('Type')} {cyan('/retry')} {dim('to re-send your last message.')}")
         except Exception as exc:
             # Stop spinner if running
             if self._spinner is not None:
@@ -890,6 +986,7 @@ class Repl:
                 self._spinner = None
             logger.error("Unexpected error in _process_turn: %s", exc, exc_info=True)
             print(f"\n  {red('✗ Error:')} {exc}")
+            print(f"  {dim('Type')} {cyan('/retry')} {dim('to re-send your last message.')}")
         print()
 
     def _show_trim_warning(self, dropped: int) -> None:
@@ -932,6 +1029,27 @@ class Repl:
                 "the session back to turn 1 for the next task."
             )
 
+        # ── Resilience instructions (CODE mode only) ─────────────────────────
+        resilience_instruction = ""
+        if self.mode == "code":
+            resilience_instruction = (
+                "\n\n## Resilience & Task Completion\n"
+                "You are expected to complete tasks to the best of your ability. Follow these guidelines:\n\n"
+                "1. **Persist through errors**: If a tool call fails with a transient error (network, timeout),\n"
+                "   retry it after adjusting parameters if needed. Do not give up on the first failure.\n"
+                "2. **Self-verify changes**: After making file changes, use read_file, diff, or run_tests\n"
+                "   to verify your changes are correct before declaring the task done.\n"
+                "3. **Break down complex tasks**: If a task is complex, break it into smaller sub-steps\n"
+                "   and tackle them one at a time. Use the think tool to reason through each step.\n"
+                "4. **Recover gracefully**: If a step fails, explain what went wrong, adjust your approach,\n"
+                "   and try an alternative. Do not abandon the task at the first obstacle.\n"
+                "5. **Report completion clearly**: When a task is fully complete (all steps verified),\n"
+                "   present a clear summary of what was done, what files were changed, and any\n"
+                "   important notes for the user.\n"
+                "6. **Ask for help when stuck**: If you have exhausted all reasonable approaches and\n"
+                "   cannot proceed, explain the situation clearly so the user can provide guidance.\n"
+            )
+
         # ── Context files injection ────────────────────────────────────────
         context_section = ""
         if self._context_files:
@@ -966,6 +1084,7 @@ class Repl:
             f"{persona}"
             f"{coding_agent_rules}"
             f"{restart_instruction}"
+            f"{resilience_instruction}"
             f"{context_section}"
         )
 
@@ -1010,6 +1129,13 @@ class Repl:
 
     def _on_tool_result(self, result: str, tool_name: str = "") -> None:
         is_error = result.startswith("Error:")
+
+        # Track consecutive tool failures
+        if is_error:
+            self._consecutive_tool_failures += 1
+        else:
+            self._consecutive_tool_failures = 0
+
         truncated = len(result) > 250
         preview = result if not truncated else result[:250]
         suffix = ""
@@ -1244,6 +1370,50 @@ class Repl:
         turn_label = f"  {color_fn('─ ')}Turn {self._turn_number}{color_fn(' ' + '─' * (56 - len(str(self._turn_number))))}"
         print(turn_label)
         self._process_turn(content, color_fn)
+
+    def _handle_retry_auto(self) -> None:
+        """Re-send the last user message with an escalation prompt.
+
+        Adds an instruction telling the agent to "try harder" or use a different
+        approach if previous attempts failed.
+        """
+        idx = self._get_last_user_index()
+        if idx is None:
+            print(f"  {dim('No previous user message to retry.')}")
+            return
+
+        content = cast("str", self.messages[idx].get("content", ""))
+        # Remove everything after the last user message
+        self.messages = self.messages[: idx + 1]
+
+        # Add an escalation instruction
+        self._task_attempts += 1
+        escalation = (
+            f"\n\n[IMPORTANT: Previous attempt(s) did not complete all requested tasks. "
+            f"This is attempt #{self._task_attempts}. Please be thorough, check your work, "
+            f"and ensure ALL aspects of the request are completed. If a previous approach "
+            f"failed, try a different strategy. Verify each step before proceeding.]"
+        )
+        self.messages.append({"role": "user", "content": content + escalation})
+
+        print(f"  {yellow('⟳')} {dim(f'Retrying with escalation (attempt {self._task_attempts})...')}")
+        print()
+        color_fn = self._turn_separator_color()
+        turn_label = f"  {color_fn('─ ')}Turn {self._turn_number}{color_fn(' ' + '─' * (56 - len(str(self._turn_number))))}"
+        print(turn_label)
+        self._process_turn(content + escalation, color_fn)
+
+    def _has_recent_file_changes(self) -> bool:
+        """Check if the most recent assistant turn included file modifications."""
+        if not self._change_log:
+            return False
+        # Simple heuristic: check the last 3 change log entries
+        recent = self._change_log[-3:]
+        for entry in recent:
+            tool = str(entry.get("tool", ""))
+            if tool in ("write_file", "edit_file", "replace_in_files"):
+                return True
+        return False
 
     def _handle_reload(self) -> None:
         """Re-discover and re-register all tools from disk."""
@@ -2068,6 +2238,8 @@ class Repl:
                 self._handle_edit()
             case "/retry" | "/r":
                 self._handle_retry()
+            case "/retry-auto" | "/ra":
+                self._handle_retry_auto()
             case "/cost":
                 self._handle_cost()
             case "/stats":
