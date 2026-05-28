@@ -48,6 +48,7 @@ from .plan import (
 from .utils import bold, dim, green, yellow, cyan, red, color_json, estimate_tokens, trim_messages, blue, magenta
 from .exporter import export_as_markdown, export_as_json
 from .custom_tools import load_custom_tools
+from .dep_analyzer import ImportGraph
 from .profiles import Profile, delete_profile, list_profiles, load_profile, save_profile
 from .prompts import list_prompts, load_prompt, save_prompt
 
@@ -116,6 +117,8 @@ HELP_TEXT = f"""\
   /open <filename>         Fuzzy-find and open a file by partial name
   /python                 Show Python REPL state
   /reset-python           Reset the Python REPL (clear all variables)
+  /deps <file>            Show what a Python file imports (dependencies)
+  /impact <file>          Show what imports a Python file (impact analysis)
 
 {bold('Multi-line input')}
   End a line with \\  to continue typing on the next line.
@@ -192,6 +195,7 @@ class Repl:
         self._context_files = context_files or []
         self._custom_tools_config = custom_tools_config
         self._python_repl: "PythonRepl | None" = None
+        self._import_graph = ImportGraph()
 
         # Cost tracking
         self._input_tokens_total = 0
@@ -1037,6 +1041,81 @@ class Repl:
         repl.reset()
         print(f"  {green('✓')} {dim('Python REPL reset. All variables cleared.')}")
 
+    def _ensure_import_graph_built(self) -> None:
+        """Build the import graph if it hasn't been built yet."""
+        if not self._import_graph._built:
+            print(f"  {dim('⟳ Building import graph...')}", end="", flush=True)
+            try:
+                self._import_graph.build(self.working_directory)
+                files = len(self._import_graph.get_all_files())
+                print(f"\r  {green('✓')} {dim(f'Import graph built ({files} files).')}")
+            except Exception as exc:
+                print(f"\r  {red('✗ Error building import graph:')} {exc}")
+
+    def _handle_deps(self, parts: list[str]) -> None:
+        """Handle /deps command — show what a file imports."""
+        self._ensure_import_graph_built()
+
+        if len(parts) < 2:
+            print(f"  {dim('Usage: /deps <file>')}")
+            print(f"  {dim('Shows what the given Python file imports.')}")
+            return
+
+        raw_path = " ".join(parts[1:]).strip()
+        filepath = self._resolve_relative_path(raw_path)
+        if filepath is None:
+            print(f"  {dim('File not found:')} {cyan(raw_path)}")
+            return
+
+        relpath = os.path.relpath(filepath, self.working_directory)
+        deps = self._import_graph.get_dependencies(relpath)
+        if not deps:
+            print(f"  {dim('No project dependencies found for:')} {cyan(relpath)}")
+            print(f"  {dim('(Standard library and third-party imports are excluded)')}")
+            return
+
+        print(f"  {bold(f'Dependencies of {relpath}:')}  {dim(f'({len(deps)} files)')}")
+        print()
+        for dep in deps:
+            print(f"  {cyan('◈')} {dim(dep)}")
+
+    def _handle_impact(self, parts: list[str]) -> None:
+        """Handle /impact command — show what imports a file (impact analysis)."""
+        self._ensure_import_graph_built()
+
+        if len(parts) < 2:
+            print(f"  {dim('Usage: /impact <file>')}")
+            print(f"  {dim('Shows which files import the given file (impact analysis).')}")
+            return
+
+        raw_path = " ".join(parts[1:]).strip()
+        filepath = self._resolve_relative_path(raw_path)
+        if filepath is None:
+            print(f"  {dim('File not found:')} {cyan(raw_path)}")
+            return
+
+        relpath = os.path.relpath(filepath, self.working_directory)
+        dependents = self._import_graph.get_dependents(relpath)
+        if not dependents:
+            print(f"  {dim('No files in the project import:')} {cyan(relpath)}")
+            return
+
+        print(f"  {bold(f'Impact analysis for {relpath}:')}  {dim(f'({len(dependents)} dependents)')}")
+        print()
+        for dep in dependents:
+            print(f"  {yellow('◈')} {dim(dep)}")
+
+    def _resolve_relative_path(self, raw_path: str) -> str | None:
+        """Resolve a user-provided path relative to working_directory."""
+        candidate = os.path.join(self.working_directory, raw_path)
+        if os.path.isfile(candidate):
+            return os.path.abspath(candidate)
+        # Try with .py extension
+        candidate_py = candidate + ".py"
+        if os.path.isfile(candidate_py):
+            return os.path.abspath(candidate_py)
+        return None
+
     def _handle_profile(self, cmd: str) -> None:
         """Handle /profile command — save, load, list, delete configuration profiles."""
         parts = cmd.strip().split(maxsplit=2)
@@ -1587,6 +1666,10 @@ class Repl:
                 self._handle_python()
             case "/reset-python":
                 self._handle_reset_python()
+            case "/deps":
+                self._handle_deps(parts)
+            case "/impact":
+                self._handle_impact(parts)
             case "/save":
                 self._handle_session_save(parts)
             case "/load":
