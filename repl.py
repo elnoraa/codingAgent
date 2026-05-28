@@ -278,7 +278,9 @@ class Repl:
         return (
             f"Current working directory: {self.working_directory}\n"
             f"Available project directories: /app (this agent), /projects/ (sibling projects)\n\n"
-            f"{base}"
+            f"{base}\n\n"
+            f"Remember: Always plan before you act. Explore the codebase, reason with the think tool, "
+            f"present your plan, and only then execute changes."
         )
 
     def _on_tool_call(self, name: str, args: dict[str, object]) -> None:
