@@ -13,6 +13,13 @@ These are MANDATORY rules. The coding agent MUST follow all instructions in this
 
 3. Never modify files outside the project directory.
 
+4. After successfully implementing a plan from `plans/pending/`, you MUST:
+   a. Move the plan to `plans/completed/` by calling the `complete_plan` tool
+      with the plan's name. This updates its front-matter and relocates it.
+
+5. When starting a new task, check `plans/pending/` first — if a plan exists
+   there that matches the task, implement it and then move it to `plans/completed/`.
+
 ## Resilience & Stability Rules
 
 1. If a tool call fails, first determine if the error is transient (network, timeout, rate limit).

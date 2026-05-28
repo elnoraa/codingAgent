@@ -36,6 +36,7 @@ from tools.web_search import web_search_tool
 from tools.undo_tool import undo_tool
 from tools.python_tool import python_tool
 from tools.write_plan import write_plan_tool
+from tools.complete_plan import complete_plan_tool
 from tools.ask_user import ask_user_tool
 from tools.syntax_check import syntax_check_tool
 from tools.verify_content import verify_content_tool
@@ -556,6 +557,7 @@ class Repl:
         self.tools.register(undo_tool)
         self.tools.register(python_tool)
         self.tools.register(write_plan_tool)
+        self.tools.register(complete_plan_tool)
         self.tools.register(ask_user_tool)
         self.tools.register(syntax_check_tool)
         self.tools.register(verify_content_tool)
