@@ -41,6 +41,7 @@ from .plan import (
     save_pending_plan,
 )
 from .utils import bold, dim, green, yellow, cyan, red, color_json, estimate_tokens, trim_messages, blue, magenta
+from .exporter import export_as_markdown, export_as_json
 
 # ── Readline (command history with arrow keys) ──────────────────────────
 _readline_available = False
@@ -88,6 +89,7 @@ HELP_TEXT = f"""\
   /reload                 Re-discover and re-register all tools from disk (no restart needed)
   /restart                Reset session to turn 1 (clear messages)
   /cost                   Show token usage and estimated API cost
+  /export [md|json] [path]  Export conversation as Markdown or JSON
   /config                 Show current configuration
 
 {bold('Multi-line input')}
@@ -702,6 +704,33 @@ class Repl:
         print(f"  {dim('Note: Cost estimates use per-model pricing. Update MODEL_PRICING')}")
         print(f"  {dim('in repl.py if you use a different model or have custom pricing.')}")
 
+    def _handle_export(self, parts: list[str]) -> None:
+        """Handle /export command — export conversation as Markdown or JSON."""
+        fmt = "md"
+        output_path: str | None = None
+        if len(parts) > 1:
+            arg = parts[1].strip().lower()
+            if arg in ("json", "md"):
+                fmt = arg
+                if len(parts) > 2:
+                    output_path = parts[2]
+            else:
+                # Treat as path, default to md
+                output_path = parts[1]
+
+        if not self.messages:
+            print(f"  {dim('No messages to export.')}")
+            return
+
+        try:
+            if fmt == "json":
+                filepath = export_as_json(self.messages, self.mode, self.llm.model, output_path)
+            else:
+                filepath = export_as_markdown(self.messages, self.mode, self.llm.model, output_path)
+            print(f"  {green('✓')} {dim('Exported to')} {cyan(filepath)}")
+        except Exception as exc:
+            print(f"  {red('✗ Export failed:')} {exc}")
+
     def _handle_config(self) -> None:
         """Show current configuration."""
         print(f"  {bold('Configuration')}")
@@ -956,6 +985,8 @@ class Repl:
                 self._handle_retry()
             case "/cost":
                 self._handle_cost()
+            case "/export":
+                self._handle_export(parts)
             case "/config":
                 self._handle_config()
             case "/save":
