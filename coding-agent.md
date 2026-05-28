@@ -49,3 +49,21 @@ These are MANDATORY rules. The coding agent MUST follow all instructions in this
 4. For swarms, prefer the `run_swarm` tool which handles lifecycle automatically.
 5. Sub-agents have a maximum nesting depth of 3 — do not attempt to spawn agents from workers.
 6. When using `send_to_agent`, use `message_type="instruction"` for delegating work and `message_type="result"` for returning data.
+
+## Plan Naming Convention
+
+When saving plans to `plans/pending/`, use the following naming format:
+
+```
+<number>-<type>-<ShortDescription>.md
+```
+
+Where `<type>` is one of: `feat`, `fix`, `refactor`, `docs`, `perf`, `ci`, `chore`, `security`, `deps`, `test`, `spike`.
+
+Examples:
+- `33-feat-add-syntax-highlighting.md`
+- `34-fix-crash-on-empty-input.md`
+- `35-refactor-extract-command-parser.md`
+- `36-docs-update-readme.md`
+
+This convention keeps plan files sortable by number, immediately scannable by type, and consistent across all sessions.
