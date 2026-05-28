@@ -885,6 +885,15 @@ class Repl:
                     print(f"  {color_fn('┃')} ", end="", flush=True)
                 print(text, end="", flush=True)
 
+            def _restart_spinner() -> None:
+                """Restart the spinner for the next LLM round (e.g. after tool results)."""
+                nonlocal text_started
+                text_started = False  # Reset so streaming prefix shows again
+                if self._spinner is not None:
+                    self._spinner.stop()
+                self._spinner = Spinner("thinking...")
+                self._spinner.start()
+
             # Start animated spinner
             self._spinner = Spinner("thinking...")
             self._spinner.start()
@@ -904,6 +913,7 @@ class Repl:
                 on_tool_call=self._on_tool_call,
                 on_tool_result=lambda _name, r: self._on_tool_result(r, tool_name=_name),
                 read_only=is_read_only,
+                on_llm_round_start=lambda: _restart_spinner(),
             )
 
             # ── Check for restart signal from restart_session tool ──────────

@@ -116,6 +116,7 @@ class LlmClient:
         on_tool_call: Callable[[str, dict[str, object]], None],
         on_tool_result: Callable[[str, str], None],
         read_only: bool = False,
+        on_llm_round_start: Callable[[], None] | None = None,
     ) -> None:
         tool_defs = tools.to_anthropic_tools(read_only=read_only)
 
@@ -132,6 +133,9 @@ class LlmClient:
         while True:
             loop_count += 1
             logger.debug("API request loop=%d (messages=%d)", loop_count, len(messages))
+
+            if on_llm_round_start is not None:
+                on_llm_round_start()
 
             with self._send_with_retry(messages, system, tool_defs, **extra) as stream:
                 for text in stream.text_stream:
