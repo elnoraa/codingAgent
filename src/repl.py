@@ -36,6 +36,12 @@ from tools.web_search import web_search_tool
 from tools.undo_tool import undo_tool
 from tools.python_tool import python_tool
 from tools.write_plan import write_plan_tool
+from tools.ask_user import ask_user_tool
+from tools.syntax_check import syntax_check_tool
+from tools.verify_content import verify_content_tool
+from tools.config_tool import config_tool
+from tools.git_log import git_log_tool
+from tools.environment import environment_tool
 from .session import save_session, load_session, list_sessions
 from typing import cast, TYPE_CHECKING
 
@@ -150,6 +156,12 @@ HELP_TEXT = f"""\
   url_fetch       Fetch a URL's content
   think           Reason step by step (no-op)
   web_search      Search the web for information
+  ask_user        Ask for clarification when instructions are ambiguous
+  syntax_check    Validate Python files for syntax errors
+  verify_content  Verify file contains/omits expected text
+  config          Show agent's current configuration
+  git_log         Show git commit history
+  environment     Show runtime environment details
 
 {bold('Modes')}
   CODE mode  {green('●')}  All tools available (read + write + execute)
@@ -544,6 +556,12 @@ class Repl:
         self.tools.register(undo_tool)
         self.tools.register(python_tool)
         self.tools.register(write_plan_tool)
+        self.tools.register(ask_user_tool)
+        self.tools.register(syntax_check_tool)
+        self.tools.register(verify_content_tool)
+        self.tools.register(config_tool)
+        self.tools.register(git_log_tool)
+        self.tools.register(environment_tool)
         # Load custom tools from config
         if self._custom_tools_config:
             custom_tools = load_custom_tools(self._custom_tools_config, self.working_directory)
@@ -579,6 +597,34 @@ class Repl:
         except Exception as exc:
             logger.error("Tool %s execution error: %s", tool.name, exc)
             return f"Error executing {tool.name}: {exc}"
+
+    def _handle_interactive_tool(self, tool: Tool, args: dict[str, object]) -> str:
+        """Handle an interactive tool that needs user input.
+
+        Pauses the tool loop, displays the question, reads user response,
+        and returns it as the tool result.
+        """
+        # Stop spinner if running
+        if self._spinner is not None:
+            self._spinner.stop()
+            self._spinner = None
+
+        question = str(args.get("question", str(args)))
+        print()
+        print(f"  {'─' * 60}")
+        print(f"  {bold(yellow('❓ Agent needs clarification:'))}")
+        print()
+        for line in question.split("\n"):
+            print(f"    {line}")
+        print()
+        print(f"  {bold('Your response:')} ", end="")
+        try:
+            response = input()
+        except (EOFError, KeyboardInterrupt):
+            response = "[User cancelled]"
+        print(f"  {'─' * 60}")
+        print()
+        return response
 
     def _setup_tab_completion(self) -> None:
         """Set up tab completion for commands using readline."""
@@ -904,6 +950,13 @@ class Repl:
             # - Code mode has all tools available
             is_read_only = self.mode == "plan" or self.mode == "ask"
 
+            # Set environment variables for the config tool to read
+            os.environ["CODING_AGENT_MODE"] = self.mode
+            os.environ["CODING_AGENT_MODEL"] = self.llm.model
+            os.environ["CODING_AGENT_MAX_TOKENS"] = str(self.max_tokens)
+            os.environ["CODING_AGENT_TEMPERATURE"] = str(self.llm.temperature)
+            os.environ["CODING_AGENT_PERSONA"] = self._custom_persona or ""
+
             self.llm.chat_with_tools(
                 messages=self.messages,
                 system=system_prompt,
@@ -914,6 +967,7 @@ class Repl:
                 on_tool_result=lambda _name, r: self._on_tool_result(r, tool_name=_name),
                 read_only=is_read_only,
                 on_llm_round_start=lambda: _restart_spinner(),
+                on_interactive_tool=self._handle_interactive_tool,
             )
 
             # ── Check for restart signal from restart_session tool ──────────

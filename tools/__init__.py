@@ -68,6 +68,7 @@ class Tool:
     input_schema: dict[str, object]
     execute: Callable[[dict[str, object], ToolContext], str]
     read_only: bool = False
+    interactive: bool = False
 
 
 def reload_tools() -> list[Tool]:

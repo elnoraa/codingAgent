@@ -7,7 +7,7 @@ from typing import Any, cast
 
 from anthropic import Anthropic
 from anthropic.types import MessageParam, ToolParam
-from tools import ToolContext, ToolRegistry
+from tools import Tool, ToolContext, ToolRegistry
 
 from .logging_config import get_logger
 from .utils import compute_backoff, is_transient_error
@@ -117,6 +117,7 @@ class LlmClient:
         on_tool_result: Callable[[str, str], None],
         read_only: bool = False,
         on_llm_round_start: Callable[[], None] | None = None,
+        on_interactive_tool: Callable[[Tool, dict[str, object]], str] | None = None,
     ) -> None:
         tool_defs = tools.to_anthropic_tools(read_only=read_only)
 
@@ -162,6 +163,11 @@ class LlmClient:
                     available = ", ".join(t.name for t in tools.get_all())
                     result = f'Error: unknown tool "{name}". Available tools: {available}'
                     logger.warning("Unknown tool called: %s", name)
+                elif tool.interactive and on_interactive_tool is not None:
+                    # Interactive tool: pause and get user input via callback
+                    logger.info("Interactive tool %s called, requesting user input", name)
+                    result = on_interactive_tool(tool, args)
+                    logger.info("Interactive tool %s completed (result_len=%d)", name, len(result))
                 else:
                     try:
                         logger.debug("Executing tool: %s with args=%s", name, _summarize_args(args))
