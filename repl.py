@@ -67,6 +67,7 @@ HELP_TEXT = f"""\
   /sessions               List all saved sessions
   /persona <text>         Set a custom persona (appended to system prompt)
   /persona clear          Clear the custom persona
+  /reload                 Re-discover and re-register all tools from disk (no restart needed)
   /cost                   Show token usage and estimated API cost
   /config                 Show current configuration
 
@@ -120,6 +121,15 @@ class Repl:
         self._output_tokens_total = 0
 
         self.tools = ToolRegistry()
+        self._register_all_tools()
+
+    def _register_all_tools(self) -> None:
+        """Register all available tools into the registry.
+
+        On first call this registers from the already-imported module-level
+        ``*_tool`` variables.  On subsequent calls (e.g. after ``/reload``) it
+        uses ``ToolRegistry.rebuild()`` to re-discover tools dynamically.
+        """
         self.tools.register(read_file_tool)
         self.tools.register(write_file_tool)
         self.tools.register(edit_file_tool)
@@ -446,6 +456,19 @@ class Repl:
         print(turn_label)
         self._process_turn(content, color_fn)
 
+    def _handle_reload(self) -> None:
+        """Re-discover and re-register all tools from disk."""
+        print(f"  {dim('⟳ Reloading tools...')}", end="", flush=True)
+        try:
+            count = self.tools.rebuild()
+            print(f"\r  {green('✓')} {dim(f'Reloaded {count} tools.')}")
+            # Show the freshly loaded tools
+            for t in self.tools.get_all():
+                ro = f" {dim('(read-only)')}" if t.read_only else ""
+                print(f"    {bold(t.name)}{dim(f' — {t.description}')}{ro}")
+        except Exception as exc:
+            print(f"\r  {red('✗ Error reloading tools:')} {exc}")
+
     # ── New feature handlers ────────────────────────────────────────────
 
     def _estimated_cost(self) -> float:
@@ -600,6 +623,8 @@ class Repl:
                 for t in tools_to_show:
                     print(f"  {bold(t.name)}{dim(f' — {t.description}')}")
                 print(f"  {dim(f'[{self.mode.upper()} mode — {len(tools_to_show)} tools available]')}")
+            case "/reload":
+                self._handle_reload()
             case "/history":
                 count = len(self.messages)
                 user_msgs = sum(1 for m in self.messages if m.get("role") == "user")
