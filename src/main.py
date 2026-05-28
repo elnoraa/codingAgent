@@ -81,6 +81,7 @@ def load_config() -> dict[str, Any]:
         "top_p": cfg.get("topP", 1.0),
         "custom_persona": cfg.get("customPersona", ""),
         "context_files": cfg.get("contextFiles", ["README*", "CONTRIBUTING*", "Makefile", "setup.py", "pyproject.toml"]),
+        "custom_tools_config": cfg.get("customToolsConfig", ""),
     }
 
 
@@ -125,6 +126,7 @@ def main() -> None:
         custom_persona=config["custom_persona"],
         auto_save_interval=auto_save_interval,
         context_files=config["context_files"],
+        custom_tools_config=config["custom_tools_config"],
     )
     repl.start()
 

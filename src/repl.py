@@ -47,6 +47,7 @@ from .plan import (
 )
 from .utils import bold, dim, green, yellow, cyan, red, color_json, estimate_tokens, trim_messages, blue, magenta
 from .exporter import export_as_markdown, export_as_json
+from .custom_tools import load_custom_tools
 from .profiles import Profile, delete_profile, list_profiles, load_profile, save_profile
 from .prompts import list_prompts, load_prompt, save_prompt
 
@@ -174,6 +175,7 @@ class Repl:
         custom_persona: str = "",
         auto_save_interval: int = 0,
         context_files: list[str] | None = None,
+        custom_tools_config: str | None = None,
     ) -> None:
         self.llm = llm
         self.system_prompt = system_prompt
@@ -188,6 +190,7 @@ class Repl:
         self._file_snapshots: dict[str, list[tuple[str, str]]] = {}
         self._change_log: list[dict[str, object]] = []
         self._context_files = context_files or []
+        self._custom_tools_config = custom_tools_config
         self._python_repl: "PythonRepl | None" = None
 
         # Cost tracking
@@ -233,6 +236,13 @@ class Repl:
         self.tools.register(web_search_tool)
         self.tools.register(undo_tool)
         self.tools.register(python_tool)
+        # Load custom tools from config
+        if self._custom_tools_config:
+            custom_tools = load_custom_tools(self._custom_tools_config, self.working_directory)
+            for ct in custom_tools:
+                self.tools.register(ct)
+            if custom_tools:
+                logger.info("Registered %d custom tool(s)", len(custom_tools))
 
     def start(self) -> None:
         print()
