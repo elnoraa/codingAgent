@@ -80,6 +80,7 @@ HELP_TEXT = f"""\
   /persona <text>         Set a custom persona (appended to system prompt)
   /persona clear          Clear the custom persona
   /reload                 Re-discover and re-register all tools from disk (no restart needed)
+  /restart                Reset session to turn 1 (clear messages, restart plan-first cycle)
   /cost                   Show token usage and estimated API cost
   /config                 Show current configuration
 
@@ -115,7 +116,10 @@ HELP_TEXT = f"""\
   In CODE mode, the first turn is automatically read-only (planning phase).
   After the assistant presents a plan, type {green('proceed')} to approve it.
   Write tools (write_file, edit_file, bash, etc.) are BLOCKED until you approve.
-  Plans are auto-saved to plans/pending/ and moved to plans/completed/ after approval."""
+  Plans are auto-saved to plans/pending/ and moved to plans/completed/ after approval.
+  Type {cyan('/restart')} to reset the session and start a fresh plan cycle from turn 1.
+  If you ask the assistant to refine the plan (instead of approving), the updated plan
+  is re-saved and the approval prompt is shown again."""
 
 
 def _plan_name_from_text(text: str) -> str:
@@ -426,6 +430,19 @@ class Repl:
                 # Show approval prompt
                 print(f"\n  {yellow('●')} {bold('Plan is ready for review.')}")
                 print(f"  {dim('Type')} {green('proceed')} {dim('to approve and execute, or keep refining the plan.')}")
+            elif self.mode == "code" and self._plan_pending_approval and self._first_code_turn_done:
+                # Plan was refined (user didn't approve) — re-save and re-prompt
+                plan_text = self._get_last_assistant_text()
+                if plan_text and self._plan_current_name:
+                    try:
+                        fpath = save_pending_plan(self._plan_current_name, plan_text, self.working_directory)
+                        print(f"\n  {dim('📋 Plan updated:')} {cyan(fpath)}")
+                    except Exception as exc:
+                        print(f"\n  {dim(f'⚠ Could not update plan: {exc}')}")
+
+                # Show approval prompt again
+                print(f"\n  {yellow('●')} {bold('Updated plan is ready for review.')}")
+                print(f"  {dim('Type')} {green('proceed')} {dim('to approve and execute, or keep refining the plan.')}")
 
             # ── Show token usage for this turn ──────────────────────────────
             tokens_after = sum(
@@ -484,7 +501,7 @@ class Repl:
 
         return (
             f"Current working directory: {self.working_directory}\n"
-            f"Available project directories: /app (this agent), /projects/ (sibling projects)\n\n"
+            f"Project root: {self.working_directory}\n\n"
             f"{base}\n\n"
             f"Remember: Always plan before you act. Explore the codebase, reason with the think tool, "
             f"present your plan, and only then execute changes."
@@ -956,6 +973,14 @@ class Repl:
                 self._handle_session_list()
             case "/persona":
                 self._handle_persona(parts)
+            case "/restart":
+                self.messages.clear()
+                self._first_code_turn_done = False
+                self._plan_pending_approval = False
+                self._plan_current_name = None
+                self._plan_auto_saved = False
+                self._turn_number = 0
+                print(f"  {green('✓')} {bold('Restarted.')} {dim('Session reset to turn 1 (plan-first cycle).')}")
             case "/q":
                 print(f"  {dim('Exiting...')}")
                 # Trigger clean exit
