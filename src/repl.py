@@ -290,6 +290,10 @@ class Repl:
                 # Empty line with no prior input — skip
                 return ""
 
+            # Check for /editor trigger at empty prompt
+            if not lines and raw.strip().lower() == "/editor":
+                return self._open_external_editor()
+
             if raw.endswith("\\"):
                 # Line continuation: strip trailing \ and collect
                 lines.append(raw[:-1])
@@ -299,6 +303,82 @@ class Repl:
             break
 
         return "".join(lines)
+
+    def _open_external_editor(self) -> str:
+        """Open an external text editor for composing long messages.
+
+        Uses $EDITOR or $VISUAL environment variable (Unix convention).
+        Falls back to normal input if no editor is configured.
+        Returns the edited content or '' if cancelled/empty.
+        """
+        import subprocess
+        import tempfile
+
+        editor = os.environ.get("EDITOR") or os.environ.get("VISUAL")
+        if not editor:
+            print(f"  {yellow('⚠')} {dim('No editor configured. Set $EDITOR or $VISUAL environment variable.')}")
+            print(f"  {dim('Falling back to multi-line input (use \\ to continue lines).')}")
+            return ""
+
+        temp_path: str | None = None
+        try:
+            # Create a temporary file with instructions
+            with tempfile.NamedTemporaryFile(
+                mode="w",
+                suffix=".md",
+                encoding="utf-8",
+                delete=False,
+            ) as f:
+                temp_path = f.name
+                f.write("# Write your message below. Lines starting with # are ignored.\n")
+                f.write("# Save and exit the editor when done.\n")
+                f.write("# Close without saving to cancel.\n")
+
+            # Launch the editor
+            try:
+                result = subprocess.call([editor, temp_path])
+            except (OSError, FileNotFoundError) as exc:
+                print(f"  {yellow('⚠')} {dim(f'Could not launch editor "{editor}": {exc}')}")
+                print(f"  {dim('Falling back to multi-line input (use \\ to continue lines).')}")
+                return ""
+
+            if result != 0:
+                print(f"  {yellow('⚠')} {dim('Editor exited with non-zero status. Cancelled.')}")
+                return ""
+
+            # Read the file back
+            if temp_path is None:
+                return ""
+            try:
+                with open(temp_path, "r", encoding="utf-8") as f:
+                    content = f.read()
+            except (OSError, IOError) as exc:
+                print(f"  {yellow('⚠')} {dim(f'Could not read editor output: {exc}')}")
+                return ""
+
+            # Strip comment lines and blank content
+            lines: list[str] = []
+            for line in content.split("\n"):
+                stripped = line.strip()
+                if stripped.startswith("#"):
+                    continue
+                lines.append(line)
+
+            result_text = "\n".join(lines).strip()
+            if not result_text:
+                print(f"  {dim('Editor content was empty. Message cancelled.')}")
+                return ""
+
+            print(f"  {dim(f'✓ Content captured from editor ({len(result_text)} chars).')}")
+            return result_text
+
+        finally:
+            # Clean up temp file
+            if temp_path is not None:
+                try:
+                    os.unlink(temp_path)
+                except (OSError, IOError):
+                    pass
 
     def _auto_save(self) -> None:
         """Auto-save the session if the interval has been reached."""
