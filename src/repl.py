@@ -520,6 +520,41 @@ class Repl:
             if custom_tools:
                 logger.info("Registered %d custom tool(s)", len(custom_tools))
 
+    def _setup_tab_completion(self) -> None:
+        """Set up tab completion for commands using readline."""
+        if not _readline_available:
+            return
+
+        import readline as _readline  # type: ignore[import-untyped]
+
+        # List of all available commands
+        commands = [
+            "/help", "/h", "/clear", "/c", "/tools", "/history", "/status", "/s",
+            "/mode", "/plan", "/p", "/ask", "/a", "/code",
+            "/plan", "/edit", "/retry", "/r",
+            "/save", "/load", "/sessions", "/persona", "/reload", "/restart",
+            "/cost", "/export", "/search", "/model", "/cd", "/rollback",
+            "/config", "/prompt", "/profile", "/changes", "/open",
+            "/python", "/reset-python", "/deps", "/impact",
+            "/q", "/exit",
+        ]
+
+        def _completer(text: str, state: int) -> str | None:
+            """Readline completer function."""
+            if not text.startswith("/"):
+                return None
+
+            # Filter commands by prefix
+            candidates = [c for c in commands if c.startswith(text)]
+            if state < len(candidates):
+                return candidates[state] + " "
+            return None
+
+        _readline.set_completer(_completer)  # type: ignore[attr-defined]
+        _readline.parse_and_bind("tab: complete")  # type: ignore[attr-defined]
+        # Make sure tab completion works at the start of the line
+        _readline.set_completer_delims(" \t\n")  # type: ignore[attr-defined]
+
     def start(self) -> None:
         print()
         print(f"  {bold('Coding Agent')} {dim('v0.6')}")
@@ -529,6 +564,7 @@ class Repl:
         print()
         self._print_separator()
         print()
+        self._setup_tab_completion()
         try:
             self._run_loop()
         except EOFError:
