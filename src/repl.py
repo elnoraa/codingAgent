@@ -33,6 +33,7 @@ from tools.restart_session import restart_session_tool
 from tools.web_search import web_search_tool
 from tools.undo_tool import undo_tool
 from tools.python_tool import python_tool
+from tools.write_plan import write_plan_tool
 from .session import save_session, load_session, list_sessions
 from typing import cast, TYPE_CHECKING
 
@@ -517,6 +518,7 @@ class Repl:
         self.tools.register(web_search_tool)
         self.tools.register(undo_tool)
         self.tools.register(python_tool)
+        self.tools.register(write_plan_tool)
         # Load custom tools from config
         if self._custom_tools_config:
             custom_tools = load_custom_tools(self._custom_tools_config, self.working_directory)
