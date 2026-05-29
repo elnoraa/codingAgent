@@ -142,6 +142,7 @@ HELP_TEXT = f"""\
   /mcp                    Show MCP server connection status and tools
   /changes                Show session change log (audit trail)
   /open <filename>         Fuzzy-find and open a file by partial name
+  /timeline                Show per-turn latency breakdown (LLM vs tools)
   /python                 Show Python REPL state
   /reset-python           Reset the Python REPL (clear all variables)
   /deps <file>            Show what a Python file imports (dependencies)
@@ -590,6 +591,12 @@ class Repl:
         self._mcp_bridge: MCPBridge | None = None
         self._mcp_servers_config: list[dict[str, object]] = mcp_servers or []
 
+        # Per-turn latency timeline
+        self._turn_timeline: list[dict[str, object]] = []
+        self._current_turn_tools: list[dict[str, object]] = []
+        self._current_llm_start: float = 0.0
+        self._turn_start_time: float = 0.0
+
         self.tools = ToolRegistry()
         self._register_all_tools()
         self._auto_save_interval = 0
@@ -1021,6 +1028,11 @@ class Repl:
     def _process_turn(self, user_input: str, color_fn: object) -> None:
         """Send a user message to the LLM, stream the response, and show token usage."""
 
+        # Record turn start for latency timeline
+        self._turn_start_time = time.time()
+        self._current_turn_tools = []
+        self._current_llm_start = time.time()
+
         messages_before = len(self.messages)
         self.messages.append({"role": "user", "content": user_input})
         # Track turns by mode
@@ -1073,6 +1085,8 @@ class Repl:
                     self._spinner.stop()
                 self._spinner = Spinner("thinking...")
                 self._spinner.start()
+                # Record when the LLM round starts for timeline tracking
+                self._current_llm_start = time.time()
 
             # Start animated spinner
             self._spinner = Spinner("thinking...")
@@ -1140,6 +1154,15 @@ class Repl:
                 if _contains_markdown(full_text):
                     print()  # Newline to end streaming line
                     render_markdown(full_text)
+
+            # ── Finalize turn latency timeline ────────────────────────────
+            llm_duration = time.time() - self._turn_start_time
+            self._turn_timeline.append({
+                "turn": len(self._turn_timeline) + 1,
+                "llm_duration": llm_duration,
+                "tools": list(self._current_turn_tools),
+                "total_duration": time.time() - self._turn_start_time,
+            })
 
             # ── Show token usage for this turn ──────────────────────────────
             tokens_after = sum(
@@ -1393,6 +1416,15 @@ class Repl:
 
     def _on_tool_result(self, result: str, tool_name: str = "") -> None:
         is_error = result.startswith("Error:")
+
+        # Record tool execution in the current turn timeline
+        if tool_name and self._tool_start_time > 0:
+            duration = time.time() - self._tool_start_time
+            self._current_turn_tools.append({
+                "name": tool_name,
+                "duration": duration,
+                "error": is_error,
+            })
 
         # Track consecutive tool failures
         if is_error:
@@ -1698,6 +1730,41 @@ class Repl:
             if tool in ("write_file", "edit_file", "replace_in_files"):
                 return True
         return False
+
+    def _handle_timeline(self) -> None:
+        """Display the per-turn latency timeline (LLM vs tool execution times)."""
+        if not self._turn_timeline:
+            print(f"  {dim('No timeline data yet.')}")
+            return
+
+        print(f"\n  {bold('Per-Turn Latency Timeline')}")
+        print(f"  {'─' * 60}")
+
+        max_total = max(e["total_duration"] for e in self._turn_timeline)  # type: ignore[typeddict-item]
+        bar_scale = 30 / max(max_total, 0.001)
+
+        for entry in self._turn_timeline:
+            turn: int = int(entry.get("turn", 0))  # type: ignore[assignment]
+            total: float = float(entry.get("total_duration", 0))  # type: ignore[assignment]
+            llm_dur: float = float(entry.get("llm_duration", 0))  # type: ignore[assignment]
+            tools_raw = entry.get("tools", [])
+            tools_list: list[dict[str, object]] = tools_raw if isinstance(tools_raw, list) else []  # type: ignore[assignment]
+
+            bar_len = int(total * bar_scale)
+            bar = "█" * bar_len
+
+            print(f"  Turn {turn}: {cyan(bar)} {bold(f'{total:.1f}s')}")
+
+            # Breakdown
+            llm_pct = (llm_dur / total * 100) if total > 0 else 0
+            print(f"    {cyan('LLM')}:     {llm_dur:.1f}s ({llm_pct:.0f}%)")
+
+            for tool in tools_list:
+                t_dur: float = float(tool.get("duration", 0))  # type: ignore[assignment]
+                t_name: str = str(tool.get("name", "?"))
+                t_err: str = " ⚠" if bool(tool.get("error", False)) else ""
+                t_pct: float = (t_dur / total * 100) if total > 0 else 0
+                print(f"    {green(t_name)}: {t_dur:.1f}s ({t_pct:.0f}%){t_err}")
 
     def _handle_reload(self) -> None:
         """Re-discover and re-register all tools from disk."""
@@ -2586,6 +2653,8 @@ class Repl:
             case "/rollback":
                 print(f"  {dim('Use the undo tool to rollback changes.')}")
                 print(f"  {dim('The agent can list and revert file snapshots automatically.')}")
+            case "/timeline":
+                self._handle_timeline()
             case "/mcp":
                 self._handle_mcp()
             case "/model":
