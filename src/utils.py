@@ -262,9 +262,9 @@ class Spinner:
 
 import random as _random
 
-DEFAULT_MAX_RETRIES = 3
+DEFAULT_MAX_RETRIES = 5
 DEFAULT_BASE_DELAY = 1.0
-DEFAULT_MAX_DELAY = 30.0
+DEFAULT_MAX_DELAY = 60.0
 
 
 def compute_backoff(
@@ -273,14 +273,19 @@ def compute_backoff(
     max_delay: float = DEFAULT_MAX_DELAY,
     jitter: bool = True,
 ) -> float:
-    """Compute exponential backoff delay in seconds for a given attempt (0-based).
+    """Compute exponential backoff delay using full jitter.
 
-    delay = min(base_delay * 2^attempt + jitter, max_delay)
+    delay = random(0, min(base_delay * 2^attempt, max_delay))
+
+    Full jitter (AWS recommended) is used when jitter=True:
+    delay = random_uniform(0, cap)
+
+    This spreads retries more evenly than additive jitter.
     """
-    delay = base_delay * (2 ** attempt)
+    cap = min(base_delay * (2 ** attempt), max_delay)
     if jitter:
-        delay += _random.uniform(0, 0.5 * delay)
-    return min(delay, max_delay)
+        return _random.uniform(0, cap)
+    return cap
 
 
 def is_transient_error(error: Exception) -> bool:

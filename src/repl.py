@@ -75,6 +75,7 @@ from .profiles import Profile, delete_profile, list_profiles, load_profile, save
 from .prompts import list_prompts, load_prompt, save_prompt
 from .orchestrator import Orchestrator
 from .mcp_bridge import MCPBridge
+from .snippets import list_snippets, load_snippet, save_snippet, delete_snippet
 
 # ── Readline (command history with arrow keys) ──────────────────────────
 _readline_available = False
@@ -128,6 +129,11 @@ HELP_TEXT = f"""\
   /export [md|json] [path]  Export conversation as Markdown or JSON
   /search <pattern>        Search conversation history
   /search -r <regex>       Search conversation with regex
+  /snippet list            List all saved snippets
+  /snippet save <name>     Save last assistant response as a snippet
+  /snippet load <name>     Display a saved snippet
+  /snippet delete <name>   Delete a snippet
+  /snippet apply <name>    Load snippet into next message
   /model [name]            Show or switch the active model
   /cd [path]               Change working directory
   /rollback                Ask agent to undo file changes
@@ -590,6 +596,10 @@ class Repl:
         # MCP bridge for Model Context Protocol servers
         self._mcp_bridge: MCPBridge | None = None
         self._mcp_servers_config: list[dict[str, object]] = mcp_servers or []
+
+        # Rate limit tracking
+        self._rate_limit_events: int = 0
+        self._pending_input: str | None = None
 
         # Per-turn latency timeline
         self._turn_timeline: list[dict[str, object]] = []
@@ -1150,6 +1160,9 @@ class Repl:
             # ── Re-render final response as Markdown ─────────────────────────
             if _accumulated_text:
                 full_text = "".join(_accumulated_text)
+                # Process mermaid code blocks
+                from .diagrams import process_mermaid_blocks
+                full_text = process_mermaid_blocks(full_text)
                 # Only re-render if it looks like it contains Markdown formatting
                 if _contains_markdown(full_text):
                     print()  # Newline to end streaming line
@@ -1469,6 +1482,85 @@ class Repl:
                 )
                 # Audio notification (best-effort, no config toggle for now)
                 play_sound()
+
+    # ── Snippet command handlers ──────────────────────────────────────────
+
+    def _handle_snippet(self, args: str) -> None:
+        """Handle /snippet commands."""
+        parts = args.strip().split(maxsplit=1)
+        subcommand = parts[0].lower() if parts else ""
+        rest = parts[1] if len(parts) > 1 else ""
+
+        if subcommand == "list":
+            snippets = list_snippets()
+            if not snippets:
+                print("  No snippets saved.")
+                return
+            print(f"\n  {bold('Saved Snippets')}")
+            for s in snippets:
+                desc = f" — {s['description']}" if s['description'] else ""
+                size_str = self._format_size(s['size'])
+                print(f"  {green(s['name'])}{desc} ({size_str})")
+
+        elif subcommand == "save":
+            if not rest:
+                print("  Usage: /snippet save <name>")
+                return
+            # Save the last assistant response as a snippet
+            last_response = self._get_last_assistant_response()
+            if not last_response:
+                print("  No assistant response to save.")
+                return
+            if save_snippet(rest, last_response):
+                print(f"  {green('✓')} Saved snippet: {rest}")
+
+        elif subcommand == "load":
+            if not rest:
+                print("  Usage: /snippet load <name>")
+                return
+            content = load_snippet(rest)
+            if content is None:
+                print(f"  {red('✗')} Snippet not found: {rest}")
+                return
+            print(f"\n  {bold(f'Snippet: {rest}')}")
+            print(content)
+
+        elif subcommand == "delete":
+            if not rest:
+                print("  Usage: /snippet delete <name>")
+                return
+            if delete_snippet(rest):
+                print(f"  {green('✓')} Deleted snippet: {rest}")
+            else:
+                print(f"  {red('✗')} Snippet not found: {rest}")
+
+        elif subcommand == "apply":
+            if not rest:
+                print("  Usage: /snippet apply <name>")
+                return
+            content = load_snippet(rest)
+            if content is None:
+                print(f"  {red('✗')} Snippet not found: {rest}")
+                return
+            # Insert snippet into user input buffer (next message)
+            self._pending_input = content
+            print(f"  {green('✓')} Loaded snippet '{rest}' — press Enter to send")
+
+        else:
+            print("  Usage: /snippet [list|save|load|delete|apply] <name>")
+
+    def _get_last_assistant_response(self) -> str:
+        """Get the last assistant text response."""
+        return self._get_last_assistant_text()
+
+    def _format_size(self, bytes_size: int) -> str:
+        """Format file size in human-readable format."""
+        size = float(bytes_size)
+        for unit in ("B", "KB", "MB", "GB"):
+            if size < 1024:
+                return f"{size:.1f}{unit}"
+            size /= 1024
+        return f"{size:.1f}TB"
 
     def _handle_plan_save(self, cmd: str) -> None:
         parts = cmd.split(maxsplit=2)
@@ -2584,6 +2676,8 @@ class Repl:
                     total = self._mcp_bridge.total_tool_count
                     count = len(self._mcp_bridge.get_server_info())
                     print(f"  {dim('MCP:')}      {cyan(f'{total} tools from {count} server(s)')}")
+                if self._rate_limit_events > 0:
+                    print(f"  {dim('Rate limit events:')} {cyan(str(self._rate_limit_events))}")
                 print(f"  {dim('Cost:')}    {dim(f'${self._estimated_cost():.4f} estimated (in: {self._input_tokens_total}, out: {self._output_tokens_total})')}")
             case "/plan" | "/p":
                 # Check for subcommands first
@@ -2661,6 +2755,8 @@ class Repl:
                 self._handle_model(parts)
             case "/search":
                 self._handle_search(parts)
+            case "/snippet":
+                self._handle_snippet(cmd.split(maxsplit=1)[1] if len(cmd.split(maxsplit=1)) > 1 else "")
             case "/export":
                 self._handle_export(parts)
             case "/config":

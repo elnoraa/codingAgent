@@ -43,9 +43,19 @@ class LlmClient:
         messages: list[dict[str, object]],
         system: str,
         on_text: Callable[[str], None],
+        on_retry: Callable[[int, float], None] | None = None,
     ) -> str:
+        """Stream a chat completion with retry on transient errors.
+
+        Args:
+            messages: The conversation messages.
+            system: The system prompt.
+            on_text: Callback for each text chunk.
+            on_retry: Optional callback with (attempt_number, delay_seconds)
+                called before each retry. Useful for showing user-facing messages.
+        """
         last_exception: Exception | None = None
-        for attempt in range(3):  # max 3 retries
+        for attempt in range(5):  # max 5 retries
             try:
                 with self.client.messages.stream(
                     model=self.model,
@@ -59,12 +69,14 @@ class LlmClient:
                         on_text(text)
                     return full_text
             except Exception as exc:
-                if attempt < 2 and is_transient_error(exc):
+                if attempt < 4 and is_transient_error(exc):
                     delay = compute_backoff(attempt)
                     logger.warning(
-                        "Transient API error (attempt %d/3): %s. Retrying in %.1fs...",
+                        "Transient API error (attempt %d/5): %s. Retrying in %.1fs...",
                         attempt + 1, exc, delay,
                     )
+                    if on_retry:
+                        on_retry(attempt + 1, delay)
                     time.sleep(delay)
                     last_exception = exc
                 else:
@@ -83,7 +95,7 @@ class LlmClient:
         Returns the stream context manager for use with ``with``.
         """
         last_exception: Exception | None = None
-        for attempt in range(3):
+        for attempt in range(5):
             try:
                 return self.client.messages.stream(
                     model=self.model,
@@ -94,10 +106,10 @@ class LlmClient:
                     **extra,  # type: ignore[arg-type]
                 )
             except Exception as exc:
-                if attempt < 2 and is_transient_error(exc):
+                if attempt < 4 and is_transient_error(exc):
                     delay = compute_backoff(attempt)
                     logger.warning(
-                        "Transient API error (attempt %d/3): %s. Retrying in %.1fs...",
+                        "Transient API error (attempt %d/5): %s. Retrying in %.1fs...",
                         attempt + 1, exc, delay,
                     )
                     time.sleep(delay)
