@@ -157,3 +157,146 @@ def test_strip_orphaned_tool_results_drops_orphan() -> None:
     result = _strip_orphaned_tool_results(messages)
     assert len(result) == 1
     assert result[0]["content"] == "hi"
+
+
+# ── Markdown Rendering ────────────────────────────────────────────────────
+
+
+def test_render_markdown_plain_text() -> None:
+    """Plain text without markdown should print without error."""
+    from src.utils import render_markdown
+    # Should not raise
+    render_markdown("Hello, this is plain text.")
+
+
+def test_render_markdown_with_code_block() -> None:
+    """Code blocks should render without error."""
+    from src.utils import render_markdown
+    text = '```python\nprint("hello")\n```'
+    render_markdown(text)
+
+
+def test_render_markdown_empty() -> None:
+    """Empty string should not raise."""
+    from src.utils import render_markdown
+    render_markdown("")
+
+
+def test_render_markdown_headings() -> None:
+    """Headings and formatting should render without error."""
+    from src.utils import render_markdown
+    text = "# Heading\n\n**bold** and *italic* text"
+    render_markdown(text)
+
+
+# ── Language Detection ────────────────────────────────────────────────────
+
+
+def test_detect_language_python() -> None:
+    from src.utils import detect_language
+    assert detect_language("main.py") == "python"
+
+
+def test_detect_language_javascript() -> None:
+    from src.utils import detect_language
+    assert detect_language("script.js") == "javascript"
+
+
+def test_detect_language_typescript() -> None:
+    from src.utils import detect_language
+    assert detect_language("app.ts") == "typescript"
+
+
+def test_detect_language_markdown() -> None:
+    from src.utils import detect_language
+    assert detect_language("README.md") == "markdown"
+
+
+def test_detect_language_unknown_extension() -> None:
+    from src.utils import detect_language
+    assert detect_language("file.unknown") == ""
+
+
+def test_detect_language_code_block_tag() -> None:
+    """Code block tags take precedence over file extension."""
+    from src.utils import detect_language
+    assert detect_language("file.py", code_block_tag="javascript") == "javascript"
+
+
+def test_detect_language_empty() -> None:
+    """Empty filename and tag returns empty string."""
+    from src.utils import detect_language
+    assert detect_language() == ""
+
+
+# ── Syntax Highlighting ───────────────────────────────────────────────────
+
+
+def test_highlight_code_python() -> None:
+    """Highlighting Python code should produce ANSI output."""
+    from src.utils import highlight_code
+    result = highlight_code('print("hello")', language="python")
+    assert isinstance(result, str)
+    assert len(result) > 0
+    # Should contain some ANSI escape sequences
+    assert "\033[" in result or "print" in result
+
+
+def test_highlight_code_no_language() -> None:
+    """Highlighting without a language should still work."""
+    from src.utils import highlight_code
+    result = highlight_code('print("hello")')
+    assert isinstance(result, str)
+
+
+def test_highlight_code_empty() -> None:
+    """Empty code should not raise."""
+    from src.utils import highlight_code
+    result = highlight_code("")
+    assert isinstance(result, str)
+
+
+def test_highlight_code_custom_theme() -> None:
+    """Custom theme should be applied."""
+    from src.utils import highlight_code
+    result = highlight_code('print("hello")', language="python", theme="native")
+    assert isinstance(result, str)
+    assert len(result) > 0
+
+
+# ── _contains_markdown ────────────────────────────────────────────────────
+
+
+def test_contains_markdown_code_block() -> None:
+    from src.repl import _contains_markdown
+    assert _contains_markdown("Some text\n```python\ncode\n```")
+
+
+def test_contains_markdown_heading() -> None:
+    from src.repl import _contains_markdown
+    assert _contains_markdown("# Heading")
+
+
+def test_contains_markdown_bold() -> None:
+    from src.repl import _contains_markdown
+    assert _contains_markdown("This is **bold**")
+
+
+def test_contains_markdown_italic() -> None:
+    from src.repl import _contains_markdown
+    assert _contains_markdown("This is *italic*")
+
+
+def test_contains_markdown_list() -> None:
+    from src.repl import _contains_markdown
+    assert _contains_markdown("- item one\n- item two")
+
+
+def test_contains_markdown_plain_text() -> None:
+    from src.repl import _contains_markdown
+    assert not _contains_markdown("Just plain text without any formatting.")
+
+
+def test_contains_markdown_empty() -> None:
+    from src.repl import _contains_markdown
+    assert not _contains_markdown("")

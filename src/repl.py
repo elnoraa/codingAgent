@@ -67,7 +67,7 @@ from .plan import (
     list_pending_plans,
     save_pending_plan,
 )
-from .utils import bold, dim, green, yellow, cyan, red, color_json, estimate_tokens, trim_messages, blue, magenta, Spinner
+from .utils import bold, dim, green, yellow, cyan, red, color_json, estimate_tokens, trim_messages, blue, magenta, Spinner, render_markdown
 from .exporter import export_as_markdown, export_as_json
 from .custom_tools import load_custom_tools
 from .dep_analyzer import ImportGraph
@@ -491,6 +491,26 @@ Shows the status of all configured MCP (Model Context Protocol) servers:
 MCP servers are configured in config.json under the "mcpServers" key.
 See the project documentation for configuration examples.""",
 }
+
+
+def _contains_markdown(text: str) -> bool:
+    """Check if text contains Markdown formatting that would benefit from rich rendering."""
+    import re as _re
+    # Check for common Markdown patterns
+    patterns = [
+        r"```",           # Code blocks
+        r"^#{1,6}\s",     # Headings (at start of line)
+        r"\*\*[^*]+\*\*", # Bold
+        r"\*[^*]+\*",     # Italic
+        r"^[-*+]\s",      # Unordered lists
+        r"^\d+\.\s",      # Ordered lists
+        r"\[.+\]\(.+\)",  # Links
+        r"\|.+\|.+\|",    # Tables
+        r"^>\s",          # Blockquotes
+        r"---",           # Horizontal rules
+        r"`[^`]+`",       # Inline code
+    ]
+    return any(bool(_re.search(p, text, _re.MULTILINE)) for p in patterns)
 
 
 def _plan_name_from_text(text: str) -> str:
@@ -1023,6 +1043,8 @@ class Repl:
 
             text_started = False
             self._spinner = None
+            # Accumulate full assistant response text for Markdown rendering
+            _accumulated_text: list[str] = []
             # Track token usage for this turn
             tokens_before = sum(
                 estimate_tokens(str(m.get("content", "")))
@@ -1041,6 +1063,7 @@ class Repl:
                     color_fn = self._turn_separator_color()
                     print(f"  {color_fn('┃')} ", end="", flush=True)
                 print(text, end="", flush=True)
+                _accumulated_text.append(text)
 
             def _restart_spinner() -> None:
                 """Restart the spinner for the next LLM round (e.g. after tool results)."""
@@ -1109,6 +1132,14 @@ class Repl:
             if self._spinner is not None:
                 self._spinner.stop()
                 self._spinner = None
+
+            # ── Re-render final response as Markdown ─────────────────────────
+            if _accumulated_text:
+                full_text = "".join(_accumulated_text)
+                # Only re-render if it looks like it contains Markdown formatting
+                if _contains_markdown(full_text):
+                    print()  # Newline to end streaming line
+                    render_markdown(full_text)
 
             # ── Show token usage for this turn ──────────────────────────────
             tokens_after = sum(

@@ -43,7 +43,10 @@ class Theme:
     info: str = _code(2)  # dim
     highlight: str = _code(1)  # bold
 
-    # Syntax highlighting
+    # Syntax highlighting (Pygments theme name for rich/rich.markdown)
+    syntax_theme: str = "monokai"
+
+    # ANSI-based syntax highlighting
     keyword: str = _code(34)  # blue
     string_val: str = _code(32)  # green
     number_val: str = _code(36)  # cyan
@@ -115,6 +118,7 @@ _ATTR_MAP: dict[str, str] = {
     "error": "error",
     "info": "info",
     "highlight": "highlight",
+    "syntax_theme": "syntax_theme",
     "keyword": "keyword",
     "string": "string_val",
     "number": "number_val",
