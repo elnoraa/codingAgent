@@ -69,17 +69,21 @@ def _format_table_schema(conn: Any, db_type: str) -> str:
         cursor = conn.execute(
             "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name"
         )
-        table_names = [row["name"] for row in cursor.fetchall()]
+        table_names = [row[0] for row in cursor.fetchall()]
 
         result: list[str] = []
         for table in table_names:
             result.append(f"\n{green(table)}")
-            cursor = conn.execute(f"PRAGMA table_info('{table}')")
+            # Sanitize table name: only allow alphanumeric, underscores, dashes
+            safe_table = "".join(c for c in table if c.isalnum() or c in "_-")
+            if not safe_table:
+                continue
+            cursor = conn.execute(f"SELECT * FROM pragma_table_info('{safe_table}')")
             for col in cursor.fetchall():
-                nullable = "NULL" if col["notnull"] == 0 else "NOT NULL"
-                default = f" DEFAULT {col['dflt_value']}" if col["dflt_value"] else ""
-                pk = " PK" if col["pk"] else ""
-                result.append(f"  ├ {col['name']}: {col['type']} {nullable}{default}{pk}")
+                nullable = "NULL" if col[3] == 0 else "NOT NULL"  # notnull is index 3
+                default = f" DEFAULT {col[4]}" if col[4] else ""  # dflt_value is index 4
+                pk = " PK" if col[5] else ""  # pk is index 5
+                result.append(f"  ├ {col[1]}: {col[2]} {nullable}{default}{pk}")  # name=1, type=2
 
         return "\n".join(result)
     else:
