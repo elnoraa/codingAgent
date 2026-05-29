@@ -620,6 +620,155 @@ class TestEdgeCases:
 # ── Duplicate Output Prevention Tests ─────────────────────────────────
 
 
+class TestToolRegistration:
+    """Verify every tool module's ``_tool`` variable is imported and registered.
+
+    When a new tool module is added to ``tools/``, it must be:
+    1. Imported at the top of ``src/repl.py`` (``from tools.<module> import <name>_tool``)
+    2. Registered in ``Repl._register_all_tools()`` (``self.tools.register(<name>_tool)``)
+
+    This suite catches wiring omissions like the ``edit_plan_tool`` bug where
+    a tool was defined in ``tools/edit_plan.py`` but never imported or registered.
+    """
+
+    def _get_tool_vars_from_tools_dir(self) -> dict[str, str]:
+        """Scan tools/ for module-level ``*_tool = Tool(...)`` definitions.
+
+        Returns ``{variable_name: module_filename}``.
+        """
+        import ast
+        from pathlib import Path
+
+        tools_dir = Path(__file__).resolve().parent.parent / "tools"
+        result: dict[str, str] = {}
+
+        for f in sorted(tools_dir.iterdir()):
+            if not f.name.endswith(".py") or f.name == "__init__.py":
+                continue
+            source = f.read_text(encoding="utf-8")
+            try:
+                tree = ast.parse(source, filename=str(f))
+            except SyntaxError:
+                continue  # pragma: no cover — shouldn't happen with valid modules
+
+            for node in ast.walk(tree):
+                if isinstance(node, ast.Assign):
+                    for target in node.targets:
+                        if (
+                            isinstance(target, ast.Name)
+                            and target.id.endswith("_tool")
+                        ):
+                            # Verify it's assigned a Tool(...) call
+                            if (
+                                isinstance(node.value, ast.Call)
+                                and isinstance(node.value.func, ast.Name)
+                                and node.value.func.id == "Tool"
+                            ):
+                                result[target.id] = f.name
+        return result
+
+    def _get_tool_imports_from_repl(self) -> set[str]:
+        """Return the set of ``*_tool`` variable names imported in ``src/repl.py``."""
+        import ast
+        from pathlib import Path
+
+        repl_path = Path(__file__).resolve().parent.parent / "src" / "repl.py"
+        source = repl_path.read_text(encoding="utf-8")
+        tree = ast.parse(source, filename=str(repl_path))
+
+        imports: set[str] = set()
+        for node in ast.walk(tree):
+            if isinstance(node, ast.ImportFrom):
+                if node.module and node.module.startswith("tools."):
+                    for alias in node.names:
+                        if alias.name.endswith("_tool"):
+                            imports.add(alias.name)
+        return imports
+
+    def _get_tool_registrations_from_repl(self) -> set[str]:
+        """Return the set of ``*_tool`` variable names registered in
+        ``_register_all_tools()`` by looking for ``self.tools.register(*)`` calls."""
+        from pathlib import Path
+
+        repl_path = Path(__file__).resolve().parent.parent / "src" / "repl.py"
+        source = repl_path.read_text(encoding="utf-8")
+
+        # Extract the body of _register_all_tools
+        import re
+
+        # Find the method body
+        method_match = re.search(
+            r"def _register_all_tools\(self\) -> None:.*?(?=\n\s{4}\S|\n\s{0,3}\S|\Z)",
+            source,
+            re.DOTALL,
+        )
+        registered: set[str] = set()
+        if method_match:
+            body = method_match.group(0)
+            for m in re.finditer(r"self\.tools\.register\((\w+_tool)\)", body):
+                registered.add(m.group(1))
+        return registered
+
+    def test_all_tool_modules_imported(self) -> None:
+        """Every module-level ``*_tool`` in tools/ must be imported in repl.py."""
+        tool_vars = self._get_tool_vars_from_tools_dir()
+        assert tool_vars, "No tool variables found in tools/ — is the scan working?"
+
+        imports = self._get_tool_imports_from_repl()
+
+        missing: list[str] = []
+        for var_name, mod_file in sorted(tool_vars.items()):
+            if var_name not in imports:
+                missing.append(f"  {var_name} (defined in tools/{mod_file})")
+
+        assert not missing, (
+            f"The following tool variable(s) are defined in tools/ but NOT imported "
+            f"in src/repl.py:\n" + "\n".join(missing)
+        )
+
+    def test_all_tool_modules_registered(self) -> None:
+        """Every module-level ``*_tool`` in tools/ must be registered via
+        ``self.tools.register()`` in ``_register_all_tools()``."""
+        tool_vars = self._get_tool_vars_from_tools_dir()
+        assert tool_vars, "No tool variables found in tools/ — is the scan working?"
+
+        registered = self._get_tool_registrations_from_repl()
+
+        missing: list[str] = []
+        for var_name, mod_file in sorted(tool_vars.items()):
+            if var_name not in registered:
+                missing.append(f"  {var_name} (defined in tools/{mod_file})")
+
+        assert not missing, (
+            f"The following tool variable(s) are defined in tools/ but NOT registered "
+            f"via self.tools.register() in _register_all_tools():\n" + "\n".join(missing)
+        )
+
+    def test_all_tool_imports_match_registrations(self) -> None:
+        """The set of imported tool names should match registered tool names."""
+        imports = self._get_tool_imports_from_repl()
+        registered = self._get_tool_registrations_from_repl()
+
+        only_imported = imports - registered
+        only_registered = registered - imports
+
+        messages: list[str] = []
+        if only_imported:
+            names = ", ".join(sorted(only_imported))
+            messages.append(
+                f"Imported but not registered via self.tools.register(): {names}"
+            )
+        if only_registered:
+            names = ", ".join(sorted(only_registered))
+            messages.append(
+                f"Registered via self.tools.register() but not imported: {names}"
+            )
+
+        assert not messages, (
+            "Mismatch between imports and registrations:\n" + "\n".join(messages)
+        )
+
+
 class TestNoDuplicateOutput:
     """Verify the LLM response text is rendered once, not duplicated.
 
