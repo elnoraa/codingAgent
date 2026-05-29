@@ -2,6 +2,10 @@
 
 Uses Python's built-in logging module with AEST timezone (UTC+10:00) timestamps.
 Logs are written to ``logs/agent.log`` with rotation, and optionally to the console.
+
+Security: A ``SensitiveDataFilter`` is automatically applied to all log output
+to redact API keys, passwords, secrets, and other sensitive patterns before
+they are written to disk.
 """
 
 from __future__ import annotations
@@ -9,6 +13,7 @@ from __future__ import annotations
 import datetime
 import logging
 import os
+import re as _re
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
@@ -18,6 +23,61 @@ MAX_LOG_BYTES = 5 * 1024 * 1024  # 5 MB per log file
 BACKUP_COUNT = 3  # keep 3 rotated log files
 
 _AEST_TZ = datetime.timezone(datetime.timedelta(hours=10))
+
+# ── Sensitive data redaction patterns for logs ──────────────────────────────────
+# Each tuple is (regex_pattern, replacement_text).
+# Applied case-insensitively to all log messages before writing to disk.
+
+_SENSITIVE_LOG_PATTERNS: list[tuple[str, str]] = [
+    # Anthropic / OpenAI / generic API keys (sk-... with alphanumeric and dashes)
+    (r'(sk-[a-zA-Z0-9\-]{20,})', 'sk-***REDACTED***'),
+    # API key env var assignments in logs (e.g. ANTHROPIC_API_KEY=sk-...)
+    (r'(ANTHROPIC_API_KEY[^a-zA-Z0-9]\s*["\x27]?)[a-zA-Z0-9_\-]+', r'\1***REDACTED***'),
+    (r'(OPENAI_API_KEY[^a-zA-Z0-9]\s*["\x27]?)[a-zA-Z0-9_\-]+', r'\1***REDACTED***'),
+    # Password/secret assignments (e.g. password = "mypass" or password: mypass)
+    (r'(password\s*[:=]\s*["\x27]?)[^"\x27,;\s}]+', r'\1***REDACTED***'),
+    (r'(passwd\s*[:=]\s*["\x27]?)[^"\x27,;\s}]+', r'\1***REDACTED***'),
+    (r'(secret\s*[:=]\s*["\x27]?)[^"\x27,;\s}]+', r'\1***REDACTED***'),
+    # Database connection strings with credentials
+    (r'((?:mongodb(?:\+srv)?|postgres(?:ql)?|mysql|redis)://)[^@\s]+@', r'\1***USER***@'),
+    # AWS access keys
+    (r'(AKIA[0-9A-Z]{16})', 'AKIA***REDACTED***'),
+    # Bearer tokens in headers
+    (r'(Authorization:\s*Bearer\s+)[a-zA-Z0-9._\x2d]+', r'\1***REDACTED***'),
+    # GitHub tokens
+    (r'(ghp_[a-zA-Z0-9]{36})', 'ghp_***REDACTED***'),
+    (r'(github_pat_[a-zA-Z0-9_]{80,})', 'github_pat_***REDACTED***'),
+    # JWT tokens
+    (r'(eyJ[a-zA-Z0-9_\-]{10,}\.[a-zA-Z0-9_\-]{10,}\.[a-zA-Z0-9_\-]{10,})', 'eyJ***REDACTED***'),
+    # Private key headers
+    (r'-----BEGIN\s+(RSA|DSA|EC|OPENSSH|PGP)\s+PRIVATE\s+KEY-----', '-----BEGIN REDACTED PRIVATE KEY-----'),
+]
+
+
+class SensitiveDataFilter(logging.Filter):
+    """Filter that redacts sensitive data from log records before they are written.
+
+    Applied automatically by ``setup_logging()``. Scans ``record.msg`` and
+    ``record.args`` for known sensitive patterns and replaces them with
+    redacted markers.
+    """
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        """Redact sensitive patterns in the log record. Always returns True."""
+        if isinstance(record.msg, str):
+            for pattern, replacement in _SENSITIVE_LOG_PATTERNS:
+                record.msg = _re.sub(pattern, replacement, record.msg, flags=_re.IGNORECASE)
+
+        if record.args:
+            sanitized_args: list[object] = []
+            for arg in record.args:
+                if isinstance(arg, str):
+                    for pattern, replacement in _SENSITIVE_LOG_PATTERNS:
+                        arg = _re.sub(pattern, replacement, arg, flags=_re.IGNORECASE)
+                sanitized_args.append(arg)
+            record.args = tuple(sanitized_args)
+
+        return True
 
 
 class AestFormatter(logging.Formatter):
@@ -64,6 +124,9 @@ def setup_logging(
     )
     file_handler.setLevel(level)
     file_handler.setFormatter(formatter)
+
+    # Add sensitive data redaction filter
+    file_handler.addFilter(SensitiveDataFilter())
 
     # Configure root logger
     root_logger = logging.getLogger()
