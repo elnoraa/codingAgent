@@ -140,6 +140,7 @@ HELP_TEXT = f"""\
   /snippet delete <name>   Delete a snippet
   /snippet apply <name>    Load snippet into next message
   /model [name]            Show or switch the active model
+  /models                 Show model routing configuration
   /cd [path]               Change working directory
   /rollback                Ask agent to undo file changes
   /config                 Show current configuration
@@ -1709,6 +1710,34 @@ class Repl:
             status = green("ON") if self._enable_summarization else dim("OFF")
             print(f"  Automatic summarization: {status}")
             print("  Usage: /summarize on|off")
+
+    # ── Models command ──────────────────────────────────────────────────
+
+    def _handle_models(self, args: str) -> None:
+        """Show available model configurations."""
+        model_mgr = getattr(self, '_model_manager', None)
+        if model_mgr is None:
+            print(f"  Single model mode: {self.llm.model}")
+            print("  Configure multiple models in config.json under 'models' key.")
+            return
+
+        rows: list[list[str]] = [
+            ["Current", model_mgr.current_model, ""],
+        ]
+
+        for mode, cfg in model_mgr.mode_configs.items():
+            rows.append([mode.upper(), cfg.model, cfg.description])
+
+        if model_mgr.read_only_config:
+            ro = model_mgr.read_only_config
+            rows.append(["read-only", ro.model, ro.description])
+
+        print(f"\n  {bold('Model Configuration')}")
+        print(f"  {'─' * 60}")
+        print(f"  {'Mode':<20} {'Model':<35} {'Description'}")
+        print(f"  {'─' * 60}")
+        for row in rows:
+            print(f"  {row[0]:<20} {cyan(row[1]):<35} {dim(row[2])}")
 
     # ── Linting ──────────────────────────────────────────────────────────
 
@@ -3468,6 +3497,8 @@ class Repl:
                 self._handle_mcp()
             case "/model":
                 self._handle_model(parts)
+            case "/models":
+                self._handle_models(cmd.split(maxsplit=1)[1] if len(cmd.split(maxsplit=1)) > 1 else "")
             case "/search":
                 self._handle_search(parts)
             case "/snippet":
