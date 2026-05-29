@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import hmac
 import importlib
 import importlib.util
 import inspect
@@ -23,6 +25,35 @@ PluginHook = Callable[..., Any]
 
 # Plugin directory
 PLUGINS_DIR = Path("plugins")
+
+# Environment variable for plugin allowlist signing key
+_PLUGIN_SIGNING_KEY_ENV = "CODING_AGENT_PLUGIN_KEY"
+
+
+def _get_signing_key() -> bytes | None:
+    """Get the HMAC signing key from the environment.
+
+    Returns ``None`` if no key is configured (allowlist will not be signed).
+    """
+    key = os.environ.get(_PLUGIN_SIGNING_KEY_ENV)
+    if key:
+        return key.encode("utf-8")
+    return None
+
+
+def _sign_allowlist(allowlist: dict[str, str], key: bytes) -> str:
+    """Create an HMAC-SHA256 signature for the allowlist content.
+
+    Sorts keys for deterministic output regardless of insertion order.
+    """
+    content = json.dumps(allowlist, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    return hmac.new(key, content, hashlib.sha256).hexdigest()
+
+
+def _verify_allowlist(allowlist: dict[str, str], signature: str, key: bytes) -> bool:
+    """Verify the HMAC-SHA256 signature of the allowlist."""
+    expected = _sign_allowlist(allowlist, key)
+    return hmac.compare_digest(expected, signature)
 
 
 @dataclass
@@ -165,13 +196,50 @@ class PluginLoader:
         return h.hexdigest()
 
     def _get_allowlist(self) -> dict[str, str]:
-        """Load the plugin allowlist (maps plugin name to file hash)."""
+        """Load and verify the plugin allowlist.
+
+        Returns a dict mapping plugin name to file hash. If the allowlist
+        file contains a signature and a signing key is configured, the
+        signature is verified and an empty dict is returned if invalid.
+        """
         allowlist_path = self._plugins_dir / ".plugin-allowlist.json"
-        if allowlist_path.exists():
-            try:
-                return json.loads(allowlist_path.read_text(encoding="utf-8"))
-            except (json.JSONDecodeError, OSError):
+        if not allowlist_path.exists():
+            return {}
+
+        try:
+            data = json.loads(allowlist_path.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            return {}
+
+        # Extract signature and allowed dict
+        if isinstance(data, dict) and "allowed" in data:
+            signature: str = data.get("signature", "") or ""
+            allowed: dict[str, str] = data.get("allowed", {})
+            if not isinstance(allowed, dict):
                 return {}
+
+            signing_key = _get_signing_key()
+            if signing_key and signature:
+                if not _verify_allowlist(allowed, signature, signing_key):
+                    logger.error(
+                        "Plugin allowlist signature verification FAILED. "
+                        "The allowlist may have been tampered with. Ignoring."
+                    )
+                    return {}
+
+            return allowed
+
+        # Legacy format: plain dict of name -> hash (no signature)
+        if isinstance(data, dict):
+            signing_key = _get_signing_key()
+            if signing_key:
+                logger.warning(
+                    "Plugin allowlist is not signed but %s is set. "
+                    "The allowlist will be signed on next update.",
+                    _PLUGIN_SIGNING_KEY_ENV,
+                )
+            return data
+
         return {}
 
     def _update_allowlist(self, name: str, file_hash: str) -> None:
@@ -179,7 +247,13 @@ class PluginLoader:
         allowlist = self._get_allowlist()
         allowlist[name] = file_hash
         allowlist_path = self._plugins_dir / ".plugin-allowlist.json"
-        allowlist_path.write_text(json.dumps(allowlist, indent=2), encoding="utf-8")
+
+        data: dict[str, object] = {"allowed": allowlist}
+        signing_key = _get_signing_key()
+        if signing_key:
+            data["signature"] = _sign_allowlist(allowlist, signing_key)
+
+        allowlist_path.write_text(json.dumps(data, indent=2), encoding="utf-8")
 
     def _extract_metadata_from_source(self, entry_point: Path) -> dict[str, str]:
         """Read plugin metadata (author, version, description) from source without executing.
