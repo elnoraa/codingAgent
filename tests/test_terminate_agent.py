@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock
 
-from tools import ToolContext
-from tools.terminate_agent import terminate_agent_tool, _execute_terminate_agent
+from src.tools import ToolContext
+from src.tools.terminate_agent import terminate_agent_tool, _execute_terminate_agent
 
 
 def _make_context(orchestrator: object | None = None) -> ToolContext:

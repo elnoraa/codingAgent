@@ -15,7 +15,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable
 
-from tools import Tool, ToolContext
+from src.tools import Tool, ToolContext
 from .logging_config import get_logger
 
 logger = get_logger(__name__)
@@ -129,7 +129,7 @@ class PluginLoader:
             return None
 
         # ── Integrity check (session-modified file detection) ──────────
-        from tools import was_file_modified_during_session
+        from src.tools import was_file_modified_during_session
         if was_file_modified_during_session(str(entry_point)):
             logger.warning(
                 "Plugin '%s' entry point '%s' was modified during the current "

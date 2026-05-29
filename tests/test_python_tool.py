@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from tools.python_tool import python_tool
+from src.tools.python_tool import python_tool
 
 
 def test_tool_definition() -> None:

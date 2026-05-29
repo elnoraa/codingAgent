@@ -8,8 +8,8 @@ from pathlib import Path
 
 import pytest
 
-from tools import ToolContext
-from tools.replace_in_files import replace_in_files_tool
+from src.tools import ToolContext
+from src.tools.replace_in_files import replace_in_files_tool
 
 
 def test_tool_definition() -> None:
@@ -25,7 +25,7 @@ def test_accepts_oldText() -> None:
         Path(filepath).write_text("hello world", encoding="utf-8")
 
         ctx = ToolContext(working_directory=tmp)
-        from tools.replace_in_files import execute
+        from src.tools.replace_in_files import execute
 
         result = execute({
             "path": tmp,
@@ -44,7 +44,7 @@ def test_accepts_old_string() -> None:
         Path(filepath).write_text("hello world", encoding="utf-8")
 
         ctx = ToolContext(working_directory=tmp)
-        from tools.replace_in_files import execute
+        from src.tools.replace_in_files import execute
 
         result = execute({
             "path": tmp,
@@ -59,7 +59,7 @@ def test_accepts_old_string() -> None:
 def test_missing_oldText_returns_error() -> None:
     """Should return error when both oldText and old_string are missing."""
     ctx = ToolContext(working_directory="/tmp")
-    from tools.replace_in_files import execute
+    from src.tools.replace_in_files import execute
 
     result = execute({"newText": "y"}, ctx)
     assert 'missing required argument "oldText"' in result
@@ -68,7 +68,7 @@ def test_missing_oldText_returns_error() -> None:
 def test_missing_newText_returns_error() -> None:
     """Should return error when both newText and new_string are missing."""
     ctx = ToolContext(working_directory="/tmp")
-    from tools.replace_in_files import execute
+    from src.tools.replace_in_files import execute
 
     result = execute({"oldText": "x"}, ctx)
     assert 'missing required argument "newText"' in result
@@ -93,7 +93,7 @@ def test_replaces_rejects_symlink_escape(tmp_path: Path) -> None:
     real_file.write_text("test content real", encoding="utf-8")
 
     ctx = ToolContext(working_directory=str(tmp_path))
-    from tools.replace_in_files import execute
+    from src.tools.replace_in_files import execute
 
     result = execute({
         "oldText": "test",

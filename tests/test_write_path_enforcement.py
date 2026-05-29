@@ -6,7 +6,7 @@ import os
 import tempfile
 from pathlib import Path
 
-from tools import Tool, ToolContext
+from src.tools import Tool, ToolContext
 from src.utils import validate_write_path
 
 
@@ -90,7 +90,7 @@ def test_tool_context_validate_write_path() -> None:
 
 def test_write_file_enforces_working_directory() -> None:
     """write_file should reject paths outside the working directory."""
-    from tools.write_file import execute as write_execute
+    from src.tools.write_file import execute as write_execute
 
     with tempfile.TemporaryDirectory() as tmpdir:
         ctx = ToolContext(working_directory=tmpdir)
@@ -110,7 +110,7 @@ def test_write_file_enforces_working_directory() -> None:
 
 def test_edit_file_enforces_working_directory() -> None:
     """edit_file should reject paths outside the working directory."""
-    from tools.edit_file import execute as edit_execute
+    from src.tools.edit_file import execute as edit_execute
 
     with tempfile.TemporaryDirectory() as tmpdir:
         ctx = ToolContext(working_directory=tmpdir)
@@ -123,7 +123,7 @@ def test_edit_file_enforces_working_directory() -> None:
 
 def test_rename_file_enforces_working_directory() -> None:
     """rename_file should reject moves outside the working directory."""
-    from tools.rename_file import execute as rename_execute
+    from src.tools.rename_file import execute as rename_execute
 
     with tempfile.TemporaryDirectory() as tmpdir:
         ctx = ToolContext(working_directory=tmpdir)
@@ -142,7 +142,7 @@ def test_rename_file_enforces_working_directory() -> None:
 
 def test_replace_in_files_enforces_working_directory() -> None:
     """replace_in_files should reject search directories outside the working directory."""
-    from tools.replace_in_files import execute as replace_execute
+    from src.tools.replace_in_files import execute as replace_execute
 
     with tempfile.TemporaryDirectory() as tmpdir:
         ctx = ToolContext(working_directory=tmpdir)
@@ -154,7 +154,7 @@ def test_replace_in_files_enforces_working_directory() -> None:
 
 def test_bash_tool_enforces_working_directory_via_workdir() -> None:
     """bash tool should validate that workdir is within the working directory."""
-    from tools.bash_tool import execute as bash_execute
+    from src.tools.bash_tool import execute as bash_execute
 
     with tempfile.TemporaryDirectory() as tmpdir:
         ctx = ToolContext(working_directory=tmpdir)
@@ -166,7 +166,7 @@ def test_bash_tool_enforces_working_directory_via_workdir() -> None:
 
 def test_bash_tool_blocks_redirect_outside() -> None:
     """bash tool should block commands that redirect output outside the working directory."""
-    from tools.bash_tool import execute as bash_execute
+    from src.tools.bash_tool import execute as bash_execute
 
     with tempfile.TemporaryDirectory() as tmpdir:
         ctx = ToolContext(working_directory=tmpdir)
@@ -178,7 +178,7 @@ def test_bash_tool_blocks_redirect_outside() -> None:
 
 def test_bash_tool_blocks_mv_outside() -> None:
     """bash tool should block mv commands targeting outside the working directory."""
-    from tools.bash_tool import execute as bash_execute
+    from src.tools.bash_tool import execute as bash_execute
 
     with tempfile.TemporaryDirectory() as tmpdir:
         ctx = ToolContext(working_directory=tmpdir)
@@ -194,7 +194,7 @@ def test_bash_tool_blocks_mv_outside() -> None:
 
 def test_bash_tool_allows_normal_commands() -> None:
     """Normal commands within the working directory should work fine."""
-    from tools.bash_tool import execute as bash_execute
+    from src.tools.bash_tool import execute as bash_execute
 
     with tempfile.TemporaryDirectory() as tmpdir:
         ctx = ToolContext(working_directory=tmpdir)
@@ -205,7 +205,7 @@ def test_bash_tool_allows_normal_commands() -> None:
 
 def test_python_tool_blocks_open_outside() -> None:
     """python tool should block open() calls that write outside the working directory."""
-    from tools.python_tool import _execute_python
+    from src.tools.python_tool import _execute_python
 
     with tempfile.TemporaryDirectory() as tmpdir:
         ctx = ToolContext(working_directory=tmpdir)
@@ -218,7 +218,7 @@ def test_python_tool_blocks_open_outside() -> None:
 
 def test_python_tool_allows_normal_code() -> None:
     """Normal Python code should work without interference."""
-    from tools.python_tool import _execute_python
+    from src.tools.python_tool import _execute_python
 
     with tempfile.TemporaryDirectory() as tmpdir:
         ctx = ToolContext(working_directory=tmpdir)
@@ -228,7 +228,7 @@ def test_python_tool_allows_normal_code() -> None:
 
 def test_git_tools_enforce_working_directory() -> None:
     """Git tools with a path parameter should validate it."""
-    from tools.git_status import execute as status_execute
+    from src.tools.git_status import execute as status_execute
 
     with tempfile.TemporaryDirectory() as tmpdir:
         ctx = ToolContext(working_directory=tmpdir)
@@ -248,7 +248,7 @@ def test_git_tools_enforce_working_directory() -> None:
 
 def test_undo_tool_enforces_working_directory() -> None:
     """undo tool revert should validate path is within working directory."""
-    from tools.undo_tool import _execute as undo_execute
+    from src.tools.undo_tool import _execute as undo_execute
 
     with tempfile.TemporaryDirectory() as tmpdir:
         ctx = ToolContext(
@@ -264,7 +264,7 @@ def test_undo_tool_enforces_working_directory() -> None:
 
 def test_diff_tool_enforces_working_directory() -> None:
     """diff tool should validate path is within the working directory."""
-    from tools.diff_tool import execute as diff_execute
+    from src.tools.diff_tool import execute as diff_execute
 
     with tempfile.TemporaryDirectory() as tmpdir:
         ctx = ToolContext(working_directory=tmpdir)
@@ -323,7 +323,7 @@ class TestAtomicWritePathValidation:
     def test_write_file_atomic_check_blocks_created_symlink(self) -> None:
         """write_file should re-check path right before the write, catching a
         symlink created after the initial validation."""
-        from tools.write_file import execute as write_execute
+        from src.tools.write_file import execute as write_execute
         _check_symlink_support()
 
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -348,7 +348,7 @@ class TestAtomicWritePathValidation:
 
     def test_edit_file_atomic_check_blocks_created_symlink(self) -> None:
         """edit_file should re-check path right before the write."""
-        from tools.edit_file import execute as edit_execute
+        from src.tools.edit_file import execute as edit_execute
         _check_symlink_support()
 
         with tempfile.TemporaryDirectory() as tmpdir:

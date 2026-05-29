@@ -23,7 +23,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from .logging_config import get_logger
-from tools import Tool, ToolContext
+from src.tools import Tool, ToolContext
 
 logger = get_logger(__name__)
 
@@ -109,7 +109,7 @@ def _handle_bash_tool(args: dict[str, object], ctx: ToolContext, defn: CustomToo
 
     # Apply the same command scanner as the built-in bash tool
     try:
-        from tools.bash_tool import _check_command_for_outside_writes
+        from src.tools.bash_tool import _check_command_for_outside_writes
     except ImportError:
         pass
     else:
@@ -290,7 +290,7 @@ def load_custom_tools(config_path: str | None, working_directory: str) -> list[T
         return []
 
     # ── Integrity check (session-modified file detection) ──────────────
-    from tools import was_file_modified_during_session
+    from src.tools import was_file_modified_during_session
     if was_file_modified_during_session(config_path):
         logger.warning(
             "Custom tools config '%s' was modified during the current "

@@ -162,7 +162,7 @@ class TestPluginInjectionPrevention:
 
     def test_detect_session_modified_plugin(self) -> None:
         """A plugin file modified during the session should be detected."""
-        from tools import record_session_start, was_file_modified_during_session
+        from src.tools import record_session_start, was_file_modified_during_session
 
         with tempfile.TemporaryDirectory() as tmpdir:
             record_session_start()
@@ -172,7 +172,7 @@ class TestPluginInjectionPrevention:
             plugin_file.write_text("__version__ = '1.0.0'\n__author__ = 'test'\n")
 
             # Record timestamp as if it was there at session start
-            from tools import record_file_timestamp
+            from src.tools import record_file_timestamp
             record_file_timestamp(str(plugin_file))
 
             # "Modify" it during the session
@@ -184,7 +184,7 @@ class TestPluginInjectionPrevention:
 
     def test_unmodified_plugin_not_detected(self) -> None:
         """A plugin file NOT modified during the session should not trigger."""
-        from tools import record_session_start, was_file_modified_during_session
+        from src.tools import record_session_start, was_file_modified_during_session
 
         with tempfile.TemporaryDirectory() as tmpdir:
             record_session_start()
@@ -193,7 +193,7 @@ class TestPluginInjectionPrevention:
             plugin_file = Path(tmpdir) / "plugin.py"
             plugin_file.write_text("__version__ = '1.0.0'\n")
 
-            from tools import record_file_timestamp
+            from src.tools import record_file_timestamp
             record_file_timestamp(str(plugin_file))
 
             # Don't modify it — check should be clean
@@ -201,7 +201,7 @@ class TestPluginInjectionPrevention:
 
     def test_nonexistent_file_not_detected(self) -> None:
         """A file that doesn't exist should not be flagged as modified."""
-        from tools import record_session_start, was_file_modified_during_session
+        from src.tools import record_session_start, was_file_modified_during_session
 
         with tempfile.TemporaryDirectory() as tmpdir:
             record_session_start()
@@ -210,7 +210,7 @@ class TestPluginInjectionPrevention:
 
     def test_new_file_after_session_start_detected(self) -> None:
         """A file created after session start should be detected."""
-        from tools import record_session_start, was_file_modified_during_session
+        from src.tools import record_session_start, was_file_modified_during_session
 
         with tempfile.TemporaryDirectory() as tmpdir:
             record_session_start()

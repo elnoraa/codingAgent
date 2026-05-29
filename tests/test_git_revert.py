@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from tools import ToolContext
-from tools.git_revert import git_revert_tool, execute
+from src.tools import ToolContext
+from src.tools.git_revert import git_revert_tool, execute
 
 
 def test_tool_definition() -> None:

@@ -6,7 +6,7 @@ import tempfile
 from pathlib import Path
 from unittest.mock import patch
 
-from tools.lint_tool import detect_linter, run_linter, _lint_post_edit_hook
+from src.tools.lint_tool import detect_linter, run_linter, _lint_post_edit_hook
 
 
 class TestDetectLinter:

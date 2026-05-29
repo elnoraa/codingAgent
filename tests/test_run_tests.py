@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from tools import ToolContext
-from tools.run_tests import run_tests_tool, execute
+from src.tools import ToolContext
+from src.tools.run_tests import run_tests_tool, execute
 
 
 def test_tool_definition() -> None:

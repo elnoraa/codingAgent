@@ -5,8 +5,8 @@ from __future__ import annotations
 import tempfile
 from pathlib import Path
 
-from tools import ToolContext
-from tools.edit_file import edit_file_tool
+from src.tools import ToolContext
+from src.tools.edit_file import edit_file_tool
 
 
 def test_tool_definition() -> None:
@@ -22,7 +22,7 @@ def test_accepts_oldText() -> None:
         Path(filepath).write_text("hello world", encoding="utf-8")
 
         ctx = ToolContext(working_directory=tmp)
-        from tools.edit_file import execute
+        from src.tools.edit_file import execute
 
         result = execute({
             "path": filepath,
@@ -41,7 +41,7 @@ def test_accepts_old_string() -> None:
         Path(filepath).write_text("hello world", encoding="utf-8")
 
         ctx = ToolContext(working_directory=tmp)
-        from tools.edit_file import execute
+        from src.tools.edit_file import execute
 
         result = execute({
             "path": filepath,
@@ -60,7 +60,7 @@ def test_oldText_takes_precedence_over_old_string() -> None:
         Path(filepath).write_text("alpha beta", encoding="utf-8")
 
         ctx = ToolContext(working_directory=tmp)
-        from tools.edit_file import execute
+        from src.tools.edit_file import execute
 
         result = execute({
             "path": filepath,
@@ -76,7 +76,7 @@ def test_oldText_takes_precedence_over_old_string() -> None:
 def test_missing_path_returns_error() -> None:
     """Should return error when path is missing."""
     ctx = ToolContext(working_directory="/tmp")
-    from tools.edit_file import execute
+    from src.tools.edit_file import execute
 
     result = execute({"oldText": "x", "newText": "y"}, ctx)
     assert 'missing required argument "path"' in result
@@ -85,7 +85,7 @@ def test_missing_path_returns_error() -> None:
 def test_missing_oldText_returns_error() -> None:
     """Should return error when both oldText and old_string are missing."""
     ctx = ToolContext(working_directory="/tmp")
-    from tools.edit_file import execute
+    from src.tools.edit_file import execute
 
     result = execute({"path": "/nonexistent/file.txt", "newText": "y"}, ctx)
     assert 'missing required argument "oldText"' in result
@@ -94,7 +94,7 @@ def test_missing_oldText_returns_error() -> None:
 def test_missing_newText_returns_error() -> None:
     """Should return error when both newText and new_string are missing."""
     ctx = ToolContext(working_directory="/tmp")
-    from tools.edit_file import execute
+    from src.tools.edit_file import execute
 
     result = execute({"path": "/nonexistent/file.txt", "oldText": "x"}, ctx)
     assert 'missing required argument "newText"' in result

@@ -69,8 +69,8 @@ def test_save_pending_plan_with_prefixed_name(temp_wd: str) -> None:
 
 def test_write_plan_execute_with_prefixed_name(temp_wd: str) -> None:
     """write_plan tool with a name like '05-feat-x' should not double-number."""
-    from tools.write_plan import execute
-    from tools import ToolContext
+    from src.tools.write_plan import execute
+    from src.tools import ToolContext
 
     ctx = ToolContext(working_directory=temp_wd)
     args = {"name": "42-feat-my-feature", "content": "# My Feature\n\nDescription."}
@@ -224,8 +224,8 @@ def test_ensure_dirs_creates_directories(temp_wd: str) -> None:
 
 def test_write_plan_execute_saves_file(temp_wd: str) -> None:
     """write_plan.execute() should create a valid plan file on disk."""
-    from tools.write_plan import execute
-    from tools import ToolContext
+    from src.tools.write_plan import execute
+    from src.tools import ToolContext
 
     ctx = ToolContext(working_directory=temp_wd)
     args = {"name": "test-write-plan", "content": "# Test Plan\n\nThis is a test."}
@@ -250,8 +250,8 @@ def test_write_plan_execute_saves_file(temp_wd: str) -> None:
 
 def test_write_plan_execute_relative_path(temp_wd: str) -> None:
     """write_plan.execute() should work with a relative working directory."""
-    from tools.write_plan import execute
-    from tools import ToolContext
+    from src.tools.write_plan import execute
+    from src.tools import ToolContext
 
     old_cwd = os.getcwd()
     try:
@@ -268,8 +268,8 @@ def test_write_plan_execute_relative_path(temp_wd: str) -> None:
 
 def test_write_plan_execute_empty_string_wd(temp_wd: str) -> None:
     """write_plan.execute() should handle an empty string working directory."""
-    from tools.write_plan import execute
-    from tools import ToolContext
+    from src.tools.write_plan import execute
+    from src.tools import ToolContext
 
     old_cwd = os.getcwd()
     try:
@@ -286,8 +286,8 @@ def test_write_plan_execute_empty_string_wd(temp_wd: str) -> None:
 
 def test_write_plan_execute_missing_name(temp_wd: str) -> None:
     """execute() should return an error when name is missing."""
-    from tools.write_plan import execute
-    from tools import ToolContext
+    from src.tools.write_plan import execute
+    from src.tools import ToolContext
 
     ctx = ToolContext(working_directory=temp_wd)
     result = execute({"content": "some content"}, ctx)
@@ -296,8 +296,8 @@ def test_write_plan_execute_missing_name(temp_wd: str) -> None:
 
 def test_write_plan_execute_missing_content(temp_wd: str) -> None:
     """execute() should return an error when content is missing."""
-    from tools.write_plan import execute
-    from tools import ToolContext
+    from src.tools.write_plan import execute
+    from src.tools import ToolContext
 
     ctx = ToolContext(working_directory=temp_wd)
     result = execute({"name": "some-name"}, ctx)
@@ -306,8 +306,8 @@ def test_write_plan_execute_missing_content(temp_wd: str) -> None:
 
 def test_write_plan_execute_empty_name_after_strip(temp_wd: str) -> None:
     """execute() should return an error for whitespace-only name."""
-    from tools.write_plan import execute
-    from tools import ToolContext
+    from src.tools.write_plan import execute
+    from src.tools import ToolContext
 
     ctx = ToolContext(working_directory=temp_wd)
     result = execute({"name": "   ", "content": "content"}, ctx)
@@ -316,8 +316,8 @@ def test_write_plan_execute_empty_name_after_strip(temp_wd: str) -> None:
 
 def test_write_plan_execute_empty_content_after_strip(temp_wd: str) -> None:
     """execute() should return an error for whitespace-only content."""
-    from tools.write_plan import execute
-    from tools import ToolContext
+    from src.tools.write_plan import execute
+    from src.tools import ToolContext
 
     ctx = ToolContext(working_directory=temp_wd)
     result = execute({"name": "test-name", "content": "   "}, ctx)

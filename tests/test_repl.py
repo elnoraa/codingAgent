@@ -624,7 +624,7 @@ class TestToolRegistration:
     """Verify every tool module's ``_tool`` variable is imported and registered.
 
     When a new tool module is added to ``tools/``, it must be:
-    1. Imported at the top of ``src/repl.py`` (``from tools.<module> import <name>_tool``)
+    1. Imported at the top of ``src/repl.py`` (``from src.tools.<module> import <name>_tool``)
     2. Registered in ``Repl._register_all_tools()`` (``self.tools.register(<name>_tool)``)
 
     This suite catches wiring omissions like the ``edit_plan_tool`` bug where
@@ -639,7 +639,7 @@ class TestToolRegistration:
         import ast
         from pathlib import Path
 
-        tools_dir = Path(__file__).resolve().parent.parent / "tools"
+        tools_dir = Path(__file__).resolve().parent.parent / "src" / "tools"
         result: dict[str, str] = {}
 
         for f in sorted(tools_dir.iterdir()):
@@ -679,7 +679,7 @@ class TestToolRegistration:
         imports: set[str] = set()
         for node in ast.walk(tree):
             if isinstance(node, ast.ImportFrom):
-                if node.module and node.module.startswith("tools."):
+                if node.module and "tools." in node.module:
                     for alias in node.names:
                         if alias.name.endswith("_tool"):
                             imports.add(alias.name)
@@ -719,10 +719,10 @@ class TestToolRegistration:
         missing: list[str] = []
         for var_name, mod_file in sorted(tool_vars.items()):
             if var_name not in imports:
-                missing.append(f"  {var_name} (defined in tools/{mod_file})")
+                missing.append(f"  {var_name} (defined in src/tools/{mod_file})")
 
         assert not missing, (
-            f"The following tool variable(s) are defined in tools/ but NOT imported "
+            f"The following tool variable(s) are defined in src/tools/ but NOT imported "
             f"in src/repl.py:\n" + "\n".join(missing)
         )
 
@@ -737,10 +737,10 @@ class TestToolRegistration:
         missing: list[str] = []
         for var_name, mod_file in sorted(tool_vars.items()):
             if var_name not in registered:
-                missing.append(f"  {var_name} (defined in tools/{mod_file})")
+                missing.append(f"  {var_name} (defined in src/tools/{mod_file})")
 
         assert not missing, (
-            f"The following tool variable(s) are defined in tools/ but NOT registered "
+            f"The following tool variable(s) are defined in src/tools/ but NOT registered "
             f"via self.tools.register() in _register_all_tools():\n" + "\n".join(missing)
         )
 

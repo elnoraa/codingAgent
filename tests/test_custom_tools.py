@@ -180,7 +180,7 @@ class TestCustomToolsInjectionPrevention:
 
     def test_detect_session_modified_config(self) -> None:
         """A config file modified during the session should be detected."""
-        from tools import record_session_start, was_file_modified_during_session
+        from src.tools import record_session_start, was_file_modified_during_session
 
         with tempfile.TemporaryDirectory() as tmpdir:
             record_session_start()
@@ -192,7 +192,7 @@ class TestCustomToolsInjectionPrevention:
             with open(config_path, "w") as f:
                 json.dump(initial, f)
 
-            from tools import record_file_timestamp
+            from src.tools import record_file_timestamp
             record_file_timestamp(config_path)
 
             # "Modify" during session
@@ -205,7 +205,7 @@ class TestCustomToolsInjectionPrevention:
 
     def test_unmodified_config_not_detected(self) -> None:
         """A config file NOT modified during the session should not trigger."""
-        from tools import record_session_start, was_file_modified_during_session
+        from src.tools import record_session_start, was_file_modified_during_session
 
         with tempfile.TemporaryDirectory() as tmpdir:
             record_session_start()
@@ -216,7 +216,7 @@ class TestCustomToolsInjectionPrevention:
             with open(config_path, "w") as f:
                 json.dump(initial, f)
 
-            from tools import record_file_timestamp
+            from src.tools import record_file_timestamp
             record_file_timestamp(config_path)
 
             # Don't modify — should be clean

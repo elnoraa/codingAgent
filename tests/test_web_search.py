@@ -5,8 +5,8 @@ from __future__ import annotations
 from collections.abc import Iterator
 from typing import Any, cast
 
-from tools import ToolContext
-from tools.web_search import execute, web_search_tool
+from src.tools import ToolContext
+from src.tools.web_search import execute, web_search_tool
 
 
 def test_tool_definition() -> None:

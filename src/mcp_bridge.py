@@ -33,7 +33,7 @@ from mcp import ClientSession, StdioServerParameters, types
 from mcp.client.stdio import stdio_client
 from mcp.client.sse import sse_client
 
-from tools import Tool, ToolContext
+from src.tools import Tool, ToolContext
 
 logger = logging.getLogger(__name__)
 

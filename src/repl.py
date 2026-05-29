@@ -11,52 +11,52 @@ from .client import LlmClient
 from .logging_config import get_logger
 from .mode import ASK_MODE_SYSTEM_PROMPT, PLAN_MODE_SYSTEM_PROMPT
 from .notifications import notify, should_notify, play_sound
-from tools import Tool, ToolContext, ToolRegistry
+from src.tools import Tool, ToolContext, ToolRegistry
 
 logger = get_logger(__name__)
-from tools.read_file import read_file_tool
-from tools.write_file import write_file_tool
-from tools.edit_file import edit_file_tool
-from tools.glob_tool import glob_tool
-from tools.grep_tool import grep_tool
-from tools.bash_tool import bash_tool
-from tools.directory_tree import directory_tree_tool
-from tools.list_directory import list_directory_tool
-from tools.file_search import file_search_tool
-from tools.diff_tool import diff_tool
-from tools.replace_in_files import replace_in_files_tool
-from tools.run_tests import run_tests_tool
-from tools.git_commit import git_commit_tool
-from tools.git_push import git_push_tool
-from tools.git_status import git_status_tool
-from tools.url_fetch import url_fetch_tool
-from tools.think_tool import think_tool
-from tools.restart_session import restart_session_tool
-from tools.web_search import web_search_tool
-from tools.undo_tool import undo_tool
-from tools.python_tool import python_tool
-from tools.write_plan import write_plan_tool
-from tools.complete_plan import complete_plan_tool
-from tools.edit_plan import edit_plan_tool
-from tools.ask_user import ask_user_tool
-from tools.syntax_check import syntax_check_tool
-from tools.verify_content import verify_content_tool
-from tools.config_tool import config_tool
-from tools.git_log import git_log_tool
-from tools.environment import environment_tool
-from tools.spawn_agent import spawn_agent_tool
-from tools.list_agents import list_agents_tool
-from tools.send_to_agent import send_to_agent_tool
-from tools.terminate_agent import terminate_agent_tool
-from tools.run_swarm import run_swarm_tool
-from tools.git_revert import git_revert_tool
-from tools.rename_file import rename_file_tool
-from tools.git_branch import git_branch_tool
-from tools.api_tool import api_tool
-from tools.precommit_tool import precommit_tool
-from tools.ci_tool import ci_tool
-from tools.db_tool import db_tool
-from tools.docker_tool import docker_tool
+from src.tools.read_file import read_file_tool
+from src.tools.write_file import write_file_tool
+from src.tools.edit_file import edit_file_tool
+from src.tools.glob_tool import glob_tool
+from src.tools.grep_tool import grep_tool
+from src.tools.bash_tool import bash_tool
+from src.tools.directory_tree import directory_tree_tool
+from src.tools.list_directory import list_directory_tool
+from src.tools.file_search import file_search_tool
+from src.tools.diff_tool import diff_tool
+from src.tools.replace_in_files import replace_in_files_tool
+from src.tools.run_tests import run_tests_tool
+from src.tools.git_commit import git_commit_tool
+from src.tools.git_push import git_push_tool
+from src.tools.git_status import git_status_tool
+from src.tools.url_fetch import url_fetch_tool
+from src.tools.think_tool import think_tool
+from src.tools.restart_session import restart_session_tool
+from src.tools.web_search import web_search_tool
+from src.tools.undo_tool import undo_tool
+from src.tools.python_tool import python_tool
+from src.tools.write_plan import write_plan_tool
+from src.tools.complete_plan import complete_plan_tool
+from src.tools.edit_plan import edit_plan_tool
+from src.tools.ask_user import ask_user_tool
+from src.tools.syntax_check import syntax_check_tool
+from src.tools.verify_content import verify_content_tool
+from src.tools.config_tool import config_tool
+from src.tools.git_log import git_log_tool
+from src.tools.environment import environment_tool
+from src.tools.spawn_agent import spawn_agent_tool
+from src.tools.list_agents import list_agents_tool
+from src.tools.send_to_agent import send_to_agent_tool
+from src.tools.terminate_agent import terminate_agent_tool
+from src.tools.run_swarm import run_swarm_tool
+from src.tools.git_revert import git_revert_tool
+from src.tools.rename_file import rename_file_tool
+from src.tools.git_branch import git_branch_tool
+from src.tools.api_tool import api_tool
+from src.tools.precommit_tool import precommit_tool
+from src.tools.ci_tool import ci_tool
+from src.tools.db_tool import db_tool
+from src.tools.docker_tool import docker_tool
 from .session import save_session, load_session, list_sessions
 from typing import Any, cast, TYPE_CHECKING
 
@@ -607,7 +607,7 @@ class Repl:
         self._import_graph = ImportGraph()
 
         # Record session start for file-tamper detection
-        from tools import record_session_start
+        from src.tools import record_session_start
         record_session_start()
         self._notifications_enabled = notifications_enabled
         self._notifications_min_duration = notifications_min_duration
@@ -1750,7 +1750,7 @@ class Repl:
 
     def _handle_lint(self, filepath: str) -> None:
         """Run linter on specified file or directory."""
-        from tools.lint_tool import detect_linter, run_linter
+        from src.tools.lint_tool import detect_linter, run_linter
 
         if not filepath:
             filepath = os.getcwd()

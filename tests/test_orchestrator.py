@@ -8,7 +8,7 @@ import pytest
 
 from src.orchestrator import Orchestrator, AgentHandle
 from src.client import LlmClient
-from tools import ToolContext
+from src.tools import ToolContext
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────

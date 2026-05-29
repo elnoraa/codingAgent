@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock
 
-from tools import ToolContext
-from tools.run_swarm import (
+from src.tools import ToolContext
+from src.tools.run_swarm import (
     _execute_run_swarm,
     _run_broadcast_swarm,
     _run_debate_swarm,

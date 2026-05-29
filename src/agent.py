@@ -18,7 +18,7 @@ import anthropic
 
 from .client import LlmClient
 from .logging_config import get_logger
-from tools import Tool, ToolContext, ToolRegistry
+from src.tools import Tool, ToolContext, ToolRegistry
 from .utils import estimate_tokens, trim_messages
 
 logger = get_logger(__name__)

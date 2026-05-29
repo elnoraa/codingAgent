@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from tools import ToolContext
-from tools.think_tool import execute, think_tool
+from src.tools import ToolContext
+from src.tools.think_tool import execute, think_tool
 
 
 def test_tool_definition() -> None:

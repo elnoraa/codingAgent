@@ -9,8 +9,8 @@ from typing import Any
 
 import pytest
 
-from tools import Tool, ToolContext
-from tools.db_tool import execute, _is_write_query, _format_table_schema
+from src.tools import Tool, ToolContext
+from src.tools.db_tool import execute, _is_write_query, _format_table_schema
 
 
 from collections.abc import Generator

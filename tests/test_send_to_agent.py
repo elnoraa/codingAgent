@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from tools.send_to_agent import _can_communicate
+from src.tools.send_to_agent import _can_communicate
 
 
 class MockAgent:

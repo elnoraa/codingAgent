@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from tools import ToolContext
-from tools.restart_session import execute, restart_session_tool
+from src.tools import ToolContext
+from src.tools.restart_session import execute, restart_session_tool
 
 
 def test_tool_definition() -> None:

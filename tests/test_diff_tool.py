@@ -6,8 +6,8 @@ import subprocess
 import tempfile
 from pathlib import Path
 
-from tools import ToolContext
-from tools.diff_tool import diff_tool, execute
+from src.tools import ToolContext
+from src.tools.diff_tool import diff_tool, execute
 
 
 def _init_git_repo(path: str) -> None:

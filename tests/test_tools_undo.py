@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from tools import ToolContext
-from tools.undo_tool import undo_tool
+from src.tools import ToolContext
+from src.tools.undo_tool import undo_tool
 
 
 def _make_context_with_snapshot() -> ToolContext:

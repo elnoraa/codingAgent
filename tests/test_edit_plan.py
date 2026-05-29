@@ -6,8 +6,8 @@ import os
 import tempfile
 from pathlib import Path
 
-from tools.edit_plan import execute as edit_plan_execute
-from tools import ToolContext
+from src.tools.edit_plan import execute as edit_plan_execute
+from src.tools import ToolContext
 
 
 def _create_test_plan(pending_dir: Path, name: str, content: str) -> Path:

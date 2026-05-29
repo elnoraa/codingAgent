@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
-from tools import ToolContext
-from tools.url_fetch import url_fetch_tool, execute
+from src.tools import ToolContext
+from src.tools.url_fetch import url_fetch_tool, execute
 
 
 def test_tool_definition() -> None:

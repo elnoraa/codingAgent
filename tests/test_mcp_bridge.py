@@ -17,7 +17,7 @@ from src.mcp_bridge import (
     _serialize_tool_result,
     parse_server_configs,
 )
-from tools import ToolContext
+from src.tools import ToolContext
 
 
 # ── Tests for parse_server_configs ────────────────────────────────────────────

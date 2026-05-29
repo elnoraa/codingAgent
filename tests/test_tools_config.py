@@ -5,8 +5,8 @@ from __future__ import annotations
 import os
 
 import pytest
-from tools import ToolContext
-from tools.config_tool import execute, config_tool
+from src.tools import ToolContext
+from src.tools.config_tool import execute, config_tool
 
 
 def test_tool_definition() -> None:
