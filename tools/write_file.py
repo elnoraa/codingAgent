@@ -22,6 +22,11 @@ def execute(args: dict[str, Any], ctx: ToolContext) -> str:
     if content is None:
         return 'Error: missing required argument "content".'
 
+    # Validate path is within the working directory
+    error = ctx.validate_write_path(path)
+    if error:
+        return error
+
     # Snapshot existing content before overwriting
     ctx.snapshot_file(path)
 

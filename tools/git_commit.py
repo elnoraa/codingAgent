@@ -19,6 +19,11 @@ def execute(args: dict[str, Any], _ctx: ToolContext) -> str:
     all_files = bool(args.get("all", False))
     logger.info("execute: path=%s, message=%s, autoMessage=%s, all=%s", root_dir, message, auto_message, all_files)
 
+    # Validate path is within the working directory
+    error = _ctx.validate_write_path(root_dir)
+    if error:
+        return error
+
     # Check if we're in a git repo
     try:
         subprocess.run(

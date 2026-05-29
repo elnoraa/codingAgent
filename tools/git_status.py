@@ -16,6 +16,11 @@ def execute(args: dict[str, Any], _ctx: ToolContext) -> str:
     root_dir = args.get("path") or os.getcwd()
     logger.info("execute: path=%s", root_dir)
 
+    # Validate path is within the working directory
+    error = _ctx.validate_write_path(root_dir)
+    if error:
+        return error
+
     # Check if we're in a git repo
     try:
         subprocess.run(

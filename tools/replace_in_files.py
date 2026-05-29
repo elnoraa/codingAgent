@@ -33,6 +33,11 @@ def execute(args: dict[str, Any], ctx: ToolContext) -> str:
     if new_text is None:
         return 'Error: missing required argument "newText" (or "new_string").'
 
+    # Validate search directory is within the working directory
+    error = ctx.validate_write_path(search_dir)
+    if error:
+        return error
+
     # Build list of files to process
     files_to_search: list[str] = []
 

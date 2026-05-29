@@ -18,6 +18,11 @@ def execute(args: dict[str, Any], _ctx: ToolContext) -> str:
     max_lines = int(args.get("maxLines", 200))
     logger.info("execute: path=%s, staged=%s, maxLines=%d", root_dir, staged, max_lines)
 
+    # Validate path is within the working directory
+    error = _ctx.validate_write_path(root_dir)
+    if error:
+        return error
+
     # Check if we're in a git repo
     try:
         subprocess.run(

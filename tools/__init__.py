@@ -89,6 +89,14 @@ class ToolContext:
         except (IndexError, OSError):
             return False
 
+    def validate_write_path(self, path: str) -> str | None:
+        """Validate that a path is within this context's working directory.
+
+        Delegates to ``src.utils.validate_write_path``.
+        """
+        from src.utils import validate_write_path as _validate
+        return _validate(path, self.working_directory)
+
 
 @dataclass
 class Tool:

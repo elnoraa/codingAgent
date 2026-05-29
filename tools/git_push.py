@@ -18,6 +18,11 @@ def execute(args: dict[str, Any], _ctx: ToolContext) -> str:
     remote = args.get("remote") or "origin"
     logger.info("execute: path=%s, branch=%s, remote=%s", root_dir, branch, remote)
 
+    # Validate path is within the working directory
+    error = _ctx.validate_write_path(root_dir)
+    if error:
+        return error
+
     # Check if we're in a git repo
     try:
         subprocess.run(

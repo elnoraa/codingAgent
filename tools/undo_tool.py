@@ -55,6 +55,11 @@ def _execute(args: dict[str, Any], ctx: ToolContext) -> str:
     if not path:
         return 'Error: path is required for revert action.'
 
+    # Validate path is within the working directory
+    error = ctx.validate_write_path(path)
+    if error:
+        return error
+
     if ctx.file_snapshots is None:
         return "Error: snapshots not available (no modifications made this session)."
 

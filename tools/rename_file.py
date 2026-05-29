@@ -26,6 +26,14 @@ def execute(args: dict[str, Any], ctx: ToolContext) -> str:
     src_path = os.path.join(ctx.working_directory, source) if not os.path.isabs(source) else source
     dst_path = os.path.join(ctx.working_directory, destination) if not os.path.isabs(destination) else destination
 
+    # Validate both paths are within the working directory
+    error = ctx.validate_write_path(src_path)
+    if error:
+        return error
+    error = ctx.validate_write_path(dst_path)
+    if error:
+        return error
+
     if not os.path.exists(src_path):
         return f"Error: source path does not exist: {src_path}"
 

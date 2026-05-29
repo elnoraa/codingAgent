@@ -22,6 +22,11 @@ def execute(args: dict[str, Any], ctx: ToolContext) -> str:
     if new_text is None:
         return 'Error: missing required argument "newText" (or "new_string").'
 
+    # Validate path is within the working directory
+    error = ctx.validate_write_path(path)
+    if error:
+        return error
+
     # Snapshot existing content before editing
     ctx.snapshot_file(path)
 

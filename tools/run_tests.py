@@ -18,6 +18,11 @@ def execute(args: dict[str, Any], _ctx: ToolContext) -> str:
     timeout = int(args.get("timeout", 120))
     logger.info("execute: path=%s, command=%s, timeout=%d", root_dir, command, timeout)
 
+    # Validate path is within the working directory
+    error = _ctx.validate_write_path(root_dir)
+    if error:
+        return error
+
     # If no explicit command, try to auto-detect test framework
     if not command:
         command = _detect_test_command(root_dir)

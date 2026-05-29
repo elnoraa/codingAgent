@@ -22,6 +22,11 @@ def execute(args: dict[str, Any], _ctx: ToolContext) -> str:
     max_count = min(int(args.get("maxCount", 20)), 100)
     branch = args.get("branch", "")
 
+    # Validate path is within the working directory
+    error = _ctx.validate_write_path(root_dir)
+    if error:
+        return error
+
     # Check if we're in a git repo
     try:
         subprocess.run(

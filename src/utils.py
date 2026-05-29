@@ -576,3 +576,33 @@ def highlight_code(code: str, language: str = "", theme: str = "monokai") -> str
         return buf.getvalue()
     except Exception:
         return code
+
+
+# ── Write-path enforcement ───────────────────────────────────────────────────
+
+
+def validate_write_path(path: str, working_directory: str) -> str | None:
+    """Validate that a write path is within the working directory.
+
+    Resolves both paths to their real absolute forms and checks that
+    *path* resolves to a location inside *working_directory*.
+
+    Returns ``None`` if the path is valid, or an error message string
+    if it is outside the working directory.
+
+    On Windows, comparison is case-insensitive (handled by Path.resolve()).
+    """
+    from pathlib import Path
+
+    resolved_path = Path(path).resolve()
+    resolved_wd = Path(working_directory).resolve()
+
+    try:
+        resolved_path.relative_to(resolved_wd)
+        return None
+    except ValueError:
+        return (
+            f"Error: Path '{path}' resolves to '{resolved_path}' "
+            f"which is outside the working directory '{resolved_wd}'. "
+            f"All file operations must be within the working directory."
+        )
