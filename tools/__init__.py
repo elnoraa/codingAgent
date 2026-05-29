@@ -24,6 +24,8 @@ class ToolContext:
     """Reference to the Orchestrator for multi-agent support (optional)."""
     agent_id: str = "main"
     """ID of the agent executing this tool (default: 'main')."""
+    confirm_edits: bool = False
+    """If True, show diff and ask user to confirm before applying file edits."""
 
     def snapshot_file(self, path: str) -> None:
         """Read the current file content and store a snapshot before modification."""

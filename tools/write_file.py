@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import os
 from pathlib import Path
 from typing import Any
 
@@ -23,6 +24,18 @@ def execute(args: dict[str, Any], ctx: ToolContext) -> str:
 
     # Snapshot existing content before overwriting
     ctx.snapshot_file(path)
+
+    # Check confirm mode — show diff and ask user before applying
+    confirm = bool(args.get("confirm", False)) or getattr(ctx, 'confirm_edits', False)
+    if confirm and os.path.exists(path):
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                current = f.read()
+            from src.utils import show_diff_and_confirm
+            if not show_diff_and_confirm(current, content, path):
+                return f"Skipped: {path} (user declined)"
+        except (OSError, IOError):
+            pass  # If we can't read the existing file, proceed
 
     try:
         Path(path).parent.mkdir(parents=True, exist_ok=True)

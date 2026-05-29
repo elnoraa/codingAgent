@@ -306,6 +306,43 @@ def is_transient_error(error: Exception) -> bool:
 # ── Markdown Rendering & Syntax Highlighting ──────────────────────────────
 
 
+def show_diff_and_confirm(original: str, modified: str, filepath: str) -> bool:
+    """Show a colored diff between original and modified content.
+
+    Returns True if user confirms, False if user rejects.
+    """
+    import difflib
+
+    diff_lines = list(difflib.unified_diff(
+        original.splitlines(keepends=True),
+        modified.splitlines(keepends=True),
+        fromfile=filepath,
+        tofile=filepath,
+    ))
+
+    if not diff_lines:
+        return True  # No changes
+
+    # Colorize the diff
+    for line in diff_lines:
+        if line.startswith("+"):
+            print(green(line.rstrip()))
+        elif line.startswith("-"):
+            print(red(line.rstrip()))
+        elif line.startswith("@@"):
+            print(cyan(line.rstrip()))
+        else:
+            print(dim(line.rstrip()))
+
+    # Ask for confirmation
+    print(f"\n  {yellow('Apply these changes?')} [Y/n] ", end="", flush=True)
+    try:
+        response = input().strip().lower()
+    except (EOFError, KeyboardInterrupt):
+        response = "n"
+    return response in ("", "y", "yes")
+
+
 def render_markdown(text: str, syntax_theme: str = "monokai") -> None:
     """Render Markdown text to the terminal using rich.
 

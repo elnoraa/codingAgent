@@ -53,6 +53,13 @@ def execute(args: dict[str, Any], ctx: ToolContext) -> str:
 
     new_content = content.replace(old_text, new_text)
 
+    # Check confirm mode — show diff and ask user before applying
+    confirm = bool(args.get("confirm", False)) or getattr(ctx, 'confirm_edits', False)
+    if confirm:
+        from src.utils import show_diff_and_confirm
+        if not show_diff_and_confirm(content, new_content, path):
+            return f"Skipped: {path} (user declined)"
+
     try:
         with open(path, "w", encoding="utf-8") as f:
             f.write(new_content)

@@ -131,6 +131,7 @@ HELP_TEXT = f"""\
   /export [md|json|session] [path]  Export conversation as Markdown, JSON, or full .agent-session
   /search <pattern>        Search conversation history
   /search -r <regex>       Search conversation with regex
+  /diff-review [on|off]    Toggle interactive diff review (confirm edits)
   /snippet list            List all saved snippets
   /snippet save <name>     Save last assistant response as a snippet
   /snippet load <name>     Display a saved snippet
@@ -612,6 +613,7 @@ class Repl:
         # Rate limit tracking
         self._rate_limit_events: int = 0
         self._pending_input: str | None = None
+        self._confirm_edits: bool = False
 
         # Per-turn latency timeline
         self._turn_timeline: list[dict[str, object]] = []
@@ -1076,6 +1078,8 @@ class Repl:
                 orchestrator=self._orchestrator,
                 agent_id="main",
             )
+            # Pass confirm-edits flag for the diff-review feature
+            context.confirm_edits = self._confirm_edits
 
             text_started = False
             self._spinner = None
@@ -1576,6 +1580,20 @@ class Repl:
             size /= 1024
         return f"{size:.1f}TB"
 
+    # ── Diff review command ──────────────────────────────────────────────
+
+    def _handle_diff_review(self, args: str = "") -> None:
+        """Toggle interactive diff review mode."""
+        parts = args.strip().split()
+        if parts and parts[0].lower() == "on":
+            self._confirm_edits = True
+        elif parts and parts[0].lower() == "off":
+            self._confirm_edits = False
+        else:
+            self._confirm_edits = not self._confirm_edits
+        status = green("ON") if self._confirm_edits else dim("OFF")
+        print(f"  Diff review mode: {status}")
+
     def _handle_plan_save(self, cmd: str) -> None:
         parts = cmd.split(maxsplit=2)
         if len(parts) < 3:
@@ -1980,7 +1998,7 @@ class Repl:
                 print(f"  {' ' * 20} {yellow(summary[:100])}")
 
     def _handle_open(self, parts: list[str]) -> None:
-        """Handle /open command — fuzzy find files by partial name."""
+        """Handle /open command — interactive file finder with inline preview."""
         if len(parts) < 2:
             print(f"  {dim('Usage: /open <partial-filename>')}")
             print(f"  {dim('Searches the project tree for files matching the given name.')}")
@@ -2019,7 +2037,6 @@ class Repl:
         def _sort_key(item: tuple[str, str]) -> tuple[int, str]:
             relpath = item[0]
             basename = os.path.basename(relpath)
-            # Priority 0 if filename starts with query, 1 if just contains
             priority = 0 if basename.lower().startswith(query_lower) else 1
             return (priority, relpath.lower())
 
@@ -2030,33 +2047,86 @@ class Repl:
             rel_path, full_path = matches[0]
             print(f"  {green('✓')} {dim('Opened:')} {cyan(rel_path)}")
             print()
-            self._display_file_preview(full_path)
+            self._preview_file(full_path)
             return
 
-        # Show top 20 matches
-        print(f"  {bold(f'Files matching \"{query}\":')} {dim(f'({len(matches)} matches)')}")
-        print()
-        for i, (rel_path, _) in enumerate(matches[:20]):
-            print(f"  {dim(str(i + 1).rjust(3))}  {cyan(rel_path)}")
+        # Show numbered results with file icons and sizes
+        print(f"\n  {bold(f'Files matching \"{query}\"')}  ({dim(str(len(matches)) + ' found')})")
+        print(f"  {'─' * 60}")
+
+        for i, (rel_path, full_path) in enumerate(matches[:20], 1):
+            try:
+                size = os.path.getsize(full_path)
+                size_str = self._format_size(size)
+            except OSError:
+                size_str = "?"
+            icon = self._get_file_icon(rel_path)
+            print(f"  {cyan(f'{i:2d}.')} {icon} {cyan(rel_path)}  {dim(f'({size_str})')}")
+
         if len(matches) > 20:
             print(f"  {dim(f'... and {len(matches) - 20} more matches')}")
 
-    def _display_file_preview(self, filepath: str) -> None:
-        """Display the first 30 lines of a file."""
+        # Interactive selection
+        print(f"\n  {yellow('Select file number')} (or press Enter to cancel): ", end="", flush=True)
         try:
-            with open(filepath, "r", encoding="utf-8", errors="replace") as f:
-                lines: list[str] = []
-                for _ in range(30):
-                    line = f.readline()
-                    if not line:
-                        break
-                    lines.append(line.rstrip("\n"))
-            for line in lines:
-                print(f"  {dim('│')} {line}")
-            if len(lines) >= 30:
-                print(f"  {dim('└─── [+ more lines]')}")
-        except (OSError, IOError) as exc:
-            print(f"  {red('✗ Error reading file:')} {exc}")
+            choice = input().strip()
+            if not choice:
+                return
+            idx = int(choice) - 1
+            if 0 <= idx < min(len(matches), 20):
+                self._preview_file(matches[idx][1])
+            else:
+                print(f"  {red('✗')} Invalid selection: {choice}")
+        except ValueError:
+            print(f"  {red('✗')} Invalid input")
+        except (EOFError, KeyboardInterrupt):
+            print()
+
+    # ── File preview helpers ─────────────────────────────────────────────
+
+    @staticmethod
+    def _get_file_icon(filepath: str) -> str:
+        """Get an emoji icon for a file based on its extension."""
+        _, ext = os.path.splitext(filepath)
+        icons = {
+            ".py": "🐍", ".js": "📜", ".ts": "📘", ".tsx": "⚛️",
+            ".jsx": "⚛️", ".json": "📋", ".md": "📝", ".yaml": "⚙️",
+            ".yml": "⚙️", ".html": "🌐", ".css": "🎨", ".sh": "💻",
+            ".sql": "🗃️", ".toml": "⚙️", ".ini": "⚙️",
+        }
+        return icons.get(ext.lower(), "📄")
+
+    def _preview_file(self, filepath: str) -> None:
+        """Show a file preview with line numbers and metadata."""
+        print(f"\n  {bold(f'File: {filepath}')}")
+        print(f"  {'─' * 60}")
+
+        try:
+            with open(filepath, "r", encoding="utf-8") as f:
+                lines = f.readlines()
+
+            max_preview = 30
+            for i, line in enumerate(lines[:max_preview], 1):
+                line_num = dim(f"{i:4d}")
+                print(f"  {line_num}│{line.rstrip()}")
+
+            if len(lines) > max_preview:
+                remaining = len(lines) - max_preview
+                print(f"  {dim(f'... and {remaining} more lines')}")
+
+            # Show file metadata
+            try:
+                size = os.path.getsize(filepath)
+                print(f"\n  {dim(f'{len(lines)} lines, {self._format_size(size)}')}")
+            except OSError:
+                pass
+
+        except Exception as e:
+            print(f"  {red(f'Error reading file: {e}')}")
+
+    def _display_file_preview(self, filepath: str) -> None:
+        """Display the first 30 lines of a file (legacy, delegates to _preview_file)."""
+        self._preview_file(filepath)
 
     def _get_or_create_python_repl(self) -> "PythonRepl":
         """Get or create the shared Python REPL instance."""
@@ -2848,6 +2918,8 @@ class Repl:
                 self._handle_search(parts)
             case "/snippet":
                 self._handle_snippet(cmd.split(maxsplit=1)[1] if len(cmd.split(maxsplit=1)) > 1 else "")
+            case "/diff-review":
+                self._handle_diff_review(cmd.split(maxsplit=1)[1] if len(cmd.split(maxsplit=1)) > 1 else "")
             case "/export":
                 self._handle_export(parts)
             case "/config":
