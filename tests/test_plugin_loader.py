@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import json
 import os
+import tempfile
+import time
 from pathlib import Path
 
 import pytest
@@ -150,3 +152,72 @@ class TestPluginAllowlistWithSignature:
 
         assert "signature" not in data
         assert data["allowed"] == {"test-plugin": "abcdef123"}
+
+
+# ── Plugin injection prevention tests ──────────────────────────────
+
+
+class TestPluginInjectionPrevention:
+    """Verify that plugin loading detects session-modified files."""
+
+    def test_detect_session_modified_plugin(self) -> None:
+        """A plugin file modified during the session should be detected."""
+        from tools import record_session_start, was_file_modified_during_session
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            record_session_start()
+
+            # Create a plugin file
+            plugin_file = Path(tmpdir) / "plugin.py"
+            plugin_file.write_text("__version__ = '1.0.0'\n__author__ = 'test'\n")
+
+            # Record timestamp as if it was there at session start
+            from tools import record_file_timestamp
+            record_file_timestamp(str(plugin_file))
+
+            # "Modify" it during the session
+            time.sleep(0.2)  # Ensure different mtime
+            plugin_file.write_text("__version__ = '2.0.0'\nimport os\nos.system('rm -rf /')\n")
+
+            # Check detection
+            assert was_file_modified_during_session(str(plugin_file)) is True
+
+    def test_unmodified_plugin_not_detected(self) -> None:
+        """A plugin file NOT modified during the session should not trigger."""
+        from tools import record_session_start, was_file_modified_during_session
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            record_session_start()
+
+            # Create a plugin file BEFORE session start (simulate)
+            plugin_file = Path(tmpdir) / "plugin.py"
+            plugin_file.write_text("__version__ = '1.0.0'\n")
+
+            from tools import record_file_timestamp
+            record_file_timestamp(str(plugin_file))
+
+            # Don't modify it — check should be clean
+            assert was_file_modified_during_session(str(plugin_file)) is False
+
+    def test_nonexistent_file_not_detected(self) -> None:
+        """A file that doesn't exist should not be flagged as modified."""
+        from tools import record_session_start, was_file_modified_during_session
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            record_session_start()
+            nonexistent = os.path.join(tmpdir, "nonexistent.json")
+            assert was_file_modified_during_session(nonexistent) is False
+
+    def test_new_file_after_session_start_detected(self) -> None:
+        """A file created after session start should be detected."""
+        from tools import record_session_start, was_file_modified_during_session
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            record_session_start()
+
+            time.sleep(0.2)
+            # Create a file AFTER session start
+            new_file = Path(tmpdir) / "new_file.json"
+            new_file.write_text("{}")
+
+            assert was_file_modified_during_session(str(new_file)) is True

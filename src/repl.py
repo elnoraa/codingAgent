@@ -604,6 +604,10 @@ class Repl:
         self._custom_tools_config = custom_tools_config
         self._python_repl: "PythonRepl | None" = None
         self._import_graph = ImportGraph()
+
+        # Record session start for file-tamper detection
+        from tools import record_session_start
+        record_session_start()
         self._notifications_enabled = notifications_enabled
         self._notifications_min_duration = notifications_min_duration
         self._tool_start_time: float = 0.0

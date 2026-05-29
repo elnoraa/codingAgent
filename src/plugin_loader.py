@@ -128,6 +128,32 @@ class PluginLoader:
             logger.warning("Plugin '%s' has no entry point (plugin.py or __init__.py)", name)
             return None
 
+        # ── Integrity check (session-modified file detection) ──────────
+        from tools import was_file_modified_during_session
+        if was_file_modified_during_session(str(entry_point)):
+            logger.warning(
+                "Plugin '%s' entry point '%s' was modified during the current "
+                "session. This could indicate a plugin injection attack.",
+                name, entry_point,
+            )
+            if interactive:
+                print()
+                print(f"  ⚠  **SECURITY WARNING**")
+                print(f"     Plugin '{name}' has been modified during this session.")
+                print(f"     This file was written or modified by the AI agent.")
+                print(f"     Proceeding could execute arbitrary code.")
+                print(f"     Path: {entry_point}")
+                print()
+                response = input("  Load anyway? Only say 'yes' if you wrote this file yourself. [y/N] ").strip().lower()
+                if response not in ("y", "yes"):
+                    logger.info("Plugin '%s' loading denied — file was session-modified", name)
+                    print(f"  Plugin '{name}' not loaded (declined security warning).")
+                    return None
+                print()
+            else:
+                logger.info("Plugin '%s' loading skipped — file was session-modified (non-interactive)", name)
+                return None
+
         # ── User confirmation ──────────────────────────────────────────────
         if interactive:
             file_hash = self._hash_file(entry_point)
