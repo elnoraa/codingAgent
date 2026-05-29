@@ -1,10 +1,10 @@
-"""Compatibility shim — re-exports from src.tools for external plugins.
+"""Compatibility shim — re-exports from src.tool_base and src.tools for external plugins.
 
-This allows external plugins (e.g., in plugins/ directory) to continue
+Allows external plugins (e.g., in plugins/ directory) to continue
 using ``from tools import Tool, ToolContext`` after the tools package
 was moved into src/tools/.
 """
-from src.tools import (  # noqa: F401
+from src.tool_base import (  # noqa: F401
     Tool,
     ToolContext,
     ToolRegistry,
@@ -13,6 +13,8 @@ from src.tools import (  # noqa: F401
     record_session_start,
     record_file_timestamp,
     was_file_modified_during_session,
+)
+from src.tools import (  # noqa: F401
     _reload_src_modules,
     reload_tools,
 )
