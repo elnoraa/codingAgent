@@ -127,6 +127,8 @@ HELP_TEXT = f"""\
   /reload                 Re-discover and re-register all tools from disk (no restart needed)
   /restart                Reset session to turn 1 (clear messages)
   /cost                   Show token usage and estimated API cost
+  /budget [set|reset|clear]  Manage token budget (set limit, reset counter, clear budget)
+  /summarize [on|off]     Toggle automatic conversation summarization
   /stats                  Show detailed session statistics
   /export [md|json|session] [path]  Export conversation as Markdown, JSON, or full .agent-session
   /search <pattern>        Search conversation history
@@ -151,6 +153,9 @@ HELP_TEXT = f"""\
   /mcp                    Show MCP server connection status and tools
   /changes                Show session change log (audit trail)
   /open <filename>         Fuzzy-find and open a file by partial name
+  /watch [add|remove]     Start or configure file watching
+  /unwatch                Stop file watching
+  /watchers               Show watcher status
   /backup [label]          Create a backup (optional label)
   /backup list             List all backups
   /backup restore <name>   Restore from a backup
@@ -615,6 +620,19 @@ class Repl:
         self._pending_input: str | None = None
         self._confirm_edits: bool = False
 
+        # Token budget tracking
+        self._token_budget: int | None = None  # Max tokens allowed (None = unlimited)
+        self._token_budget_warning: float = 0.8  # Warn at 80% of budget
+        self._token_budget_hard_limit: float = 1.0  # Block at 100%
+        self._token_budget_exceeded: bool = False
+        self._total_tokens_used: int = 0
+
+        # Summarization toggle
+        self._enable_summarization: bool = False
+
+        # File watcher
+        self._file_watcher: Any = None
+
         # Per-turn latency timeline
         self._turn_timeline: list[dict[str, object]] = []
         self._current_turn_tools: list[dict[str, object]] = []
@@ -1065,7 +1083,8 @@ class Repl:
         self._turns_by_mode[self.mode] = self._turns_by_mode.get(self.mode, 0) + 1
         system_prompt = self._get_system_prompt()
         current_system_tokens = estimate_tokens(system_prompt)
-        trimmed = trim_messages(self.messages, self.max_tokens, current_system_tokens)
+        trimmed = trim_messages(self.messages, self.max_tokens, current_system_tokens,
+                                client=self.llm if self._enable_summarization else None)
         dropped = messages_before - len(trimmed) + 1  # +1 for the just-added message
         if dropped > 0:
             self._show_trim_warning(dropped)
@@ -1132,6 +1151,9 @@ class Repl:
             os.environ["CODING_AGENT_MAX_TOKENS"] = str(self.max_tokens)
             os.environ["CODING_AGENT_TEMPERATURE"] = str(self.llm.temperature)
             os.environ["CODING_AGENT_PERSONA"] = self._custom_persona or ""
+
+            # Set up budget check callback
+            self.llm.on_budget_check = lambda: not self._token_budget_exceeded
 
             self.llm.chat_with_tools(
                 messages=self.messages,
@@ -1593,6 +1615,152 @@ class Repl:
             self._confirm_edits = not self._confirm_edits
         status = green("ON") if self._confirm_edits else dim("OFF")
         print(f"  Diff review mode: {status}")
+
+    # ── Token Budget management ──────────────────────────────────────────
+
+    def _check_token_budget(self) -> None:
+        """Check current token usage against budget and warn/block as needed."""
+        if self._token_budget is None:
+            return
+
+        ratio = self._total_tokens_used / self._token_budget
+
+        if ratio >= self._token_budget_hard_limit:
+            self._token_budget_exceeded = True
+            print(f"\n  {red('✗')} Token budget exceeded ({self._total_tokens_used:,} / {self._token_budget:,} tokens)")
+            print(f"  {yellow('⟳')} Switching to read-only mode. Use /budget reset to clear.")
+            self.mode = "plan"
+
+        elif ratio >= self._token_budget_warning:
+            warning_level = "WARNING" if ratio >= 0.9 else "CAUTION"
+            print(f"\n  {yellow('⚠')} Token budget {warning_level}: {self._total_tokens_used:,} / {self._token_budget:,} tokens ({ratio:.0%})")
+
+    def _handle_budget(self, args: str) -> None:
+        """Handle /budget commands."""
+        parts = args.strip().split()
+        subcmd = parts[0].lower() if parts else ""
+
+        if subcmd == "set":
+            if len(parts) < 2:
+                print("  Usage: /budget set <token_limit>")
+                return
+            try:
+                limit = int(parts[1])
+                if limit <= 0:
+                    print("  Budget must be positive.")
+                    return
+                self._token_budget = limit
+                self._token_budget_exceeded = False
+                print(f"  Token budget set to {limit:,} tokens")
+            except ValueError:
+                print("  Invalid token limit.")
+
+        elif subcmd == "reset":
+            self._total_tokens_used = 0
+            self._token_budget_exceeded = False
+            print("  Token budget counter reset.")
+
+        elif subcmd == "clear":
+            self._token_budget = None
+            self._token_budget_exceeded = False
+            print("  Token budget cleared (unlimited).")
+
+        else:
+            # Show current status
+            if self._token_budget is None:
+                print("  No token budget set (unlimited).")
+            else:
+                ratio = self._total_tokens_used / self._token_budget
+                print(f"  Token budget: {self._total_tokens_used:,} / {self._token_budget:,} tokens ({ratio:.1%})")
+                if self._token_budget_exceeded:
+                    print(f"  {red('●')} Budget exceeded — in read-only mode")
+            print(f"  Usage: /budget [set <limit>|reset|clear]")
+
+    # ── Summarization ────────────────────────────────────────────────────
+
+    def _handle_summarize(self, args: str) -> None:
+        """Handle /summarize command."""
+        if args.strip() == "on":
+            self._enable_summarization = True
+            print(f"  {green('✓')} Automatic summarization enabled")
+        elif args.strip() == "off":
+            self._enable_summarization = False
+            print(f"  {dim('○')} Automatic summarization disabled")
+        else:
+            status = green("ON") if self._enable_summarization else dim("OFF")
+            print(f"  Automatic summarization: {status}")
+            print("  Usage: /summarize on|off")
+
+    # ── File Watcher ─────────────────────────────────────────────────────
+
+    def _init_file_watcher(self) -> None:
+        """Initialize file watcher (lazy)."""
+        self._file_watcher: Any = None
+
+    def _on_file_change(self, changed_paths: list[str]) -> None:
+        """Callback when watched files change externally."""
+        for path in changed_paths:
+            print(f"\n  {yellow('⟳')} File changed externally: {path}")
+        print(f"  {dim('Type /status to see current state, or continue working.')}")
+
+    def _handle_watch(self, args: str) -> None:
+        """Handle /watch command."""
+        from .file_watcher import FileWatcher
+
+        parts = args.strip().split()
+        if not parts:
+            # Toggle current watcher
+            if self._file_watcher and self._file_watcher.is_running:
+                self._file_watcher.stop()
+                print("  File watcher stopped.")
+            else:
+                self._file_watcher = FileWatcher(
+                    paths=[self.working_directory],
+                    on_change=self._on_file_change,
+                )
+                self._file_watcher.start()
+                print(f"  File watcher started (watching: {self.working_directory})")
+            return
+
+        subcmd = parts[0].lower()
+
+        if subcmd == "add" and len(parts) > 1:
+            path = os.path.join(self.working_directory, parts[1])
+            if self._file_watcher:
+                self._file_watcher.add_path(path)
+                print(f"  Added watch path: {path}")
+
+        elif subcmd == "remove" and len(parts) > 1:
+            path = os.path.join(self.working_directory, parts[1])
+            if self._file_watcher:
+                self._file_watcher.remove_path(path)
+                print(f"  Removed watch path: {path}")
+
+        elif subcmd == "pattern" and len(parts) > 1:
+            if self._file_watcher:
+                self._file_watcher.stop()
+                print(f"  Set watch pattern: {parts[1]}")
+
+    def _handle_unwatch(self, args: str) -> None:
+        """Handle /unwatch command."""
+        if self._file_watcher:
+            self._file_watcher.stop()
+            self._file_watcher = None
+            print("  File watcher stopped.")
+        else:
+            print("  No file watcher running.")
+
+    def _handle_watchers(self, args: str) -> None:
+        """Handle /watchers command — show watcher status."""
+        if self._file_watcher and self._file_watcher.is_running:
+            print(f"\n  {bold('File Watcher')}")
+            print(f"  Status: {green('Running')}")
+            print(f"  Watching:")
+            for p in self._file_watcher.watched_paths:
+                print(f"    {p}")
+            print(f"  Method: {'watchdog' if self._file_watcher._use_watchdog else 'polling'}")
+        else:
+            print("  No file watcher running.")
 
     def _handle_plan_save(self, cmd: str) -> None:
         parts = cmd.split(maxsplit=2)
@@ -2920,6 +3088,16 @@ class Repl:
                 self._handle_snippet(cmd.split(maxsplit=1)[1] if len(cmd.split(maxsplit=1)) > 1 else "")
             case "/diff-review":
                 self._handle_diff_review(cmd.split(maxsplit=1)[1] if len(cmd.split(maxsplit=1)) > 1 else "")
+            case "/budget":
+                self._handle_budget(cmd.split(maxsplit=1)[1] if len(cmd.split(maxsplit=1)) > 1 else "")
+            case "/summarize":
+                self._handle_summarize(cmd.split(maxsplit=1)[1] if len(cmd.split(maxsplit=1)) > 1 else "")
+            case "/watch":
+                self._handle_watch(cmd.split(maxsplit=1)[1] if len(cmd.split(maxsplit=1)) > 1 else "")
+            case "/unwatch":
+                self._handle_unwatch(cmd.split(maxsplit=1)[1] if len(cmd.split(maxsplit=1)) > 1 else "")
+            case "/watchers":
+                self._handle_watchers(cmd.split(maxsplit=1)[1] if len(cmd.split(maxsplit=1)) > 1 else "")
             case "/export":
                 self._handle_export(parts)
             case "/config":

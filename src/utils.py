@@ -5,7 +5,11 @@ import os
 import sys
 import threading
 import time
-from typing import TextIO, cast
+from typing import Any, TextIO, cast
+
+from .logging_config import get_logger
+
+logger = get_logger(__name__)
 
 # ── ANSI color helpers ─────────────────────────────────────────────────────
 
@@ -113,7 +117,10 @@ def trim_messages(
     messages: list[dict[str, object]],
     max_tokens: int,
     system_tokens: int,
+    client: Any | None = None,  # NEW: for summarization
+    summarization_threshold: float = 0.9,  # NEW: summarize at 90% capacity
 ) -> list[dict[str, object]]:
+    """Trim messages to fit within context window, optionally summarizing."""
     threshold = int(max_tokens * TRIM_THRESHOLD)
     available = threshold - system_tokens
     if available <= 0:
@@ -123,6 +130,23 @@ def trim_messages(
     if total <= available:
         return messages
 
+    # Optionally summarize oldest messages instead of dropping them
+    if client is not None and total > int(max_tokens * summarization_threshold):
+        # Try summarizing the earliest 50% of messages
+        mid = len(messages) // 2
+        early_msgs = messages[:mid]
+        late_msgs = messages[mid:]
+
+        summary = summarize_conversation(early_msgs, client)
+        if summary:
+            summary_msg: dict[str, object] = {
+                "role": "user",
+                "content": f"[Summary of earlier conversation: {summary}]",
+            }
+            combined: list[dict[str, object]] = [summary_msg] + late_msgs  # type: ignore[operator]
+            return _strip_orphaned_tool_results(combined)
+
+    # Fall back to standard trimming
     kept: list[dict[str, object]] = []
     budget = available
 
@@ -304,6 +328,50 @@ def is_transient_error(error: Exception) -> bool:
 
 
 # ── Markdown Rendering & Syntax Highlighting ──────────────────────────────
+
+
+# ── Conversation Summarization ──────────────────────────────────────────
+
+
+def summarize_conversation(
+    messages: list[dict[str, object]],
+    client: Any,  # LlmClient instance
+) -> str:
+    """Summarize a list of messages into a condensed form using the LLM.
+
+    Returns a summary string that can replace the original messages.
+    """
+    # Build a condensed version of the messages for the summarizer prompt
+    text_parts: list[str] = []
+    for msg in messages:
+        role = msg.get("role", "unknown")
+        content = msg.get("content", "")
+        if isinstance(content, str):
+            text_parts.append(f"[{role}]: {content[:200]}")
+        elif isinstance(content, list):
+            for block in content:
+                if isinstance(block, dict):
+                    t = block.get("text") or block.get("content", "")
+                    if isinstance(t, str):
+                        text_parts.append(f"[{role}]: {t[:200]}")
+
+    conversation_text = "\n".join(text_parts)
+
+    prompt = (
+        "Summarize the following conversation between a user and an AI coding assistant. "
+        "Focus on: the user's goals, what files have been discussed or modified, "
+        "key decisions made, and what the current state of work is. "
+        "Keep the summary concise but informative (2-3 paragraphs).\n\n"
+        f"{conversation_text}"
+    )
+
+    try:
+        # Use a separate non-streaming call for summarization
+        summary = client.chat_sync(prompt, max_tokens=500)
+        return summary.strip()
+    except Exception as e:
+        logger.warning("Summarization failed: %s", e)
+        return ""
 
 
 def show_diff_and_confirm(original: str, modified: str, filepath: str) -> bool:

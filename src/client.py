@@ -30,6 +30,8 @@ class LlmClient:
         self.max_tokens = max_tokens
         self.temperature = temperature
         self.top_p = top_p
+        # Budget check callback — if set and returns False, LLM calls are blocked
+        self.on_budget_check: Callable[[], bool] | None = None
         logger.info(
             "Client initialized: model=%s, max_tokens=%s, temperature=%s, top_p=%s",
             model,
@@ -37,6 +39,20 @@ class LlmClient:
             temperature,
             top_p,
         )
+
+    def chat_sync(self, prompt: str, max_tokens: int = 500) -> str:
+        """Make a non-streaming synchronous chat completion (for summarization)."""
+        response = self.client.messages.create(
+            model=self.model,
+            max_tokens=max_tokens,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        if response.content:
+            first_block = response.content[0]
+            # Handle TextBlock or similar response types
+            text = getattr(first_block, "text", str(first_block))
+            return str(text) if text else ""
+        return ""
 
     def chat_stream(
         self,
@@ -146,6 +162,11 @@ class LlmClient:
         while True:
             loop_count += 1
             logger.debug("API request loop=%d (messages=%d)", loop_count, len(messages))
+
+            # Check token budget before each API call
+            if self.on_budget_check and not self.on_budget_check():
+                logger.warning("Token budget exceeded, stopping LLM calls")
+                return
 
             if on_llm_round_start is not None:
                 on_llm_round_start()
