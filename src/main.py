@@ -84,7 +84,26 @@ def load_config() -> dict[str, Any]:
         "custom_tools_config": cfg.get("customToolsConfig", ""),
         "notifications_enabled": cfg.get("notifications", {}).get("enabled", False),
         "notifications_min_duration": cfg.get("notifications", {}).get("minDuration", 10),
+        "mcp_servers": _get_mcp_servers(cfg),
     }
+
+
+def _get_mcp_servers(cfg: dict[str, Any]) -> list[dict[str, Any]]:
+    """Extract the MCP server list from config, with fallback to env var."""
+    mcp_servers = cfg.get("mcpServers")
+    if isinstance(mcp_servers, list):
+        return mcp_servers
+
+    # Fallback: try MCP_SERVERS env var as JSON
+    env_val = os.environ.get("MCP_SERVERS")
+    if env_val:
+        try:
+            parsed = json.loads(env_val)
+            if isinstance(parsed, list):
+                return parsed
+        except (json.JSONDecodeError, ValueError):
+            logger.warning("Invalid MCP_SERVERS env var, ignoring")
+    return []
 
 
 def main() -> None:
@@ -131,6 +150,7 @@ def main() -> None:
         custom_tools_config=config["custom_tools_config"],
         notifications_enabled=config["notifications_enabled"],
         notifications_min_duration=config["notifications_min_duration"],
+        mcp_servers=config["mcp_servers"],
     )
     repl.start()
 

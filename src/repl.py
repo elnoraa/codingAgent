@@ -49,7 +49,7 @@ from tools.send_to_agent import send_to_agent_tool
 from tools.terminate_agent import terminate_agent_tool
 from tools.run_swarm import run_swarm_tool
 from .session import save_session, load_session, list_sessions
-from typing import cast, TYPE_CHECKING
+from typing import Any, cast, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from src.python_repl import PythonRepl
@@ -68,6 +68,7 @@ from .dep_analyzer import ImportGraph
 from .profiles import Profile, delete_profile, list_profiles, load_profile, save_profile
 from .prompts import list_prompts, load_prompt, save_prompt
 from .orchestrator import Orchestrator
+from .mcp_bridge import MCPBridge
 
 # ── Readline (command history with arrow keys) ──────────────────────────
 _readline_available = False
@@ -132,6 +133,7 @@ HELP_TEXT = f"""\
   /profile load <name>    Load a configuration profile
   /profile save <name>    Save current config as a profile
   /profile delete <name>  Delete a configuration profile
+  /mcp                    Show MCP server connection status and tools
   /changes                Show session change log (audit trail)
   /open <filename>         Fuzzy-find and open a file by partial name
   /python                 Show Python REPL state
@@ -466,6 +468,16 @@ Shows what files import the given file (impact analysis). This
 helps understand the blast radius of changes to a file.
 
 See also: /deps""",
+    "mcp": """\
+Usage: /mcp
+
+Shows the status of all configured MCP (Model Context Protocol) servers:
+- Connection status (connected/disconnected)
+- Number of tools available from each server
+- Individual tool names and descriptions
+
+MCP servers are configured in config.json under the "mcpServers" key.
+See the project documentation for configuration examples.""",
 }
 
 
@@ -500,6 +512,7 @@ class Repl:
         custom_tools_config: str | None = None,
         notifications_enabled: bool = False,
         notifications_min_duration: int = 10,
+        mcp_servers: list[dict[str, object]] | None = None,
     ) -> None:
         self.llm = llm
         self.system_prompt = system_prompt
@@ -538,6 +551,10 @@ class Repl:
         self._consecutive_tool_failures: int = 0
         self._last_mode: str = "code"  # track for mode-change announcements
         self._mode_changed_via_command: bool = False
+
+        # MCP bridge for Model Context Protocol servers
+        self._mcp_bridge: MCPBridge | None = None
+        self._mcp_servers_config: list[dict[str, object]] = mcp_servers or []
 
         self.tools = ToolRegistry()
         self._register_all_tools()
@@ -607,6 +624,22 @@ class Repl:
                 self.tools.register(ct)
             if custom_tools:
                 logger.info("Registered %d custom tool(s)", len(custom_tools))
+
+        # Load MCP tools from configured servers
+        if self._mcp_servers_config:
+            try:
+                self._mcp_bridge = MCPBridge(self._mcp_servers_config)
+                mcp_tools = self._mcp_bridge.start()
+                for t in mcp_tools:
+                    self.tools.register(t)
+                if mcp_tools:
+                    logger.info(
+                        "Registered %d MCP tool(s) from %d server(s)",
+                        len(mcp_tools), len(self._mcp_bridge.get_server_info()),
+                    )
+            except Exception as exc:
+                logger.error("Failed to initialize MCP bridge: %s", exc)
+                print(f"  {yellow('⚠')} {dim(f'MCP initialization failed: {exc}')}")
 
     def _execute_tool_with_timeout(
         self,
@@ -708,6 +741,16 @@ class Repl:
         print()
         self._print_separator()
         print()
+
+        # Show MCP connection status
+        if self._mcp_bridge and self._mcp_bridge.is_any_connected:
+            for info in self._mcp_bridge.get_server_info():
+                status = f"{green('● connected')}" if info["connected"] else f"{red('● disconnected')}"
+                tool_count: int = int(info["tool_count"])  # type: ignore[arg-type]
+                mcp_name: str = str(info["name"])
+                print(f"  {dim('MCP:')} {cyan(mcp_name)} {status} {dim(f'({tool_count} tools)')}")
+        print()
+
         self._setup_tab_completion()
         try:
             self._run_loop()
@@ -728,6 +771,13 @@ class Repl:
                         is_autosave=True,
                     )
                     print(f"  {dim('Auto-saved session:')} {cyan(path)}")
+                except Exception:
+                    pass
+
+            # Disconnect MCP servers on exit
+            if self._mcp_bridge is not None:
+                try:
+                    self._mcp_bridge.disconnect_all()
                 except Exception:
                     pass
 
@@ -2144,6 +2194,46 @@ class Repl:
         else:
             print(f"  {dim('Persona:')}     {dim('(none)')}")
 
+        # Show MCP server status
+        if self._mcp_bridge and self._mcp_servers_config:
+            print(f"  {dim('MCP servers:')}")
+            for info in self._mcp_bridge.get_server_info():
+                status_label = f"{green('connected')}" if info["connected"] else f"{red('disconnected')}"
+                transport: str = str(info["transport"])
+                mcp_cfg_name: str = str(info["name"])
+                print(f"    {dim('·')} {cyan(mcp_cfg_name)} {dim(f'({transport})')} {dim(status_label)}")
+
+    def _handle_mcp(self) -> None:
+        """Show MCP server connection status and tools."""
+        if not self._mcp_bridge:
+            print(f"  {dim('No MCP servers configured.')}")
+            print(f"  {dim('Add mcpServers to config.json to connect.')}")
+            return
+
+        infos: list[dict[str, Any]] = self._mcp_bridge.get_server_info()
+        if not infos:
+            print(f"  {dim('No MCP servers configured.')}")
+            return
+
+        total = int(sum(i['tool_count'] for i in infos))  # type: ignore[arg-type]
+        connected = int(sum(1 for i in infos if i['connected']))
+        print(f"  {bold('MCP Servers')}  {dim(f'({connected}/{len(infos)} connected, {total} tools)')}")
+        print()
+        for info in infos:
+            status_symbol = green('●') if info['connected'] else red('○')
+            status_label = green('Connected') if info['connected'] else red('Disconnected')
+            name: str = str(info['name'])
+            print(f"  {status_symbol} {cyan(name)}  {dim(status_label)}")
+            if info['connected'] and info['tools']:
+                tools_list: list[dict[str, Any]] = info['tools']  # type: ignore[assignment]
+                for t in tools_list:
+                    t_name: str = str(t.get('name', ''))
+                    t_desc: str = str(t.get('description', ''))
+                    print(f"     {dim('·')} {t_name}  {dim(t_desc[:60])}")
+            if info.get('error'):
+                err: str = str(info['error'])
+                print(f"     {red('✗')} {dim(err)}")
+
     def _handle_session_save(self, parts: list[str]) -> None:
         """Save the current session."""
         if len(parts) < 2:
@@ -2263,7 +2353,9 @@ class Repl:
             case "/tools":
                 tools_to_show = self.tools.get_read_only() if self.mode in ("plan", "ask") else self.tools.get_all()
                 for t in tools_to_show:
-                    print(f"  {bold(t.name)}{dim(f' — {t.description}')}")
+                    is_mcp = "/" in t.name and self._mcp_bridge is not None and self._mcp_bridge.is_any_connected
+                    tag = f" {cyan('[MCP]')}" if is_mcp else ""
+                    print(f"  {bold(t.name)}{tag}{dim(f' — {t.description}')}")
                 print(f"  {dim(f'[{self.mode.upper()} mode — {len(tools_to_show)} tools available]')}")
             case "/reload":
                 self._handle_reload()
@@ -2345,6 +2437,10 @@ class Repl:
                 print(f"  {dim('WD:')}       {dim(self.working_directory)}")
                 if self._custom_persona:
                     print(f"  {dim('Persona:')}  {cyan(self._custom_persona)}")
+                if self._mcp_bridge and self._mcp_bridge.is_any_connected:
+                    total = self._mcp_bridge.total_tool_count
+                    count = len(self._mcp_bridge.get_server_info())
+                    print(f"  {dim('MCP:')}      {cyan(f'{total} tools from {count} server(s)')}")
                 print(f"  {dim('Cost:')}    {dim(f'${self._estimated_cost():.4f} estimated (in: {self._input_tokens_total}, out: {self._output_tokens_total})')}")
             case "/plan" | "/p":
                 # Check for subcommands first
@@ -2414,6 +2510,8 @@ class Repl:
             case "/rollback":
                 print(f"  {dim('Use the undo tool to rollback changes.')}")
                 print(f"  {dim('The agent can list and revert file snapshots automatically.')}")
+            case "/mcp":
+                self._handle_mcp()
             case "/model":
                 self._handle_model(parts)
             case "/search":
