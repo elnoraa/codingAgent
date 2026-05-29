@@ -54,6 +54,8 @@ from tools.git_branch import git_branch_tool
 from tools.api_tool import api_tool
 from tools.precommit_tool import precommit_tool
 from tools.ci_tool import ci_tool
+from tools.db_tool import db_tool
+from tools.docker_tool import docker_tool
 from .session import save_session, load_session, list_sessions
 from typing import Any, cast, TYPE_CHECKING
 
@@ -126,7 +128,7 @@ HELP_TEXT = f"""\
   /restart                Reset session to turn 1 (clear messages)
   /cost                   Show token usage and estimated API cost
   /stats                  Show detailed session statistics
-  /export [md|json] [path]  Export conversation as Markdown or JSON
+  /export [md|json|session] [path]  Export conversation as Markdown, JSON, or full .agent-session
   /search <pattern>        Search conversation history
   /search -r <regex>       Search conversation with regex
   /snippet list            List all saved snippets
@@ -148,6 +150,10 @@ HELP_TEXT = f"""\
   /mcp                    Show MCP server connection status and tools
   /changes                Show session change log (audit trail)
   /open <filename>         Fuzzy-find and open a file by partial name
+  /backup [label]          Create a backup (optional label)
+  /backup list             List all backups
+  /backup restore <name>   Restore from a backup
+  /backup clean [N]        Remove old backups, keep N most recent
   /timeline                Show per-turn latency breakdown (LLM vs tools)
   /python                 Show Python REPL state
   /reset-python           Reset the Python REPL (clear all variables)
@@ -199,6 +205,8 @@ HELP_TEXT = f"""\
   api             Make HTTP requests (GET, POST, etc.) to API endpoints
   precommit       Manage pre-commit hooks (install, run, update, validate)
   ci              CI/CD integration (detect, validate config, check pipeline status)
+  db              Explore databases (SQLite, PostgreSQL, MySQL)
+  docker          Manage Docker (containers, images, Compose)
 
 {bold('Modes')}
   CODE mode  {green('●')}  All tools available (read + write + execute)
@@ -368,16 +376,20 @@ system prompt tokens, and estimated total cost in USD.
 
 Pricing is based on the built-in MODEL_PRICING table.""",
     "export": """\
-Usage: /export [md|json] [path]
+Usage: /export [md|json|session] [path]
 
-Exports the conversation history as Markdown or JSON.
-Default format is Markdown. If no path is given, creates a
-timestamped file in the exports/ directory.
+Exports the conversation history as Markdown, JSON, or full .agent-session format.
+
+Formats:
+  md       - Markdown format (default)
+  json     - JSON format with messages
+  session  - Full .agent-session file with messages, metadata, and file listing
 
 Examples:
   /export                  Export as Markdown (default)
   /export json             Export as JSON
-  /export json ./chat.json Export to a specific path""",
+  /export session          Export full session as .agent-session
+  /export session ./backup.agent-session Export to a specific path""",
     "search": """\
 Usage: /search <pattern>
        /search -r <regex>
@@ -675,6 +687,8 @@ class Repl:
         self.tools.register(api_tool)
         self.tools.register(precommit_tool)
         self.tools.register(ci_tool)
+        self.tools.register(db_tool)
+        self.tools.register(docker_tool)
         # Load custom tools from config
         if self._custom_tools_config:
             custom_tools = load_custom_tools(self._custom_tools_config, self.working_directory)
@@ -2390,12 +2404,16 @@ class Repl:
         print(f"  {green('✓')} {dim('Model switched:')} {cyan(old_model)} {dim('→')} {cyan(new_model)}")
 
     def _handle_export(self, parts: list[str]) -> None:
-        """Handle /export command — export conversation as Markdown or JSON."""
+        """Handle /export command — export conversation as Markdown, JSON, or full .agent-session."""
         fmt = "md"
         output_path: str | None = None
         if len(parts) > 1:
             arg = parts[1].strip().lower()
-            if arg in ("json", "md"):
+            if arg == "session":
+                fmt = "session"
+                if len(parts) > 2:
+                    output_path = parts[2]
+            elif arg in ("json", "md"):
                 fmt = arg
                 if len(parts) > 2:
                     output_path = parts[2]
@@ -2408,11 +2426,43 @@ class Repl:
             return
 
         try:
-            if fmt == "json":
+            if fmt == "session":
+                from .exporter import export_full_session, load_session_file, export_summary
+                from datetime import datetime as _dt
+
+                filename = output_path or f"session_{_dt.now().strftime('%Y%m%d_%H%M%S')}.agent-session"
+                if not filename.endswith(".agent-session"):
+                    filename += ".agent-session"
+
+                # Gather session data
+                metadata = {
+                    "model": self.llm.model,
+                    "mode": self.mode,
+                    "messages": len(self.messages),
+                }
+
+                result = export_full_session(
+                    output_path=os.path.join(os.getcwd(), filename),
+                    messages=list(self.messages),
+                    metadata=metadata,
+                    working_directory=self.working_directory,
+                )
+
+                if result.endswith(".agent-session"):
+                    size = self._format_size(os.path.getsize(result))
+                    print(f"  {green('✓')} Session exported: {result} ({size})")
+                    # Show summary
+                    data = load_session_file(result)
+                    if data:
+                        print(export_summary(data))
+                else:
+                    print(f"  {red('✗')} {result}")
+            elif fmt == "json":
                 filepath = export_as_json(self.messages, self.mode, self.llm.model, output_path)
+                print(f"  {green('✓')} {dim('Exported to')} {cyan(filepath)}")
             else:
                 filepath = export_as_markdown(self.messages, self.mode, self.llm.model, output_path)
-            print(f"  {green('✓')} {dim('Exported to')} {cyan(filepath)}")
+                print(f"  {green('✓')} {dim('Exported to')} {cyan(filepath)}")
         except Exception as exc:
             print(f"  {red('✗ Export failed:')} {exc}")
 
@@ -2468,6 +2518,45 @@ class Repl:
             if info.get('error'):
                 err: str = str(info['error'])
                 print(f"     {red('✗')} {dim(err)}")
+
+    # ── Backup command handlers ──────────────────────────────────────────
+
+    def _handle_backup(self, args: str) -> None:
+        """Handle /backup commands."""
+        from .backup import create_backup, list_backups, restore_backup, clean_backups
+
+        parts = args.strip().split(maxsplit=1)
+        subcmd = parts[0].lower() if parts else ""
+        rest = parts[1] if len(parts) > 1 else ""
+
+        if subcmd == "list":
+            backups = list_backups()
+            if not backups:
+                print("  No backups found.")
+                return
+            print(f"\n  {bold('Available Backups')}")
+            print(f"  {'─' * 50}")
+            for b in backups:
+                created = b["created"].strftime("%Y-%m-%d %H:%M") if b["created"] else "?"
+                print(f"  {green(b['name'])}  {dim(b['type'])}  {b['size']}  {created}")
+
+        elif subcmd == "restore":
+            if not rest:
+                print("  Usage: /backup restore <name>")
+                return
+            result = restore_backup(rest, self.working_directory)
+            print(f"  {result}")
+
+        elif subcmd == "clean":
+            count = int(rest) if rest.isdigit() else 5
+            result = clean_backups(count)
+            print(f"  {result}")
+
+        else:
+            # Create backup
+            label = subcmd if subcmd else ""
+            result = create_backup(self.working_directory, label=label)
+            print(f"  {result}")
 
     def _handle_session_save(self, parts: list[str]) -> None:
         """Save the current session."""
@@ -2747,6 +2836,8 @@ class Repl:
             case "/rollback":
                 print(f"  {dim('Use the undo tool to rollback changes.')}")
                 print(f"  {dim('The agent can list and revert file snapshots automatically.')}")
+            case "/backup":
+                self._handle_backup(cmd.split(maxsplit=1)[1] if len(cmd.split(maxsplit=1)) > 1 else "")
             case "/timeline":
                 self._handle_timeline()
             case "/mcp":
