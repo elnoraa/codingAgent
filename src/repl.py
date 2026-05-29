@@ -172,6 +172,10 @@ HELP_TEXT = f"""\
   /task delete <name>            Delete a task file
   /task context <name> key=val   Update task context
   /tasks                         List all tasks
+  /plugins                Show loaded plugins and their status
+  /fork <name> [desc]     Fork the conversation at this point
+  /branch [list|switch|delete]  Manage conversation branches
+  /branches               List all branches
   /timeline                Show per-turn latency breakdown (LLM vs tools)
   /python                 Show Python REPL state
   /reset-python           Reset the Python REPL (clear all variables)
@@ -644,6 +648,9 @@ class Repl:
 
         # File watcher
         self._file_watcher: Any = None
+
+        # Branch manager (lazy init)
+        self._branch_manager: Any = None
 
         # Per-turn latency timeline
         self._turn_timeline: list[dict[str, object]] = []
@@ -2010,6 +2017,121 @@ class Repl:
         else:
             print("  Usage: /task [start|step|complete-step|status|resume|delete|context]")
 
+    # ── Plugin commands ─────────────────────────────────────────────────
+
+    def _handle_plugins(self, args: str) -> None:
+        """Show loaded plugins and their status."""
+        from pathlib import Path as _Path
+        plugins_dir = _Path("plugins").resolve()
+        if not plugins_dir.exists():
+            print(f"  Plugins directory not found: {plugins_dir}")
+            print(f"  Create a 'plugins/' directory and add plugins there.")
+            return
+
+        discovered: list[str] = []
+        for entry in plugins_dir.iterdir():
+            if entry.is_dir() and not entry.name.startswith(("__", ".")):
+                plugin_file = entry / "plugin.py"
+                if plugin_file.exists() or (entry / "__init__.py").exists():
+                    discovered.append(entry.name)
+
+        if not discovered:
+            print("  No plugins found in plugins/ directory.")
+            return
+
+        print(f"\n  {bold('Plugins')}")
+        print(f"  {'─' * 60}")
+        for name in discovered:
+            print(f"  {green(name)}")
+            # Try to read the description from the plugin file
+            plugin_file = plugins_dir / name / "plugin.py"
+            if plugin_file.exists():
+                try:
+                    for line in plugin_file.read_text().split("\n"):
+                        if line.startswith("__description__"):
+                            desc = line.split("=")[1].strip().strip('"').strip("'")
+                            print(f"    {dim(desc)}")
+                            break
+                except Exception:
+                    pass
+
+    # ── Branch commands ─────────────────────────────────────────────────
+
+    def _handle_fork(self, args: str) -> None:
+        """Fork the conversation at the current point."""
+        from .branch_manager import BranchManager
+
+        parts = args.strip().split(maxsplit=1)
+        name = parts[0].lower() if parts else ""
+        description = parts[1] if len(parts) > 1 else ""
+
+        if not name:
+            print("  Usage: /fork <name> [description]")
+            return
+
+        if name == "main":
+            print("  Cannot fork 'main' branch.")
+            return
+
+        if not hasattr(self, '_branch_manager'):
+            self._branch_manager = BranchManager(self.messages)
+
+        if self._branch_manager.fork(name, description):
+            print(f"  {green('✓')} Forked branch: '{name}' (from '{self._branch_manager.active_branch}')")
+        else:
+            print(f"  {red('✗')} Branch '{name}' already exists.")
+
+    def _handle_branch(self, args: str) -> None:
+        """Switch to or manage branches."""
+        from .branch_manager import BranchManager
+
+        if not hasattr(self, '_branch_manager'):
+            self._branch_manager = BranchManager(self.messages)
+
+        parts = args.strip().split(maxsplit=1)
+        subcmd = parts[0].lower() if parts else ""
+        rest = parts[1] if len(parts) > 1 else ""
+
+        if subcmd in ("list", "ls"):
+            branches = self._branch_manager.list_branches()
+            if not branches:
+                print("  No branches.")
+                return
+
+            print(f"\n  {bold('Branches')}")
+            print(f"  {'─' * 60}")
+            for b in branches:
+                active_marker = green("●") if b["active"] else dim("○")
+                print(f"  {active_marker} {b['name']:<20} {b['age']:<12} {b['messages']} msgs  {dim(b['description'])}")
+
+        elif subcmd == "switch" and rest:
+            if self._branch_manager.switch(rest):
+                self.messages = self._branch_manager.active_messages
+                print(f"  Switched to branch: {green(rest)} ({len(self.messages)} messages)")
+            else:
+                print(f"  {red('✗')} Branch '{rest}' not found.")
+
+        elif subcmd == "delete" and rest:
+            if self._branch_manager.delete(rest):
+                print(f"  Deleted branch: {rest}")
+            else:
+                print(f"  {red('✗')} Cannot delete '{rest}'. Use /branch list to see available branches.")
+
+        elif subcmd and subcmd not in ("list", "ls", "switch", "delete"):
+            if self._branch_manager.switch(subcmd):
+                self.messages = self._branch_manager.active_messages
+                print(f"  Switched to branch: {green(subcmd)} ({len(self.messages)} messages)")
+            else:
+                print(f"  {red('✗')} Branch '{subcmd}' not found.")
+
+        else:
+            print(f"  Active branch: {green(self._branch_manager.active_branch)}")
+            print(f"  Use: /branch list, /branch switch <name>, /branch delete <name>")
+
+    def _handle_branches(self, args: str) -> None:
+        """Alias for /branches list."""
+        self._handle_branch("list")
+
     def _handle_plan_save(self, cmd: str) -> None:
         parts = cmd.split(maxsplit=2)
         if len(parts) < 3:
@@ -3332,6 +3454,14 @@ class Repl:
                 self._handle_task(cmd.split(maxsplit=1)[1] if len(cmd.split(maxsplit=1)) > 1 else "")
             case "/tasks":
                 self._handle_task("status")
+            case "/plugins":
+                self._handle_plugins(cmd.split(maxsplit=1)[1] if len(cmd.split(maxsplit=1)) > 1 else "")
+            case "/fork":
+                self._handle_fork(cmd.split(maxsplit=1)[1] if len(cmd.split(maxsplit=1)) > 1 else "")
+            case "/branch":
+                self._handle_branch(cmd.split(maxsplit=1)[1] if len(cmd.split(maxsplit=1)) > 1 else "")
+            case "/branches":
+                self._handle_branches(cmd.split(maxsplit=1)[1] if len(cmd.split(maxsplit=1)) > 1 else "")
             case "/timeline":
                 self._handle_timeline()
             case "/mcp":
