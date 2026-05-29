@@ -27,6 +27,15 @@ def execute(args: dict[str, Any], ctx: ToolContext) -> str:
     if error:
         return error
 
+    # Validate content and path length
+    from src.utils import validate_length, MAX_FILE_CONTENT, MAX_PATH_LENGTH
+    error = validate_length(content, MAX_FILE_CONTENT, "file content")
+    if error:
+        return error
+    error = validate_length(path, MAX_PATH_LENGTH, "file path")
+    if error:
+        return error
+
     # Snapshot existing content before overwriting
     ctx.snapshot_file(path)
 

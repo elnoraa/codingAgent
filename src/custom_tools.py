@@ -8,6 +8,8 @@ without writing Python code. Supports handler types: bash, http, python.
   counterparts (write-path enforcement, command scanning, restricted imports).
 - HTTP handlers have SSRF protection (private IPs are blocked).
 - A warning is logged whenever bash or python type tools are loaded.
+- Template substitution values are validated to prevent shell metacharacter
+  injection in bash tools and CR/LF injection in HTTP tools.
 """
 
 from __future__ import annotations
@@ -15,12 +17,19 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re as _re
 import subprocess
 from dataclasses import dataclass, field
 from typing import Any
 
 from .logging_config import get_logger
 from tools import Tool, ToolContext
+
+logger = get_logger(__name__)
+
+# Characters that have special meaning in shell and should be blocked
+# in template substitutions for bash-type custom tools
+_SHELL_DANGEROUS_PATTERN = _re.compile(r'[;&|`$(){}]')
 
 logger = get_logger(__name__)
 
@@ -33,6 +42,39 @@ class CustomToolDef:
     input_schema: dict[str, object]
     handler_type: str  # "bash", "http", "python"
     handler_config: dict[str, Any] = field(default_factory=dict)
+
+
+def _validate_template_value(value: str, handler_type: str) -> str | None:
+    """Validate a template substitution value for safety.
+
+    For bash-type handlers, blocks shell metacharacters.
+    For http-type handlers, blocks CR/LF injection.
+
+    Returns an error message if the value is unsafe, ``None`` if safe.
+    """
+    if not isinstance(value, str):
+        return None
+
+    if handler_type == "bash":
+        if _SHELL_DANGEROUS_PATTERN.search(value):
+            return (
+                f"Error: Template substitution value contains shell metacharacters "
+                f"that are not allowed: {value!r}"
+            )
+        if value.startswith("-"):
+            return (
+                f"Error: Template substitution value starts with '-' which could "
+                f"be interpreted as a command-line flag: {value!r}"
+            )
+
+    elif handler_type == "http":
+        if "\r" in value or "\n" in value:
+            return (
+                f"Error: Template substitution value contains CR/LF characters "
+                f"which could enable HTTP header injection: {value!r}"
+            )
+
+    return None
 
 
 def _handle_bash_tool(args: dict[str, object], ctx: ToolContext, defn: CustomToolDef) -> str:
@@ -49,6 +91,10 @@ def _handle_bash_tool(args: dict[str, object], ctx: ToolContext, defn: CustomToo
     try:
         command = command_template
         for key, value in args.items():
+            # Validate the substitution value for shell safety
+            error = _validate_template_value(str(value), "bash")
+            if error:
+                return error
             command = command.replace("{{" + key + "}}", str(value))
     except Exception as e:
         return f"Error in template substitution: {e}"
@@ -105,6 +151,10 @@ def _handle_http_tool(args: dict[str, object], ctx: ToolContext, defn: CustomToo
     try:
         url = url_template
         for key, value in args.items():
+            # Validate the substitution value for HTTP safety
+            error = _validate_template_value(str(value), "http")
+            if error:
+                return error
             url = url.replace("{{" + key + "}}", str(value))
     except Exception as e:
         return f"Error in URL template substitution: {e}"

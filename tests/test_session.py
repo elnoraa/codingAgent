@@ -280,3 +280,58 @@ class TestSessionRedaction:
         content: str = cast("str", loaded_msgs[0].get("content", "")) if loaded_msgs else ""
         assert "supersecret" not in content
         assert "***REDACTED***" in content
+
+
+# ── Filename length tests ─────────────────────────────────────────────────────
+
+
+from src.session import _MAX_FILENAME_LENGTH
+
+
+def test_save_session_truncates_long_name(temp_working_dir: str) -> None:
+    """Very long session names should be truncated."""
+    long_name = "a" * 500
+    path = save_session(
+        name=long_name,
+        messages=[{"role": "user", "content": "hello"}],
+        mode="code",
+        working_directory=temp_working_dir,
+        model="test-model",
+    )
+    assert "Error" not in path
+    import os as _os
+    filename = _os.path.basename(path)
+    saved_name = filename.replace(".json", "")
+    assert len(saved_name) <= _MAX_FILENAME_LENGTH
+
+
+def test_save_session_normal_name_not_truncated(temp_working_dir: str) -> None:
+    """Normal-length session names should not be truncated."""
+    path = save_session(
+        name="my-normal-session",
+        messages=[],
+        mode="plan",
+        working_directory=temp_working_dir,
+        model="test",
+    )
+    assert "Error" not in path
+    assert "my-normal-session" in path
+
+
+def test_load_session_rejects_overlong_name(temp_working_dir: str) -> None:
+    """Loading a session with an overlong name should return None."""
+    long_name = "x" * (_MAX_FILENAME_LENGTH + 50)
+    result = load_session(long_name, temp_working_dir)
+    assert result is None
+
+
+def test_delete_session_rejects_overlong_name(temp_working_dir: str) -> None:
+    """Deleting a session with an overlong name should return False."""
+    long_name = "x" * (_MAX_FILENAME_LENGTH + 50)
+    assert delete_session(long_name, temp_working_dir) is False
+
+
+def test_max_filename_length_constant_is_reasonable() -> None:
+    """The max filename length should be <= 255 (OS limit)."""
+    assert _MAX_FILENAME_LENGTH <= 255
+    assert _MAX_FILENAME_LENGTH >= 50

@@ -77,3 +77,37 @@ def test_all_tools_have_explicit_read_only() -> None:
             f"Tool file {f.name} is missing explicit read_only flag. "
             f"Add read_only=True or read_only=False to the Tool() definition."
         )
+
+
+# ── Bash tool env var access tests ────────────────────────────────────────────
+
+
+class TestBashToolEnvVarDetection:
+    """Verify detection of sensitive env var access in bash commands."""
+
+    def test_detect_echo_api_key(self) -> None:
+        """Echo of ANTHROPIC_API_KEY should be detected."""
+        from tools.bash_tool import _check_for_sensitive_env_access
+        result = _check_for_sensitive_env_access("echo $ANTHROPIC_API_KEY")
+        assert result is not None
+        assert "ANTHROPIC_API_KEY" in result
+
+    def test_detect_echo_braces(self) -> None:
+        """Echo with ${} syntax should be detected."""
+        from tools.bash_tool import _check_for_sensitive_env_access
+        result = _check_for_sensitive_env_access("echo ${ANTHROPIC_API_KEY}")
+        assert result is not None
+
+    def test_no_false_positive_on_safe_vars(self) -> None:
+        """Safe environment variables should not be flagged."""
+        from tools.bash_tool import _check_for_sensitive_env_access
+        assert _check_for_sensitive_env_access("echo $HOME") is None
+        assert _check_for_sensitive_env_access("echo $PATH") is None
+        assert _check_for_sensitive_env_access("echo $USER") is None
+
+    def test_no_false_positive_on_normal_commands(self) -> None:
+        """Normal commands without env var access should not be flagged."""
+        from tools.bash_tool import _check_for_sensitive_env_access
+        assert _check_for_sensitive_env_access("ls -la") is None
+        assert _check_for_sensitive_env_access("python -m pytest tests/") is None
+        assert _check_for_sensitive_env_access("git status") is None

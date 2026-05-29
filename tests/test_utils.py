@@ -22,6 +22,12 @@ from src.utils import (
     magenta,
     red,
     trim_messages,
+    validate_length,
+    MAX_CODE_LENGTH,
+    MAX_COMMAND_LENGTH,
+    MAX_QUERY_LENGTH,
+    MAX_TEXT_LENGTH,
+    MAX_PATH_LENGTH,
     yellow,
 )
 
@@ -305,6 +311,42 @@ def test_contains_markdown_empty() -> None:
     assert not _contains_markdown("")
 
 
+# ── validate_length tests ──────────────────────────────────────────────────────
+
+
+def test_validate_length_within_limit() -> None:
+    """Value within max length should return None."""
+    assert validate_length("short", 100, "test") is None
+
+
+def test_validate_length_exceeds_limit() -> None:
+    """Value exceeding max length should return an error message."""
+    result = validate_length("a" * 200, 100, "test field")
+    assert result is not None
+    assert "too long" in result.lower()
+    assert "test field" in result
+
+
+def test_validate_length_none_value() -> None:
+    """None value should return None."""
+    assert validate_length(None, 100, "test") is None  # type: ignore[arg-type]
+
+
+def test_validate_length_exact_limit() -> None:
+    """Value exactly at max length should return None."""
+    assert validate_length("x" * 100, 100, "test") is None
+
+
+def test_max_length_constants_are_positive() -> None:
+    """All max-length constants should be positive."""
+    assert MAX_CODE_LENGTH > 0
+    assert MAX_COMMAND_LENGTH > 0
+    assert MAX_QUERY_LENGTH > 0
+    assert MAX_TEXT_LENGTH > 0
+    assert MAX_PATH_LENGTH > 0
+    assert MAX_PATH_LENGTH <= 4096  # Should match typical OS limits
+
+
 # ── redact_sensitive_content tests ────────────────────────────────────────────
 
 
@@ -421,3 +463,59 @@ def test_validate_walk_path_symlink_escape(tmp_path: Path) -> None:
 
     result = validate_walk_path(str(link_path), str(tmp_path))
     assert result is not None
+
+
+# ── strip_dangerous_ansi tests ────────────────────────────────────────────────
+
+
+def test_strip_dangerous_ansi_clear_screen() -> None:
+    """Clear screen sequence should be stripped."""
+    from src.utils import strip_dangerous_ansi
+    result = strip_dangerous_ansi("Hello\x1b[2JWorld")
+    assert "HelloWorld" in result
+    assert "\x1b[2J" not in result
+
+
+def test_strip_dangerous_ansi_cursor_position() -> None:
+    """Cursor positioning sequences should be stripped."""
+    from src.utils import strip_dangerous_ansi
+    result = strip_dangerous_ansi("\x1b[10;5Hmalicious")
+    assert "malicious" in result
+    assert "\x1b[10;5H" not in result
+
+
+def test_strip_dangerous_ansi_title_set() -> None:
+    """Terminal title setting sequences should be stripped."""
+    from src.utils import strip_dangerous_ansi
+    result = strip_dangerous_ansi("\x1b]0;Fake Prompt\x07")
+    assert "Fake Prompt" not in result
+
+
+def test_strip_dangerous_ansi_hide_cursor() -> None:
+    """Cursor hide/show sequences should be stripped."""
+    from src.utils import strip_dangerous_ansi
+    result = strip_dangerous_ansi("Hello\x1b[?25lWorld")
+    assert "HelloWorld" in result
+    assert "\x1b[?25l" not in result
+
+
+def test_strip_dangerous_preserves_colors() -> None:
+    """Normal color sequences should be preserved."""
+    from src.utils import strip_dangerous_ansi
+    text = "\033[32mGreen text\033[0m"
+    result = strip_dangerous_ansi(text)
+    assert "\033[32m" in result
+    assert "\033[0m" in result
+
+
+def test_strip_dangerous_empty_string() -> None:
+    """Empty string should return empty."""
+    from src.utils import strip_dangerous_ansi
+    assert strip_dangerous_ansi("") == ""
+
+
+def test_strip_dangerous_no_ansi() -> None:
+    """Plain text without ANSI should be unchanged."""
+    from src.utils import strip_dangerous_ansi
+    text = "Hello, World!"
+    assert strip_dangerous_ansi(text) == text

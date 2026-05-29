@@ -25,6 +25,9 @@ logger = get_logger(__name__)
 
 SESSION_DIR = "sessions"
 
+# Maximum length for session filenames
+_MAX_FILENAME_LENGTH = 200
+
 # Environment variable for optional session encryption
 SESSION_KEY_ENV = "CODING_AGENT_SESSION_KEY"
 
@@ -172,6 +175,14 @@ def save_session(
     if not safe_name:
         return "Error: invalid session name. Use alphanumeric characters, dashes, or underscores."
 
+    # Limit filename length
+    if len(safe_name) > _MAX_FILENAME_LENGTH:
+        safe_name = safe_name[:_MAX_FILENAME_LENGTH].rstrip("-_. ")
+        logger.warning(
+            "Session name truncated to %d characters.",
+            _MAX_FILENAME_LENGTH,
+        )
+
     session_data = {
         "name": safe_name,
         "saved_at": datetime.now().isoformat(),
@@ -206,7 +217,7 @@ def load_session(name: str, working_directory: str) -> dict[str, object] | None:
     s_dir = _sessions_dir(working_directory)
     safe_name = name.strip().replace(" ", "-")
     safe_name = "".join(c for c in safe_name if c.isalnum() or c in "-_.")
-    if not safe_name:
+    if not safe_name or len(safe_name) > _MAX_FILENAME_LENGTH:
         return None
 
     # Try plain JSON first
@@ -301,6 +312,8 @@ def delete_session(name: str, working_directory: str) -> bool:
     s_dir = _sessions_dir(working_directory)
     safe_name = name.strip().replace(" ", "-")
     safe_name = "".join(c for c in safe_name if c.isalnum() or c in "-_.")
+    if not safe_name or len(safe_name) > _MAX_FILENAME_LENGTH:
+        return False
     # Try plain JSON
     filepath = os.path.join(s_dir, f"{safe_name}.json")
     if os.path.isfile(filepath):

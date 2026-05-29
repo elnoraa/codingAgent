@@ -27,6 +27,18 @@ def execute(args: dict[str, Any], ctx: ToolContext) -> str:
     if error:
         return error
 
+    # Validate lengths
+    from src.utils import validate_length, MAX_TEXT_LENGTH, MAX_PATH_LENGTH
+    error = validate_length(old_text, MAX_TEXT_LENGTH, "old text")
+    if error:
+        return error
+    error = validate_length(new_text, MAX_TEXT_LENGTH, "new text")
+    if error:
+        return error
+    error = validate_length(path, MAX_PATH_LENGTH, "file path")
+    if error:
+        return error
+
     # Snapshot existing content before editing
     ctx.snapshot_file(path)
 

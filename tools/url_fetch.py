@@ -19,6 +19,12 @@ def execute(args: dict[str, Any], _ctx: ToolContext) -> str:
     if not url:
         return 'Error: missing required argument "url".'
 
+    # Validate URL length
+    from src.utils import validate_length, MAX_URL_LENGTH
+    error = validate_length(url, MAX_URL_LENGTH, "URL")
+    if error:
+        return error
+
     # SSRF protection: block private/internal IPs
     try:
         from src.utils import validate_url_target

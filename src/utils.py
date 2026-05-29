@@ -11,6 +11,31 @@ from .logging_config import get_logger
 
 logger = get_logger(__name__)
 
+# ── Input size limits ─────────────────────────────────────────────────────────
+
+MAX_CODE_LENGTH = 50_000        # 50KB for Python code execution
+MAX_COMMAND_LENGTH = 10_000     # 10KB for shell commands
+MAX_QUERY_LENGTH = 50_000       # 50KB for SQL queries
+MAX_TEXT_LENGTH = 100_000       # 100KB for file content replacements
+MAX_PATH_LENGTH = 4_096         # 4096 chars for file paths
+MAX_FILE_CONTENT = 10_000_000   # 10MB for file write content
+MAX_URL_LENGTH = 8_192          # 8KB for URLs
+
+
+def validate_length(value: str | None, max_length: int, name: str) -> str | None:
+    """Validate that a string value doesn't exceed *max_length*.
+
+    Returns an error message if too long, ``None`` if valid.
+    """
+    if value is None:
+        return None
+    if len(value) > max_length:
+        return (
+            f"Error: {name} is too long ({len(value)} chars, max {max_length}). "
+            f"Please reduce the input size."
+        )
+    return None
+
 # ── ANSI color helpers ─────────────────────────────────────────────────────
 
 
@@ -401,6 +426,49 @@ def print_separator(style: str = "dim") -> None:
         print(f"  {'─' * 60}")
 
 
+# ── ANSI Terminal Escape Sanitization ──────────────────────────────────────────
+
+import re as _re_ansi
+
+# Dangerous ANSI sequences that should be stripped from output before rendering.
+# These can be used for terminal injection attacks (cursor positioning, screen
+# clearing, title setting, keyboard remapping, etc.).
+_DANGEROUS_ANSI_PATTERNS: list[Any] = [
+    _re_ansi.compile(r'\x1b\[2J'),        # Clear entire screen
+    _re_ansi.compile(r'\x1b\[3J'),        # Clear scrollback
+    _re_ansi.compile(r'\x1b\[0J'),        # Clear from cursor to end of screen
+    _re_ansi.compile(r'\x1b\[1J'),        # Clear from beginning to cursor
+    _re_ansi.compile(r'\x1b\[\d*(?:;\d*)?[Hf]'),  # Cursor positioning
+    _re_ansi.compile(r'\x1b\[\?25[lh]'),   # Hide/show cursor
+    _re_ansi.compile(r'\x1b\]0;.+?\x07'),  # Set terminal title
+    _re_ansi.compile(r'\x1b\]2;.+?\x07'),  # Set terminal title (alternative)
+    _re_ansi.compile(r'\x1b\[\d*[n]'),    # Device status reports
+    _re_ansi.compile(r'\x1b\[[0-9;]*[t]'),    # XTerm window ops
+    _re_ansi.compile(r'\x1bc', _re_ansi.ASCII),      # RIS (Reset to Initial State)
+    _re_ansi.compile(r'\x1b][\\_\[\]]'),  # String terminators
+]
+
+
+def strip_dangerous_ansi(text: str) -> str:
+    """Strip dangerous ANSI escape sequences from text.
+
+    Preserves common formatting sequences (colors, bold, dim) but removes
+    sequences that could be used for terminal injection attacks.
+
+    Args:
+        text: The text to sanitize.
+
+    Returns:
+        Sanitized text with dangerous sequences removed.
+    """
+    if not text:
+        return text
+    result = text
+    for pattern in _DANGEROUS_ANSI_PATTERNS:
+        result = pattern.sub('', result)
+    return result
+
+
 def print_code(code: str, language: str = "", theme: str = "monokai") -> None:
     """Print syntax-highlighted code using rich if available."""
     try:
@@ -555,6 +623,8 @@ def render_markdown(text: str, syntax_theme: str = "monokai") -> None:
     Applies syntax highlighting to code blocks within the Markdown.
     Falls back to plain print() if Markdown parsing fails.
     """
+    # Sanitize dangerous ANSI sequences before rendering
+    text = strip_dangerous_ansi(text)
     try:
         from rich.markdown import Markdown as RichMarkdown
         from rich import print as rich_print
@@ -617,6 +687,8 @@ def highlight_code(code: str, language: str = "", theme: str = "monokai") -> str
     Returns:
         Syntax-highlighted string (rich renderable), or original code on failure.
     """
+    # Sanitize dangerous ANSI sequences before rendering
+    code = strip_dangerous_ansi(code)
     try:
         from rich.syntax import Syntax
         from rich.ansi import AnsiDecoder
@@ -635,6 +707,105 @@ def highlight_code(code: str, language: str = "", theme: str = "monokai") -> str
 
 
 # ── Write-path enforcement ───────────────────────────────────────────────────
+
+
+import time as _time
+from collections import defaultdict as _defaultdict
+from threading import Lock as _Lock
+
+
+class RateLimiter:
+    """Simple sliding-window rate limiter for tool calls.
+
+    Tracks the number of tool calls within a configurable time window
+    and returns an error if the limit is exceeded.
+
+    Supports different limits for different categories of tools
+    (read, write, exec, network).
+
+    Usage::
+
+        limiter = RateLimiter()
+        error = limiter.check_limit("bash", category="exec")
+        if error:
+            return error
+    """
+
+    DEFAULT_LIMITS: dict[str, tuple[int, float]] = {
+        "read":    (60,  60.0),    # 60 read calls per minute
+        "write":   (20,  60.0),    # 20 write calls per minute
+        "exec":    (30,  60.0),    # 30 subprocess calls per minute
+        "network": (15,  60.0),    # 15 network calls per minute
+        "default": (50,  60.0),    # 50 calls per minute (fallback)
+    }
+
+    def __init__(self, limits: dict[str, tuple[int, float]] | None = None) -> None:
+        self._limits = {**self.DEFAULT_LIMITS, **(limits or {})}
+        self._history: dict[str, list[float]] = _defaultdict(list)
+        self._lock = _Lock()
+
+    def check_limit(self, tool_name: str, category: str = "default") -> str | None:
+        """Check if the tool is within its rate limit.
+
+        Args:
+            tool_name: Name of the tool (for logging).
+            category: Category of the tool (read, write, exec, network, default).
+
+        Returns:
+            ``None`` if within limit, or an error message if rate limited.
+        """
+        if category not in self._limits:
+            category = "default"
+
+        max_calls, window_seconds = self._limits[category]
+        now = _time.time()
+        cutoff = now - window_seconds
+
+        with self._lock:
+            history = self._history[category]
+            while history and history[0] < cutoff:
+                history.pop(0)
+
+            if len(history) >= max_calls:
+                oldest = history[0] if history else now
+                retry_after = max(0, window_seconds - (now - oldest))
+                logger.warning(
+                    "Rate limit exceeded for '%s' (tool: %s): "
+                    "%d calls in %ds window. Retry after %.1fs.",
+                    category, tool_name, len(history), window_seconds, retry_after,
+                )
+                return (
+                    f"Error: Rate limit exceeded for {category} operations "
+                    f"(tool: {tool_name}). Maximum {max_calls} calls per "
+                    f"{window_seconds:.0f}s. Please wait {retry_after:.1f}s "
+                    f"before retrying."
+                )
+
+            history.append(now)
+
+        return None
+
+    def get_remaining(self, category: str = "default") -> int:
+        """Get the number of remaining calls allowed in the current window."""
+        if category not in self._limits:
+            category = "default"
+        max_calls, window_seconds = self._limits[category]
+        now = _time.time()
+        cutoff = now - window_seconds
+
+        with self._lock:
+            history = self._history[category]
+            while history and history[0] < cutoff:
+                history.pop(0)
+            return max(0, max_calls - len(history))
+
+    def reset(self, category: str | None = None) -> None:
+        """Reset rate limit counters for a category (or all if ``None``)."""
+        with self._lock:
+            if category:
+                self._history[category].clear()
+            else:
+                self._history.clear()
 
 
 def validate_write_path(path: str, working_directory: str) -> str | None:

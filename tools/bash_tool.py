@@ -56,6 +56,21 @@ _ESCAPE_PATTERNS: list[tuple[str, str]] = [
     (r'\bgit\s+clone\b.*\s+((?:[a-zA-Z]:)?[/\\]|\.\./)', "git clone target outside the working directory"),
 ]
 
+# Sensitive environment variables that should be flagged when accessed via shell
+_SENSITIVE_ENV_VARS = frozenset({
+    "ANTHROPIC_API_KEY",
+    "OPENAI_API_KEY",
+    "ANTHROPIC_BASE_URL",
+    "CODING_AGENT_SESSION_KEY",
+    "CODING_AGENT_PLUGIN_KEY",
+    "MCP_SERVERS",
+    "AWS_ACCESS_KEY_ID",
+    "AWS_SECRET_ACCESS_KEY",
+    "AWS_SESSION_TOKEN",
+    "GITHUB_TOKEN",
+    "GIT_TOKEN",
+})
+
 
 def _expand_shell_variables(cmd: str) -> str:
     """Expand environment variables (``$VAR``, ``${VAR}``) and tilde (``~``)
@@ -132,6 +147,34 @@ def _check_command_for_outside_writes(command: str, working_directory: str) -> s
     return None
 
 
+def _check_for_sensitive_env_access(command: str) -> str | None:
+    """Check if a command tries to read sensitive environment variables.
+
+    Returns a warning string if sensitive env vars are detected, ``None`` otherwise.
+    This is a soft warning — it does not block execution — because env vars
+    are already accessible via the shell itself. It serves as awareness.
+    """
+    import re as _re_env
+
+    for var_name in _SENSITIVE_ENV_VARS:
+        pattern = _re_env.compile(
+            r'(?:^|\s)(?:echo|cat|print|printf|env|export|declare)\s.*'
+            r'(?:\$' + _re_env.escape(var_name) + r'|\$\{' + _re_env.escape(var_name) + r'\})',
+            _re_env.IGNORECASE,
+        )
+        if pattern.search(command):
+            logger.warning(
+                "Command may be accessing sensitive environment variable '%s': %s",
+                var_name, command[:200],
+            )
+            return (
+                f"Warning: Command appears to access sensitive environment variable "
+                f"'{var_name}'. Environment variables containing secrets (API keys, "
+                f"tokens) should not be read or displayed."
+            )
+    return None
+
+
 def execute(args: dict[str, Any], ctx: ToolContext) -> str:
     command = args.get("command")
     timeout = int(args.get("timeout", DEFAULT_TIMEOUT))
@@ -139,6 +182,12 @@ def execute(args: dict[str, Any], ctx: ToolContext) -> str:
     logger.info("execute: command=%s, timeout=%s, workdir=%s", command, timeout, workdir)
     if not command:
         return 'Error: missing required argument "command".'
+
+    # Validate command length
+    from src.utils import validate_length, MAX_COMMAND_LENGTH
+    error = validate_length(command, MAX_COMMAND_LENGTH, "command")
+    if error:
+        return error
 
     # Validate workdir is within the working directory
     error = ctx.validate_write_path(workdir)

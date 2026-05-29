@@ -33,6 +33,15 @@ def execute(args: dict[str, Any], ctx: ToolContext) -> str:
     if new_text is None:
         return 'Error: missing required argument "newText" (or "new_string").'
 
+    # Validate lengths
+    from src.utils import validate_length, MAX_TEXT_LENGTH
+    error = validate_length(old_text, MAX_TEXT_LENGTH, "old text")
+    if error:
+        return error
+    error = validate_length(new_text, MAX_TEXT_LENGTH, "new text")
+    if error:
+        return error
+
     # Validate search directory is within the working directory
     error = ctx.validate_write_path(search_dir)
     if error:

@@ -125,3 +125,47 @@ def test_invalid_tool_definition_skipped() -> None:
         tools = load_custom_tools(config_path, tmpdir)
         assert len(tools) == 1
         assert tools[0].name == "valid_tool"
+
+
+# ── Template validation tests ─────────────────────────────────────────────────
+
+
+class TestTemplateValidation:
+    """Verify template value sanitization."""
+
+    def test_bash_blocks_semicolon(self) -> None:
+        """Semicolons in bash template values should be blocked."""
+        from src.custom_tools import _validate_template_value
+        error = _validate_template_value("hello; rm -rf /", "bash")
+        assert error is not None
+
+    def test_bash_blocks_backtick(self) -> None:
+        """Backticks in bash template values should be blocked."""
+        from src.custom_tools import _validate_template_value
+        error = _validate_template_value("`rm -rf /`", "bash")
+        assert error is not None
+
+    def test_bash_blocks_flag_prefix(self) -> None:
+        """Values starting with '-' should be blocked."""
+        from src.custom_tools import _validate_template_value
+        error = _validate_template_value("--force", "bash")
+        assert error is not None
+
+    def test_bash_allows_safe_values(self) -> None:
+        """Safe alphanumeric values should pass validation."""
+        from src.custom_tools import _validate_template_value
+        assert _validate_template_value("hello", "bash") is None
+        assert _validate_template_value("user_input_123", "bash") is None
+        assert _validate_template_value("file-name.txt", "bash") is None
+
+    def test_http_blocks_crlf(self) -> None:
+        """CR/LF characters in HTTP template values should be blocked."""
+        from src.custom_tools import _validate_template_value
+        error = _validate_template_value("value\r\nInjected-Header: malicious", "http")
+        assert error is not None
+
+    def test_http_allows_safe_values(self) -> None:
+        """Safe URL values should pass HTTP validation."""
+        from src.custom_tools import _validate_template_value
+        assert _validate_template_value("user123", "http") is None
+        assert _validate_template_value("search+query", "http") is None

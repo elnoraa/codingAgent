@@ -135,6 +135,13 @@ def execute(args: dict[str, Any], ctx: ToolContext) -> str:
     user = args.get("user", "")
     password = args.get("password", "")
 
+    # Validate query length
+    if query:
+        from src.utils import validate_length, MAX_QUERY_LENGTH
+        error = validate_length(query, MAX_QUERY_LENGTH, "SQL query")
+        if error:
+            return error
+
     try:
         # Connect
         if db_type == "sqlite":

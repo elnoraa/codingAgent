@@ -30,6 +30,12 @@ def _execute_python(args: dict[str, object], ctx: ToolContext) -> str:
     if not isinstance(code_str, str) or not code_str.strip():
         return "Error: No code provided. Use {\"code\": \"...\"}."
 
+    # Validate code length
+    from src.utils import validate_length, MAX_CODE_LENGTH
+    error = validate_length(code_str, MAX_CODE_LENGTH, "Python code")
+    if error:
+        return error
+
     repl = _get_repl(ctx)
     return repl.execute(code_str)
 
