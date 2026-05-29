@@ -42,7 +42,8 @@ class Plan:
 
 def _ensure_dirs(working_directory: str) -> tuple[Path, Path, Path]:
     """Ensure plans/{pending,completed} directories exist. Returns (plans_dir, pending_dir, completed_dir)."""
-    plans_dir = Path(working_directory) / PLANS_DIR
+    base = Path(working_directory).resolve()
+    plans_dir = base / PLANS_DIR
     pending_dir = plans_dir / PENDING_DIR
     completed_dir = plans_dir / COMPLETED_DIR
     pending_dir.mkdir(parents=True, exist_ok=True)

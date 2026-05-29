@@ -155,3 +155,110 @@ def test_ensure_dirs_creates_directories(temp_wd: str) -> None:
     assert completed_dir.is_dir()
     assert (plans_dir / "pending").is_dir()
     assert (plans_dir / "completed").is_dir()
+
+
+# ── Tests for write_plan.execute() ─────────────────────────────────────
+# These tests directly validate the write_plan tool's execute function.
+# They use a ToolContext with a temp directory to isolate from the real project.
+
+
+def test_write_plan_execute_saves_file(temp_wd: str) -> None:
+    """write_plan.execute() should create a valid plan file on disk."""
+    from tools.write_plan import execute
+    from tools import ToolContext
+
+    ctx = ToolContext(working_directory=temp_wd)
+    args = {"name": "test-write-plan", "content": "# Test Plan\n\nThis is a test."}
+    result = execute(args, ctx)
+
+    # Should return success with the file path
+    assert "Plan saved to" in result, f"Unexpected result: {result}"
+    filepath = result.replace("Plan saved to ", "")
+
+    # File must exist on disk
+    assert os.path.isfile(filepath), f"File not found at: {filepath}"
+
+    # File content should have proper front-matter and content
+    with open(filepath, encoding="utf-8") as f:
+        content = f.read()
+    assert "name:" in content
+    assert "status: pending" in content
+    assert "created_at:" in content
+    assert "# Test Plan" in content
+    assert "This is a test." in content
+
+
+def test_write_plan_execute_relative_path(temp_wd: str) -> None:
+    """write_plan.execute() should work with a relative working directory."""
+    from tools.write_plan import execute
+    from tools import ToolContext
+
+    old_cwd = os.getcwd()
+    try:
+        os.chdir(temp_wd)
+        ctx = ToolContext(working_directory=".")
+        args = {"name": "rel-path-test", "content": "relative path test"}
+        result = execute(args, ctx)
+        assert "Plan saved to" in result, f"Unexpected result: {result}"
+        filepath = result.replace("Plan saved to ", "")
+        assert os.path.isfile(filepath), f"File not found at: {filepath}"
+    finally:
+        os.chdir(old_cwd)
+
+
+def test_write_plan_execute_empty_string_wd(temp_wd: str) -> None:
+    """write_plan.execute() should handle an empty string working directory."""
+    from tools.write_plan import execute
+    from tools import ToolContext
+
+    old_cwd = os.getcwd()
+    try:
+        os.chdir(temp_wd)
+        ctx = ToolContext(working_directory="")
+        args = {"name": "empty-wd-test", "content": "empty wd test"}
+        result = execute(args, ctx)
+        assert "Plan saved to" in result, f"Unexpected result: {result}"
+        filepath = result.replace("Plan saved to ", "")
+        assert os.path.isfile(filepath), f"File not found at: {filepath}"
+    finally:
+        os.chdir(old_cwd)
+
+
+def test_write_plan_execute_missing_name(temp_wd: str) -> None:
+    """execute() should return an error when name is missing."""
+    from tools.write_plan import execute
+    from tools import ToolContext
+
+    ctx = ToolContext(working_directory=temp_wd)
+    result = execute({"content": "some content"}, ctx)
+    assert "Error" in result or "missing" in result.lower()
+
+
+def test_write_plan_execute_missing_content(temp_wd: str) -> None:
+    """execute() should return an error when content is missing."""
+    from tools.write_plan import execute
+    from tools import ToolContext
+
+    ctx = ToolContext(working_directory=temp_wd)
+    result = execute({"name": "some-name"}, ctx)
+    assert "Error" in result or "missing" in result.lower()
+
+
+def test_write_plan_execute_empty_name_after_strip(temp_wd: str) -> None:
+    """execute() should return an error for whitespace-only name."""
+    from tools.write_plan import execute
+    from tools import ToolContext
+
+    ctx = ToolContext(working_directory=temp_wd)
+    result = execute({"name": "   ", "content": "content"}, ctx)
+    assert "Error" in result or "missing" in result.lower()
+
+
+def test_write_plan_execute_empty_content_after_strip(temp_wd: str) -> None:
+    """execute() should return an error for whitespace-only content."""
+    from tools.write_plan import execute
+    from tools import ToolContext
+
+    ctx = ToolContext(working_directory=temp_wd)
+    result = execute({"name": "test-name", "content": "   "}, ctx)
+    assert "Error" in result or "missing" in result.lower()

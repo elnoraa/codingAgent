@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os as _os
 from typing import Any
 
 from tools import Tool, ToolContext
@@ -21,6 +22,18 @@ def execute(args: dict[str, Any], ctx: ToolContext) -> str:
     try:
         name_str = name.strip()
         filepath = save_pending_plan(name_str, content, ctx.working_directory)
+
+        # Post-write verification: confirm the file actually exists on disk.
+        # This catches silent failures where the write targeted a different
+        # directory than expected (e.g. thread CWD mismatch).
+        if not _os.path.isfile(filepath):
+            error_msg = (
+                f"write_plan reported success but file does not exist at expected path: {filepath}. "
+                f"working_directory={ctx.working_directory!r}, cwd={_os.getcwd()!r}"
+            )
+            logger.error(error_msg)
+            return f"Error: {error_msg}"
+
         logger.info("Plan saved via write_plan tool: name=%s, file=%s", name_str, filepath)
         return f"Plan saved to {filepath}"
     except Exception as exc:

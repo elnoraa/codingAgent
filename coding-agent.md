@@ -41,6 +41,31 @@ These are MANDATORY rules. The coding agent MUST follow all instructions in this
    Instead, use `bash` with `mv`, `rename`, or `git mv` to move/rename files.
    Using `write_file` for moves is inefficient, loses file metadata, and leaves the original file behind.
 
+## Testing Rules
+
+1. Every fix MUST include new tests that would catch the bug if it recurred.
+   Do not rely solely on existing tests — add tests specific to the fix.
+
+2. Test the exposed/public API, not just internal helper functions. For tools,
+   call the `execute()` function directly with a `ToolContext`. If the bug
+   involves path resolution, use a temp directory fixture in the test.
+
+3. Always test edge cases:
+   - Empty strings, whitespace-only values, missing required arguments
+   - Relative vs absolute paths, unusual working directory values
+   - Boundary conditions (empty input, maximum input length if applicable)
+
+4. After every file-write operation in a test, assert the file actually
+   exists using `os.path.isfile()` or `Path.is_file()`. This catches
+   silent path resolution failures.
+
+5. All tests MUST use isolated temp directories (via `tempfile.TemporaryDirectory`
+   or pytest `tmp_path` fixture) — never write to the real project directories
+   like `plans/` or `sessions/` during tests.
+
+6. Run the full test suite after every change with `pytest` and confirm
+   all tests pass before committing.
+
 ## Multi-Agent & Swarm Rules
 
 1. When spawning sub-agents, provide clear, self-contained tasks that can be completed independently.
