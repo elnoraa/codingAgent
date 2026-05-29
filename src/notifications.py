@@ -100,3 +100,34 @@ def notify(title: str, message: str) -> bool:
 def should_notify(elapsed: float, min_duration: int = DEFAULT_MIN_DURATION) -> bool:
     """Determine if a notification should be sent based on elapsed time."""
     return elapsed >= min_duration
+
+
+def play_sound() -> bool:
+    """Play a brief notification sound using OS-native mechanisms.
+
+    Returns True if sound was played, False otherwise.
+    """
+    system = platform.system()
+    try:
+        if system == "Windows":
+            import winsound  # type: ignore[import-untyped]
+            winsound.MessageBeep(winsound.MB_OK)
+            return True
+        elif system == "Darwin":
+            # macOS: use afplay with bundled system sound
+            subprocess.run(
+                ["afplay", "/System/Library/Sounds/Tink.aiff"],
+                capture_output=True, timeout=2,
+            )
+            return True
+        else:
+            # Linux: try speaker-beep or console bell
+            try:
+                subprocess.run(["beep"], capture_output=True, timeout=2)
+            except FileNotFoundError:
+                # Fallback: console bell character
+                print("\a", end="", flush=True)
+            return True
+    except Exception as e:
+        logger.debug("Audio notification failed: %s", e)
+        return False

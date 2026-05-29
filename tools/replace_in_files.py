@@ -17,7 +17,7 @@ IGNORE_DIRS = frozenset({
 })
 
 
-def execute(args: dict[str, Any], _ctx: ToolContext) -> str:
+def execute(args: dict[str, Any], ctx: ToolContext) -> str:
     old_text = args.get("oldText") or args.get("old_string")
     new_text = args.get("newText") or args.get("new_string")
     search_dir = args.get("path") or os.getcwd()
@@ -88,6 +88,7 @@ def execute(args: dict[str, Any], _ctx: ToolContext) -> str:
             continue
 
         new_content = content.replace(old_text, new_text)
+        ctx.snapshot_file(filepath)
         try:
             with open(filepath, "w", encoding="utf-8") as f:
                 f.write(new_content)

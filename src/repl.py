@@ -10,7 +10,7 @@ import anthropic
 from .client import LlmClient
 from .logging_config import get_logger
 from .mode import ASK_MODE_SYSTEM_PROMPT, PLAN_MODE_SYSTEM_PROMPT
-from .notifications import notify, should_notify
+from .notifications import notify, should_notify, play_sound
 from tools import Tool, ToolContext, ToolRegistry
 
 logger = get_logger(__name__)
@@ -48,6 +48,12 @@ from tools.list_agents import list_agents_tool
 from tools.send_to_agent import send_to_agent_tool
 from tools.terminate_agent import terminate_agent_tool
 from tools.run_swarm import run_swarm_tool
+from tools.git_revert import git_revert_tool
+from tools.rename_file import rename_file_tool
+from tools.git_branch import git_branch_tool
+from tools.api_tool import api_tool
+from tools.precommit_tool import precommit_tool
+from tools.ci_tool import ci_tool
 from .session import save_session, load_session, list_sessions
 from typing import Any, cast, TYPE_CHECKING
 
@@ -180,6 +186,12 @@ HELP_TEXT = f"""\
   send_to_agent   Send a message to another agent
   terminate_agent Stop and remove a sub-agent
   run_swarm       Run a swarm of agents in a collaboration pattern
+  git_revert      Undo/revert git changes (unstage, undo_commit, reset, discard)
+  rename_file     Rename or move files/directories (git-aware)
+  git_branch      Manage git branches (list, create, switch, merge, delete, diff)
+  api             Make HTTP requests (GET, POST, etc.) to API endpoints
+  precommit       Manage pre-commit hooks (install, run, update, validate)
+  ci              CI/CD integration (detect, validate config, check pipeline status)
 
 {bold('Modes')}
   CODE mode  {green('●')}  All tools available (read + write + execute)
@@ -534,6 +546,8 @@ class Repl:
         self._notifications_min_duration = notifications_min_duration
         self._tool_start_time: float = 0.0
         self._tool_usage: dict[str, int] = {}
+        self._tool_durations: dict[str, list[float]] = {}
+        self._tool_errors: dict[str, int] = {}
         self._mode_switches: int = 0
         self._spinner: Spinner | None = None
         self._turns_by_mode: dict[str, int] = {"code": 0, "plan": 0, "ask": 0}
@@ -617,6 +631,13 @@ class Repl:
         self.tools.register(send_to_agent_tool)
         self.tools.register(terminate_agent_tool)
         self.tools.register(run_swarm_tool)
+        # New Wave 1 tools
+        self.tools.register(git_revert_tool)
+        self.tools.register(rename_file_tool)
+        self.tools.register(git_branch_tool)
+        self.tools.register(api_tool)
+        self.tools.register(precommit_tool)
+        self.tools.register(ci_tool)
         # Load custom tools from config
         if self._custom_tools_config:
             custom_tools = load_custom_tools(self._custom_tools_config, self.working_directory)
@@ -1359,6 +1380,15 @@ class Repl:
         if self._tool_start_time > 0:
             elapsed = time.time() - self._tool_start_time
             elapsed_str = f" {dim(f'┄ {elapsed:.1f}s')}"
+            # Track duration per tool
+            if tool_name and tool_name not in self._tool_durations:
+                self._tool_durations[tool_name] = []
+            if tool_name:
+                self._tool_durations[tool_name].append(elapsed)
+
+        # Track errors
+        if is_error and tool_name:
+            self._tool_errors[tool_name] = self._tool_errors.get(tool_name, 0) + 1
 
         if is_error:
             print(f"  {red('✗')} {red(preview)}{suffix}{elapsed_str}")
@@ -1374,6 +1404,8 @@ class Repl:
                     title=f"Coding Agent: {tool_display}",
                     message=f"Completed in {elapsed:.1f}s",
                 )
+                # Audio notification (best-effort, no config toggle for now)
+                play_sound()
 
     def _handle_plan_save(self, cmd: str) -> None:
         parts = cmd.split(maxsplit=2)
@@ -1706,7 +1738,11 @@ class Repl:
             for tool_name, count in sorted(self._tool_usage.items(), key=lambda x: -x[1]):
                 bar_len = int((count / max(1, max_count)) * 20)
                 bar = "█" * bar_len
-                print(f"  {cyan(tool_name.ljust(20))} {dim(bar)} {cyan(str(count))}")
+                durations = self._tool_durations.get(tool_name, [])
+                avg_dur = sum(durations) / len(durations) if durations else 0
+                errors = self._tool_errors.get(tool_name, 0)
+                error_str = f"  errors: {errors}" if errors else ""
+                print(f"  {cyan(tool_name.ljust(20))} {dim(bar)} {cyan(str(count).ljust(4))} {dim(f'avg {avg_dur:.2f}s')} {red(error_str) if errors else dim(error_str)}")
         else:
             print(f"  {dim('No tools have been called yet.')}")
         print()
