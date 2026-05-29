@@ -123,6 +123,64 @@ created_at: {timestamp}
     return str(filepath)
 
 
+def update_pending_plan(name: str, content: str, working_directory: str) -> str:
+    """Update an existing pending plan's body content while preserving front-matter.
+
+    Args:
+        name: The plan name (filename stem, with or without numeric prefix).
+        content: The new Markdown body content (replaces everything after front-matter).
+        working_directory: The project root directory.
+
+    Returns:
+        The file path of the updated plan.
+
+    Raises:
+        FileNotFoundError: If no matching plan is found in plans/pending/.
+    """
+    _, pending_dir, _ = _ensure_dirs(working_directory)
+
+    # Try exact match first, then glob for partial match
+    safe_name = _sanitize_name(name)
+    filepath = pending_dir / f"{safe_name}.md"
+
+    if not filepath.is_file():
+        # Try to find by stem prefix (in case the name lacks a number)
+        stripped = _strip_leading_number(safe_name)
+        matches = sorted(pending_dir.glob(f"*{stripped}*"))
+        if not matches:
+            raise FileNotFoundError(
+                f"Plan '{name}' not found in {pending_dir}. "
+                f"Use write_plan to create a new plan."
+            )
+        filepath = matches[0]
+
+    existing = filepath.read_text(encoding="utf-8")
+
+    # Parse front-matter: everything between the first --- and second ---
+    lines = existing.split("\n")
+    if lines and lines[0].strip() == "---":
+        # Find closing ---
+        end_idx = None
+        for i in range(1, len(lines)):
+            if lines[i].strip() == "---":
+                end_idx = i
+                break
+
+        if end_idx is not None:
+            front_matter = "\n".join(lines[: end_idx + 1])
+            new_content = f"{front_matter}\n\n{content}"
+        else:
+            # Malformed front-matter — just replace whole file
+            new_content = content
+    else:
+        # No front-matter — just replace whole file
+        new_content = content
+
+    filepath.write_text(new_content, encoding="utf-8")
+    logger.info("Plan updated: name=%s, file=%s", name, filepath)
+    return str(filepath)
+
+
 def complete_plan(name: str, working_directory: str) -> bool:
     """Move a plan from plans/pending/ to plans/completed/. Returns True on success."""
     _, pending_dir, completed_dir = _ensure_dirs(working_directory)
