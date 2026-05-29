@@ -47,6 +47,10 @@ def execute(args: dict[str, Any], ctx: ToolContext) -> str:
         logger.error("Error writing file %s: %s", path, exc)
         return f"Error writing file: {exc}"
 
+    # Run post-edit hooks
+    from tools import run_post_edit_hooks
+    result = run_post_edit_hooks(path, result)
+
     return result
 
 

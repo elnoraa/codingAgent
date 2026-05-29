@@ -160,6 +160,7 @@ HELP_TEXT = f"""\
   /backup list             List all backups
   /backup restore <name>   Restore from a backup
   /backup clean [N]        Remove old backups, keep N most recent
+  /lint [path]            Run linter on file or directory (auto-detects config)
   /timeline                Show per-turn latency breakdown (LLM vs tools)
   /python                 Show Python REPL state
   /reset-python           Reset the Python REPL (clear all variables)
@@ -1691,6 +1692,39 @@ class Repl:
             print(f"  Automatic summarization: {status}")
             print("  Usage: /summarize on|off")
 
+    # ── Linting ──────────────────────────────────────────────────────────
+
+    def _handle_lint(self, filepath: str) -> None:
+        """Run linter on specified file or directory."""
+        from tools.lint_tool import detect_linter, run_linter
+
+        if not filepath:
+            filepath = os.getcwd()
+
+        linter = detect_linter(os.getcwd())
+        if linter is None:
+            print("  No linter detected.")
+            print("  Supported: ruff, flake8, ESLint")
+            return
+
+        # Resolve path
+        full_path = os.path.join(os.getcwd(), filepath) if not os.path.isabs(filepath) else filepath
+
+        if os.path.isdir(full_path):
+            # Lint all supported files in directory
+            files: list[str] = []
+            for root, dirs, filenames in os.walk(full_path):
+                dirs[:] = [d for d in dirs if not d.startswith(".") and d != "node_modules"]
+                for f in filenames:
+                    if f.endswith((".py", ".js", ".ts")):
+                        files.append(os.path.join(root, f))
+        else:
+            files = [full_path]
+
+        print(f"  Running {linter} on {len(files)} file(s)...")
+        result = run_linter(files, os.getcwd())
+        print(f"\n{result}")
+
     # ── File Watcher ─────────────────────────────────────────────────────
 
     def _init_file_watcher(self) -> None:
@@ -3076,6 +3110,8 @@ class Repl:
                 print(f"  {dim('The agent can list and revert file snapshots automatically.')}")
             case "/backup":
                 self._handle_backup(cmd.split(maxsplit=1)[1] if len(cmd.split(maxsplit=1)) > 1 else "")
+            case "/lint":
+                self._handle_lint(cmd.split(maxsplit=1)[1] if len(cmd.split(maxsplit=1)) > 1 else "")
             case "/timeline":
                 self._handle_timeline()
             case "/mcp":

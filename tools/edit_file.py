@@ -70,6 +70,10 @@ def execute(args: dict[str, Any], ctx: ToolContext) -> str:
     result = f'Applied edit to {path}. Replaced:\n"""\n{old_preview}\n"""'
     logger.info("Edit applied to %s: replaced %d chars with %d chars", path, len(old_text), len(new_text))
 
+    # Run post-edit hooks
+    from tools import run_post_edit_hooks
+    result = run_post_edit_hooks(path, result)
+
     return result
 
 

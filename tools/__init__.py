@@ -14,6 +14,28 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     import types
 
+# Post-edit hook registry
+_post_edit_hooks: list[Callable[[str, str], str]] = []
+
+
+def register_post_edit_hook(hook: Callable[[str, str], str]) -> None:
+    """Register a hook that runs after file edits.
+
+    Hook signature: (filepath, result_message) -> updated_result_message
+    """
+    _post_edit_hooks.append(hook)
+
+
+def run_post_edit_hooks(filepath: str, result: str) -> str:
+    """Run all registered post-edit hooks and return updated result."""
+    for hook in _post_edit_hooks:
+        try:
+            result = hook(filepath, result)
+        except Exception as e:
+            logger = logging.getLogger(__name__)
+            logger.debug("Post-edit hook failed: %s", e)
+    return result
+
 
 @dataclass
 class ToolContext:

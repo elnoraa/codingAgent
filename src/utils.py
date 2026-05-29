@@ -330,6 +330,88 @@ def is_transient_error(error: Exception) -> bool:
 # ── Markdown Rendering & Syntax Highlighting ──────────────────────────────
 
 
+# ── Rich Terminal Rendering Utilities ───────────────────────────────────
+
+
+def print_info(message: str) -> None:
+    """Print an info message with a dim style."""
+    print(f"  {message}")
+
+
+def print_success(message: str) -> None:
+    """Print a success message in green."""
+    print(f"  ✓ {message}")
+
+
+def print_warning(message: str) -> None:
+    """Print a warning message in yellow."""
+    print(f"  ⚠ {message}")
+
+
+def print_error(message: str) -> None:
+    """Print an error message in red."""
+    print(f"  ✗ {message}")
+
+
+def print_panel(title: str, content: str, style: str = "cyan") -> None:
+    """Print content inside a bordered panel using rich if available."""
+    try:
+        from rich.console import Console
+        from rich.panel import Panel
+        console = Console()
+        console.print(Panel(content, title=title, border_style=style))
+    except ImportError:
+        print(f"\n  {title}")
+        print(f"  {'─' * 40}")
+        for line in content.split("\n"):
+            print(f"  {line}")
+        print(f"  {'─' * 40}")
+
+
+def print_table(title: str, columns: list[str], rows: list[list[str]]) -> None:
+    """Print a table with columns and rows using rich if available."""
+    try:
+        from rich.console import Console
+        from rich.table import Table
+        table = Table(title=title, title_style="bold")
+        for col in columns:
+            table.add_column(col)
+        for row in rows:
+            table.add_row(*row)
+        console = Console()
+        console.print(table)
+    except ImportError:
+        print(f"\n  {title}")
+        print(f"  {'─' * 60}")
+        header = "  " + " | ".join(columns)
+        print(header)
+        print(f"  {'─' * 60}")
+        for row in rows:
+            print("  " + " | ".join(str(c) for c in row))
+        print(f"  {'─' * 60}")
+
+
+def print_separator(style: str = "dim") -> None:
+    """Print a horizontal rule/separator using rich if available."""
+    try:
+        from rich.console import Console
+        from rich.rule import Rule
+        Console().print(Rule(style=style))
+    except ImportError:
+        print(f"  {'─' * 60}")
+
+
+def print_code(code: str, language: str = "", theme: str = "monokai") -> None:
+    """Print syntax-highlighted code using rich if available."""
+    try:
+        from rich.console import Console
+        from rich.syntax import Syntax
+        syntax = Syntax(code, language, theme=theme, line_numbers=True)
+        Console().print(syntax)
+    except Exception:
+        print(code)
+
+
 # ── Conversation Summarization ──────────────────────────────────────────
 
 
