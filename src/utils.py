@@ -888,6 +888,36 @@ def validate_write_path(path: str, working_directory: str) -> str | None:
     return None
 
 
+def validate_write_path_atomic(path: str, working_directory: str) -> str | None:
+    """Validate that a path is within the working directory, performing the
+    check as close to the actual write as possible.
+
+    This function:
+    1. Resolves the path to its real (canonical) form
+    2. Checks that the real path is within the working directory
+    3. Does NOT do a full symlink parent walk (that's done at tool-call time)
+
+    Call this function IMMEDIATELY before opening a file for writing,
+    inside the try block.
+
+    Returns ``None`` if the path is valid, or an error message string
+    if it is outside the working directory.
+    """
+    from pathlib import Path
+
+    try:
+        resolved_path = Path(path).resolve()
+        resolved_wd = Path(working_directory).resolve()
+        resolved_path.relative_to(resolved_wd)
+    except (ValueError, RuntimeError, OSError):
+        return (
+            f"Error: Path '{path}' resolves to outside the working directory "
+            f"'{working_directory}'. All file operations must be within the "
+            f"working directory."
+        )
+    return None
+
+
 def validate_walk_path(path: str, working_directory: str) -> str | None:
     """Validate that a path discovered during directory walking is within the
     working directory after resolving all symlinks.

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 from typing import Any
 
 from tools import Tool, ToolContext
@@ -78,7 +79,12 @@ def execute(args: dict[str, Any], ctx: ToolContext) -> str:
             return f"Skipped: {path} (user declined)"
 
     try:
-        with open(path, "w", encoding="utf-8") as f:
+        from src.utils import validate_write_path_atomic
+        resolved_path = str(Path(path).resolve())
+        atomic_error = validate_write_path_atomic(resolved_path, ctx.working_directory)
+        if atomic_error:
+            return atomic_error
+        with open(resolved_path, "w", encoding="utf-8") as f:
             f.write(new_content)
     except Exception as exc:
         return f"Error writing file: {exc}"

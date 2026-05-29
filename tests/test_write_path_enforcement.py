@@ -272,3 +272,109 @@ def test_diff_tool_enforces_working_directory() -> None:
         invalid = os.path.join(tmpdir, "..")
         result = diff_execute({"path": invalid}, ctx)
         assert "outside the working directory" in result
+
+
+# ── Atomic write-path validation tests ─────────────────────────────
+
+class TestAtomicWritePathValidation:
+    """Verify that the atomic write-path validator detects symlink escapes
+    even when a symlink is created between the initial check and the write."""
+
+    def test_atomic_validation_detects_symlink_escape(self) -> None:
+        """validate_write_path_atomic should detect a symlink pointing outside."""
+        from src.utils import validate_write_path_atomic
+        _check_symlink_support()
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # Create a symlink inside workdir pointing outside
+            outside = os.path.join(tmpdir, "..", "outside.txt")
+            symlink_path = os.path.join(tmpdir, "evil_link")
+            os.symlink(outside, symlink_path)
+
+            # The atomic check should catch it
+            result = validate_write_path_atomic(symlink_path, tmpdir)
+            assert result is not None
+            assert "outside the working directory" in result
+
+    def test_atomic_validation_allows_normal_path(self) -> None:
+        """validate_write_path_atomic should allow paths inside workdir."""
+        from src.utils import validate_write_path_atomic
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = os.path.join(tmpdir, "normal_file.txt")
+            result = validate_write_path_atomic(path, tmpdir)
+            assert result is None
+
+    def test_atomic_validation_rejects_absolute_outside(self) -> None:
+        """validate_write_path_atomic should reject absolute paths outside."""
+        from src.utils import validate_write_path_atomic
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # Use a different temp dir that's outside our workdir
+            import tempfile as _tf
+            other_dir = _tf.mkdtemp()
+            try:
+                result = validate_write_path_atomic(other_dir, tmpdir)
+                assert result is not None
+            finally:
+                import shutil
+                shutil.rmtree(other_dir, ignore_errors=True)
+
+    def test_write_file_atomic_check_blocks_created_symlink(self) -> None:
+        """write_file should re-check path right before the write, catching a
+        symlink created after the initial validation."""
+        from tools.write_file import execute as write_execute
+        _check_symlink_support()
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            ctx = ToolContext(working_directory=tmpdir)
+
+            # First, create a legitimate subdirectory
+            subdir = os.path.join(tmpdir, "subdir")
+            os.makedirs(subdir)
+
+            # The path we're writing to
+            target = os.path.join(subdir, "output.txt")
+
+            # Replace the subdirectory with a symlink pointing outside
+            os.rmdir(subdir)
+            outside_target = os.path.join(tmpdir, "..", "outside.txt")
+            os.symlink(outside_target, subdir)
+
+            # The write should be blocked because the subdir is now a symlink
+            result = write_execute({"path": target, "content": "test"}, ctx)
+            assert "outside the working directory" in result
+            assert "Error" in result
+
+    def test_edit_file_atomic_check_blocks_created_symlink(self) -> None:
+        """edit_file should re-check path right before the write."""
+        from tools.edit_file import execute as edit_execute
+        _check_symlink_support()
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            ctx = ToolContext(working_directory=tmpdir)
+
+            # Create a file inside
+            filepath = os.path.join(tmpdir, "test.txt")
+            Path(filepath).write_text("original content")
+
+            # Replace it with a symlink pointing outside
+            os.remove(filepath)
+            outside_target = os.path.join(tmpdir, "..", "outside.txt")
+            os.symlink(outside_target, filepath)
+
+            # The edit should be blocked
+            result = edit_execute({"path": filepath, "oldText": "original", "newText": "modified"}, ctx)
+            assert "outside the working directory" in result or "Error" in result
+
+
+def _check_symlink_support() -> None:
+    """Check if the OS supports creating symlinks. Skip test if not."""
+    if os.name == "nt":
+        import pytest
+        try:
+            test_link = os.path.join(tempfile.mkdtemp(), "_symlink_test")
+            os.symlink(__file__, test_link)
+            os.remove(test_link)
+        except OSError:
+            pytest.skip("Symlink creation not supported (requires admin on Windows)")

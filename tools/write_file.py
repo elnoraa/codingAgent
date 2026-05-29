@@ -52,11 +52,18 @@ def execute(args: dict[str, Any], ctx: ToolContext) -> str:
             pass  # If we can't read the existing file, proceed
 
     try:
-        Path(path).parent.mkdir(parents=True, exist_ok=True)
-        with open(path, "w", encoding="utf-8") as f:
+        # Atomic write-path check: validate immediately before writing
+        from src.utils import validate_write_path_atomic
+        resolved_path = str(Path(path).resolve())
+        atomic_error = validate_write_path_atomic(resolved_path, ctx.working_directory)
+        if atomic_error:
+            return atomic_error
+
+        Path(resolved_path).parent.mkdir(parents=True, exist_ok=True)
+        with open(resolved_path, "w", encoding="utf-8") as f:
             f.write(content)
-        result = f"Successfully wrote {len(content)} bytes to {path}"
-        logger.info("Wrote %d bytes to %s", len(content), path)
+        result = f"Successfully wrote {len(content)} bytes to {resolved_path}"
+        logger.info("Wrote %d bytes to %s", len(content), resolved_path)
     except Exception as exc:
         logger.error("Error writing file %s: %s", path, exc)
         return f"Error writing file: {exc}"

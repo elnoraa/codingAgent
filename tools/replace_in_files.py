@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import os
 import re
+from pathlib import Path
 from typing import Any
 
 from tools import Tool, ToolContext
@@ -111,7 +112,13 @@ def execute(args: dict[str, Any], ctx: ToolContext) -> str:
         new_content = content.replace(old_text, new_text)
         ctx.snapshot_file(filepath)
         try:
-            with open(filepath, "w", encoding="utf-8") as f:
+            from src.utils import validate_write_path_atomic
+            resolved_fp = str(Path(filepath).resolve())
+            atomic_error = validate_write_path_atomic(resolved_fp, ctx.working_directory)
+            if atomic_error:
+                file_details.append(f"{filepath}: {atomic_error}")
+                continue
+            with open(resolved_fp, "w", encoding="utf-8") as f:
                 f.write(new_content)
             replaced_count += occurrences
             file_details.append(f"{filepath}: replaced {occurrences} occurrence(s)")
