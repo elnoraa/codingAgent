@@ -17,6 +17,7 @@ from src.plan import (
     save_pending_plan,
     _ensure_dirs,
     _get_next_plan_number,
+    _strip_leading_number,
 )
 
 
@@ -49,6 +50,65 @@ def test_save_pending_plan_sanitizes_name(temp_wd: str) -> None:
 
     # Should still be a valid file
     assert os.path.isfile(filepath)
+
+
+def test_save_pending_plan_with_prefixed_name(temp_wd: str) -> None:
+    """A name that already starts with a numeric prefix should NOT double-number.
+
+    e.g. save_pending_plan("05-feat-foo", ...) should produce
+    "01-feat-foo.md" (or whatever the next auto-number is), NOT "01-05-feat-foo.md".
+    """
+    filepath = save_pending_plan("05-feat-foo", "Content", temp_wd)
+    assert os.path.isfile(filepath)
+    filename = Path(filepath).name
+    # First number is the auto-number (e.g. "01-"), the second "05-" must not appear
+    assert filename.startswith("01-"), f"Expected auto-number prefix, got: {filename}"
+    assert "05-" not in filename.split("-", 1)[1], f"Old prefix '05-' leaked through: {filename}"
+    assert "feat-foo" in filename
+
+
+def test_write_plan_execute_with_prefixed_name(temp_wd: str) -> None:
+    """write_plan tool with a name like '05-feat-x' should not double-number."""
+    from tools.write_plan import execute
+    from tools import ToolContext
+
+    ctx = ToolContext(working_directory=temp_wd)
+    args = {"name": "42-feat-my-feature", "content": "# My Feature\n\nDescription."}
+    result = execute(args, ctx)
+
+    assert "Plan saved to" in result, f"Unexpected result: {result}"
+    filepath = result.replace("Plan saved to ", "")
+
+    # Verify file exists and name isn't doubled
+    assert os.path.isfile(filepath), f"File not found at: {filepath}"
+    filename = Path(filepath).name
+    # Should start with "01-" (the auto-number), not "01-42-"
+    parts = filename.split("-")
+    assert parts[0].isdigit(), f"Expected numeric prefix: {filename}"
+    assert parts[1] != "42", f"Double-numbering detected: {filename}"
+    assert "feat-my-feature" in filename
+
+
+def test_strip_leading_number_removes_prefix() -> None:
+    """_strip_leading_number should remove a leading 'N-' prefix."""
+    assert _strip_leading_number("05-feat-foo") == "feat-foo"
+    assert _strip_leading_number("123-plan-name") == "plan-name"
+    assert _strip_leading_number("01-test") == "test"
+
+
+def test_strip_leading_number_no_prefix() -> None:
+    """_strip_leading_number should leave names without a prefix unchanged."""
+    assert _strip_leading_number("feat-foo") == "feat-foo"
+    assert _strip_leading_number("my-plan") == "my-plan"
+    assert _strip_leading_number("alpha-beta") == "alpha-beta"
+
+
+def test_strip_leading_number_edge_cases() -> None:
+    """Edge cases for _strip_leading_number."""
+    assert _strip_leading_number("") == ""
+    assert _strip_leading_number("5") == "5"  # just a digit, no hyphen
+    assert _strip_leading_number("5-") == ""  # number + hyphen only
+    assert _strip_leading_number("0-foo") == "foo"
 
 
 def test_complete_plan_moves_file(temp_wd: str) -> None:

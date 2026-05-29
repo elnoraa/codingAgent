@@ -60,6 +60,15 @@ def _sanitize_name(name: str) -> str:
     return safe
 
 
+def _strip_leading_number(name: str) -> str:
+    """Strip an existing leading numeric prefix (e.g. '05-', '123-') from a plan name.
+
+    This prevents double-numbering when a user passes a name that already
+    contains a numeric prefix (e.g. '05-feat-add-login' becomes 'feat-add-login').
+    """
+    return re.sub(r"^\d+-", "", name, count=1)
+
+
 def _get_next_plan_number(working_directory: str) -> int:
     """Return the next available plan number (highest existing + 1, default 1).
 
@@ -88,10 +97,14 @@ def save_pending_plan(name: str, content: str, working_directory: str) -> str:
 
     Automatically prepends a sequential numeric prefix (e.g., "01-", "02-")
     based on the highest existing plan number in both pending/ and completed/.
+
+    If *name* already starts with a numeric prefix (e.g. ``"05-feat-foo"``),
+    that prefix is stripped first to avoid double-numbering.
     """
     _, pending_dir, _ = _ensure_dirs(working_directory)
     next_num = _get_next_plan_number(working_directory)
-    prefixed_name = f"{next_num:02d}-{name}"
+    clean_name = _strip_leading_number(name)
+    prefixed_name = f"{next_num:02d}-{clean_name}"
     safe_name = _sanitize_name(prefixed_name)
     timestamp = datetime.now().isoformat()
 
