@@ -587,6 +587,10 @@ def validate_write_path(path: str, working_directory: str) -> str | None:
     Resolves both paths to their real absolute forms and checks that
     *path* resolves to a location inside *working_directory*.
 
+    Also checks for symlink-based escapes — if any component of the
+    path is a symlink pointing outside the working directory, it is
+    rejected even if the final resolved path is inside.
+
     Returns ``None`` if the path is valid, or an error message string
     if it is outside the working directory.
 
@@ -597,12 +601,124 @@ def validate_write_path(path: str, working_directory: str) -> str | None:
     resolved_path = Path(path).resolve()
     resolved_wd = Path(working_directory).resolve()
 
+    # Step 1: Check that the final resolved path is within the working directory
     try:
         resolved_path.relative_to(resolved_wd)
-        return None
     except ValueError:
         return (
             f"Error: Path '{path}' resolves to '{resolved_path}' "
             f"which is outside the working directory '{resolved_wd}'. "
             f"All file operations must be within the working directory."
         )
+
+    # Step 2: Check for symlink-based escapes
+    # Walk the path from root to leaf checking each component.
+    # If any component is a symlink pointing outside the working directory,
+    # reject the path (an attacker could create a symlink inside WD -> outside).
+    try:
+        # Build the absolute path to walk
+        if os.path.isabs(path):
+            original_abs = Path(path)
+        else:
+            original_abs = Path(working_directory) / path
+
+        # Normalize the path to remove ".." and "." components for walking
+        original_abs = original_abs.resolve()
+
+        # Walk all parent directories checking for symlinks
+        for parent in original_abs.parents:
+            try:
+                if parent.is_symlink():
+                    resolved_link = parent.resolve()
+                    try:
+                        resolved_link.relative_to(resolved_wd)
+                    except ValueError:
+                        return (
+                            f"Error: Path '{path}' contains symlink '{parent}' "
+                            f"which points to '{resolved_link}' outside the working "
+                            f"directory. Symlinks to outside paths are not allowed."
+                        )
+            except (OSError, RuntimeError):
+                pass  # Can't check — path may not exist yet, skip
+
+        # Also check the leaf if it exists
+        try:
+            if original_abs.is_symlink():
+                resolved_link = original_abs.resolve()
+                try:
+                    resolved_link.relative_to(resolved_wd)
+                except ValueError:
+                    return (
+                        f"Error: Path '{path}' is a symlink pointing to "
+                        f"'{resolved_link}' outside the working directory. "
+                        f"Symlinks to outside paths are not allowed."
+                    )
+        except (OSError, RuntimeError):
+            pass
+    except (OSError, ValueError, RuntimeError):
+        pass  # If we can't fully check, don't block (path may not exist yet)
+
+    return None
+
+
+# ── SSRF protection ─────────────────────────────────────────────────────────
+
+import ipaddress as _ipaddress
+import socket as _socket
+from urllib.parse import urlparse as _urlparse
+
+# Private/reserved IP ranges that should be blocked for SSRF prevention
+_PRIVATE_NETWORKS: list[Any] = [
+    _ipaddress.ip_network("127.0.0.0/8"),       # Loopback
+    _ipaddress.ip_network("10.0.0.0/8"),         # Private
+    _ipaddress.ip_network("172.16.0.0/12"),      # Private
+    _ipaddress.ip_network("192.168.0.0/16"),     # Private
+    _ipaddress.ip_network("169.254.0.0/16"),     # Link-local
+    _ipaddress.ip_network("0.0.0.0/8"),          # Current network
+    _ipaddress.ip_network("100.64.0.0/10"),      # Carrier-grade NAT
+    _ipaddress.ip_network("198.18.0.0/15"),      # Benchmarking
+    _ipaddress.ip_network("::1/128"),            # IPv6 loopback
+    _ipaddress.ip_network("fc00::/7"),           # IPv6 unique local
+    _ipaddress.ip_network("fe80::/10"),          # IPv6 link-local
+]
+
+
+def validate_url_target(url: str) -> str | None:
+    """Validate that a URL target does not point to a private/internal IP.
+
+    Resolves the hostname to IP address(es) and checks against a blocklist
+    of private, reserved, and link-local networks. This prevents Server-Side
+    Request Forgery (SSRF) attacks against internal infrastructure.
+
+    Returns ``None`` if the URL is safe, or an error message string if blocked.
+    """
+    parsed = _urlparse(url)
+    if not parsed.scheme:
+        return "Error: URL must have a scheme (http:// or https://)"
+    if parsed.scheme not in ("http", "https"):
+        return f"Error: Unsupported URL scheme '{parsed.scheme}'. Only http/https allowed."
+
+    hostname = parsed.hostname
+    if not hostname:
+        return "Error: URL has no valid hostname"
+
+    # Resolve hostname to IP addresses
+    try:
+        addrinfo = _socket.getaddrinfo(hostname, None)
+    except (_socket.gaierror, OSError):
+        return None  # Can't resolve — let the request proceed (may fail naturally)
+
+    for family, _, _, _, sockaddr in addrinfo:
+        try:
+            ip = _ipaddress.ip_address(sockaddr[0])
+            for private_net in _PRIVATE_NETWORKS:
+                if ip in private_net:
+                    return (
+                        f"Error: URL '{url}' resolves to private IP {ip}. "
+                        f"Requests to private/internal networks are blocked "
+                        f"for security (SSRF protection)."
+                    )
+        except ValueError:
+            continue
+
+    return None

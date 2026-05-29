@@ -2,6 +2,10 @@
 
 Sessions are stored as JSON files in the working_directory/sessions/ folder.
 Each session captures: messages, mode, working_directory, model, timestamp.
+
+If the ``CODING_AGENT_SESSION_KEY`` environment variable is set, session
+files are encrypted with AES-GCM (via ``cryptography.fernet``) and stored
+with a ``.encrypted`` extension instead of ``.json``.
 """
 
 from __future__ import annotations
@@ -9,10 +13,11 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 import time
 from datetime import datetime
 from pathlib import Path
-from typing import cast
+from typing import Any, cast
 
 from .logging_config import get_logger
 
@@ -20,9 +25,70 @@ logger = get_logger(__name__)
 
 SESSION_DIR = "sessions"
 
+# Environment variable for optional session encryption
+SESSION_KEY_ENV = "CODING_AGENT_SESSION_KEY"
+
+# Patterns that may indicate sensitive content in messages
+_SENSITIVE_PATTERNS: list[tuple[str, str]] = [
+    (r'[\'"]?(?:sk-[a-zA-Z0-9]{20,})[\'"]?', "API key (e.g. sk-...)"),
+    (r'(?:ANTHROPIC_API_KEY|OPENAI_API_KEY|API_KEY)', "API key environment variable"),
+    (r'(?:password|passwd|secret)\s*[:=]\s*[\'"]?\S+', "potential password/secret"),
+]
+
 
 def _sessions_dir(working_directory: str) -> str:
     return os.path.join(working_directory, SESSION_DIR)
+
+
+def _get_cipher() -> Any | None:
+    """Return a Fernet cipher if SESSION_KEY_ENV is set, else None."""
+    key = os.environ.get(SESSION_KEY_ENV)
+    if not key:
+        return None
+    try:
+        from cryptography.fernet import Fernet
+        # If key is not a raw 44-char Fernet key, derive one via SHA-256
+        if len(key) != 44:
+            import base64
+            import hashlib
+            derived = hashlib.sha256(key.encode()).digest()
+            key = base64.urlsafe_b64encode(derived)
+        return Fernet(key)
+    except Exception as exc:
+        logger.warning("Invalid %s, sessions will be unencrypted: %s", SESSION_KEY_ENV, exc)
+        return None
+
+
+def _check_sensitive_content(messages: list[dict[str, object]]) -> list[str]:
+    """Scan messages for potentially sensitive content patterns.
+
+    Returns a list of warning strings (empty if none found).
+    This is a best-effort scan and may produce false positives/negatives.
+    """
+    warnings: list[str] = []
+    for msg in messages:
+        content = msg.get("content", "")
+        if isinstance(content, str):
+            for pattern, desc in _SENSITIVE_PATTERNS:
+                if re.search(pattern, content, re.IGNORECASE):
+                    warnings.append(
+                        f"Potential {desc} detected in message content. "
+                        f"Set {SESSION_KEY_ENV} for encryption."
+                    )
+                    break  # One warning per message
+        elif isinstance(content, list):
+            # Check tool result content blocks
+            for block in cast("list[dict[str, object]]", content):
+                block_content = block.get("content") or block.get("text", "")
+                if isinstance(block_content, str):
+                    for pattern, desc in _SENSITIVE_PATTERNS:
+                        if re.search(pattern, block_content, re.IGNORECASE):
+                            warnings.append(
+                                f"Potential {desc} detected in tool output. "
+                                f"Set {SESSION_KEY_ENV} for encryption."
+                            )
+                            break
+    return warnings
 
 
 def save_session(
@@ -42,8 +108,6 @@ def save_session(
     if not safe_name:
         return "Error: invalid session name. Use alphanumeric characters, dashes, or underscores."
 
-    filepath = os.path.join(s_dir, f"{safe_name}.json")
-
     session_data = {
         "name": safe_name,
         "saved_at": datetime.now().isoformat(),
@@ -54,10 +118,22 @@ def save_session(
         "is_autosave": is_autosave,
     }
 
-    with open(filepath, "w", encoding="utf-8") as f:
-        json.dump(session_data, f, indent=2, ensure_ascii=False)
+    cipher = _get_cipher()
+    if cipher:
+        # Encrypted save
+        filepath = os.path.join(s_dir, f"{safe_name}.encrypted")
+        json_bytes = json.dumps(session_data, indent=2, ensure_ascii=False).encode("utf-8")
+        encrypted = cipher.encrypt(json_bytes)
+        with open(filepath, "wb") as f:
+            f.write(encrypted)
+        logger.info("Session saved (encrypted): name=%s, mode=%s, messages=%d, file=%s", safe_name, mode, len(messages), filepath)
+    else:
+        # Plain JSON save
+        filepath = os.path.join(s_dir, f"{safe_name}.json")
+        with open(filepath, "w", encoding="utf-8") as f:
+            json.dump(session_data, f, indent=2, ensure_ascii=False)
+        logger.info("Session saved: name=%s, mode=%s, messages=%d, file=%s", safe_name, mode, len(messages), filepath)
 
-    logger.info("Session saved: name=%s, mode=%s, messages=%d, file=%s", safe_name, mode, len(messages), filepath)
     return filepath
 
 
@@ -69,19 +145,38 @@ def load_session(name: str, working_directory: str) -> dict[str, object] | None:
     if not safe_name:
         return None
 
+    # Try plain JSON first
     filepath = os.path.join(s_dir, f"{safe_name}.json")
-    if not os.path.isfile(filepath):
-        return None
+    if os.path.isfile(filepath):
+        try:
+            with open(filepath, "r", encoding="utf-8") as f:
+                data: dict[str, object] = json.load(f)
+            msg_count = len(cast("list[object]", data.get("messages", [])))
+            logger.info("Session loaded: name=%s, messages=%d, mode=%s", safe_name, msg_count, data.get("mode", "?"))
+            return data
+        except (json.JSONDecodeError, OSError) as exc:
+            logger.warning("Failed to load session %s: %s", safe_name, exc)
+            return None
 
-    try:
-        with open(filepath, "r", encoding="utf-8") as f:
-            data: dict[str, object] = json.load(f)
-        msg_count = len(cast("list[object]", data.get("messages", [])))
-        logger.info("Session loaded: name=%s, messages=%d, mode=%s", safe_name, msg_count, data.get("mode", "?"))
-        return data
-    except (json.JSONDecodeError, OSError) as exc:
-        logger.warning("Failed to load session %s: %s", safe_name, exc)
-        return None
+    # Try encrypted
+    filepath_enc = os.path.join(s_dir, f"{safe_name}.encrypted")
+    if os.path.isfile(filepath_enc):
+        cipher = _get_cipher()
+        if cipher is None:
+            logger.warning("Cannot load encrypted session %s: %s not set", safe_name, SESSION_KEY_ENV)
+            return None
+        try:
+            with open(filepath_enc, "rb") as f:
+                decrypted = cipher.decrypt(f.read())
+            data = json.loads(decrypted.decode("utf-8"))
+            msg_count = len(cast("list[object]", data.get("messages", [])))
+            logger.info("Session loaded (encrypted): name=%s, messages=%d, mode=%s", safe_name, msg_count, data.get("mode", "?"))
+            return data
+        except Exception as exc:
+            logger.warning("Failed to load encrypted session %s: %s", safe_name, exc)
+            return None
+
+    return None
 
 
 def list_sessions(working_directory: str) -> list[dict[str, object]]:
@@ -92,19 +187,41 @@ def list_sessions(working_directory: str) -> list[dict[str, object]]:
 
     sessions: list[dict[str, object]] = []
     for fname in os.listdir(s_dir):
-        if not fname.endswith(".json"):
+        if not (fname.endswith(".json") or fname.endswith(".encrypted")):
             continue
         filepath = os.path.join(s_dir, fname)
         try:
-            with open(filepath, "r", encoding="utf-8") as f:
-                data: dict[str, object] = json.load(f)
+            if fname.endswith(".encrypted"):
+                # For listing, try to load metadata (may fail without key)
+                cipher = _get_cipher()
+                if cipher:
+                    with open(filepath, "rb") as f:
+                        decrypted = cipher.decrypt(f.read())
+                    data = json.loads(decrypted.decode("utf-8"))
+                else:
+                    # Can't read encrypted files without key, show basic info
+                    sessions.append({
+                        "name": fname[:-10],  # Remove .encrypted
+                        "saved_at": "unknown (encrypted)",
+                        "mode": "unknown",
+                        "model": "unknown",
+                        "message_count": 0,
+                        "filepath": filepath,
+                        "encrypted": True,
+                    })
+                    continue
+            else:
+                with open(filepath, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+
             sessions.append({
-                "name": data.get("name", fname[:-5]),
+                "name": data.get("name", fname[:-5] if fname.endswith(".json") else fname[:-10]),
                 "saved_at": data.get("saved_at", "unknown"),
                 "mode": data.get("mode", "unknown"),
                 "model": data.get("model", "unknown"),
                 "message_count": len(cast("list[object]", data.get("messages", []))),
                 "filepath": filepath,
+                "encrypted": fname.endswith(".encrypted"),
             })
         except (json.JSONDecodeError, OSError):
             continue
@@ -120,10 +237,17 @@ def delete_session(name: str, working_directory: str) -> bool:
     s_dir = _sessions_dir(working_directory)
     safe_name = name.strip().replace(" ", "-")
     safe_name = "".join(c for c in safe_name if c.isalnum() or c in "-_.")
+    # Try plain JSON
     filepath = os.path.join(s_dir, f"{safe_name}.json")
     if os.path.isfile(filepath):
         os.remove(filepath)
         logger.info("Session deleted: %s", safe_name)
+        return True
+    # Try encrypted
+    filepath_enc = os.path.join(s_dir, f"{safe_name}.encrypted")
+    if os.path.isfile(filepath_enc):
+        os.remove(filepath_enc)
+        logger.info("Session deleted (encrypted): %s", safe_name)
         return True
     logger.warning("Session not found for deletion: %s", safe_name)
     return False

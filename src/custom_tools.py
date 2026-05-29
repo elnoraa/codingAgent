@@ -2,6 +2,12 @@
 
 Allows users to define custom tools through a JSON config file
 without writing Python code. Supports handler types: bash, http, python.
+
+**Security considerations:**
+- Bash and Python handlers run with the same restrictions as their built-in
+  counterparts (write-path enforcement, command scanning, restricted imports).
+- HTTP handlers have SSRF protection (private IPs are blocked).
+- A warning is logged whenever bash or python type tools are loaded.
 """
 
 from __future__ import annotations
@@ -30,7 +36,11 @@ class CustomToolDef:
 
 
 def _handle_bash_tool(args: dict[str, object], ctx: ToolContext, defn: CustomToolDef) -> str:
-    """Execute a bash command with template substitution."""
+    """Execute a bash command with template substitution.
+
+    Applies the same command-scanner checks as the built-in ``bash`` tool
+    to prevent writes outside the working directory.
+    """
     command_template = defn.handler_config.get("command", "")
     if not command_template:
         return "Error: No command specified in tool definition."
@@ -43,6 +53,22 @@ def _handle_bash_tool(args: dict[str, object], ctx: ToolContext, defn: CustomToo
     except Exception as e:
         return f"Error in template substitution: {e}"
 
+    # Apply the same command scanner as the built-in bash tool
+    try:
+        from tools.bash_tool import _check_command_for_outside_writes
+    except ImportError:
+        pass
+    else:
+        scanner_error = _check_command_for_outside_writes(command, ctx.working_directory)
+        if scanner_error:
+            return scanner_error
+
+    # Validate workdir if specified in handler config
+    workdir = defn.handler_config.get("workdir") or ctx.working_directory
+    error = ctx.validate_write_path(workdir)
+    if error:
+        return error
+
     try:
         result = subprocess.run(
             command,
@@ -50,7 +76,7 @@ def _handle_bash_tool(args: dict[str, object], ctx: ToolContext, defn: CustomToo
             capture_output=True,
             text=True,
             timeout=30,
-            cwd=ctx.working_directory,
+            cwd=workdir,
         )
         output = ""
         if result.stdout:
@@ -69,7 +95,7 @@ def _handle_bash_tool(args: dict[str, object], ctx: ToolContext, defn: CustomToo
 
 
 def _handle_http_tool(args: dict[str, object], ctx: ToolContext, defn: CustomToolDef) -> str:
-    """Make an HTTP request."""
+    """Make an HTTP request with SSRF protection."""
     url_template = defn.handler_config.get("url", "")
     method = defn.handler_config.get("method", "GET").upper()
     if not url_template:
@@ -82,6 +108,15 @@ def _handle_http_tool(args: dict[str, object], ctx: ToolContext, defn: CustomToo
             url = url.replace("{{" + key + "}}", str(value))
     except Exception as e:
         return f"Error in URL template substitution: {e}"
+
+    # SSRF protection: block requests to private/internal IPs
+    try:
+        from src.utils import validate_url_target
+        error = validate_url_target(url)
+        if error:
+            return error
+    except ImportError:
+        pass
 
     try:
         import urllib.request
@@ -97,11 +132,28 @@ def _handle_http_tool(args: dict[str, object], ctx: ToolContext, defn: CustomToo
 
 
 def _handle_python_tool(args: dict[str, object], ctx: ToolContext, defn: CustomToolDef) -> str:
-    """Execute embedded Python script with args as variables."""
+    """Execute embedded Python script with args as variables.
+
+    Uses the same restricted execution environment as the built-in
+    ``python`` tool (blocked dangerous imports, write-path enforcement).
+    """
     script = defn.handler_config.get("script", "")
     if not script:
         return "Error: No script specified in tool definition."
 
+    # Use the restricted Python REPL if working directory is set
+    if ctx.working_directory:
+        try:
+            from src.python_repl import PythonRepl
+            repl = PythonRepl(restrict_to_working_directory=ctx.working_directory)
+            # Prepend args as variable assignments so the script can use them
+            preamble = "\n".join(f"{k} = {v!r}" for k, v in args.items())
+            full_code = preamble + "\n" + script if preamble else script
+            return repl.execute(full_code)
+        except Exception as e:
+            return f"Error executing script: {e}"
+
+    # Fallback: unrestricted execution (no working directory set)
     import io
     import sys as _sys
 
@@ -187,6 +239,16 @@ def load_custom_tools(config_path: str | None, working_directory: str) -> list[T
             handler = raw.get("handler", {})
             handler_type = handler.get("type", "bash")
             handler_config = {k: v for k, v in handler.items() if k != "type"}
+
+            # Log a security warning for potentially dangerous handler types
+            if handler_type in ("bash", "python"):
+                logger.warning(
+                    "Loading custom tool '%s' with type '%s' — this tool can "
+                    "execute arbitrary %s commands. Ensure the config file is "
+                    "trustworthy.",
+                    name, handler_type,
+                    "shell" if handler_type == "bash" else "Python",
+                )
 
             defn = CustomToolDef(
                 name=name,

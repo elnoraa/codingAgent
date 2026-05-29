@@ -946,7 +946,12 @@ class Repl:
         Uses $EDITOR or $VISUAL environment variable (Unix convention).
         Falls back to normal input if no editor is configured.
         Returns the edited content or '' if cancelled/empty.
+
+        Temp files are created in a dedicated temp directory that is
+        cleaned up entirely in the ``finally`` block, catching any
+        editor backup files (``.swp``, ``~``, etc.) that may be created.
         """
+        import shutil
         import subprocess
         import tempfile
 
@@ -956,16 +961,15 @@ class Repl:
             print(f"  {dim('Falling back to multi-line input (use \\ to continue lines).')}")
             return ""
 
-        temp_path: str | None = None
+        temp_dir: str | None = None
         try:
-            # Create a temporary file with instructions
-            with tempfile.NamedTemporaryFile(
-                mode="w",
-                suffix=".md",
-                encoding="utf-8",
-                delete=False,
-            ) as f:
-                temp_path = f.name
+            # Create a dedicated temp directory so editor backup files
+            # (e.g. .swp, .swo, file~) are confined and cleaned up together
+            temp_dir = tempfile.mkdtemp(prefix="agent_editor_")
+            temp_path = os.path.join(temp_dir, "message.md")
+
+            # Write instructions
+            with open(temp_path, "w", encoding="utf-8") as f:
                 f.write("# Write your message below. Lines starting with # are ignored.\n")
                 f.write("# Save and exit the editor when done.\n")
                 f.write("# Close without saving to cancel.\n")
@@ -983,8 +987,6 @@ class Repl:
                 return ""
 
             # Read the file back
-            if temp_path is None:
-                return ""
             try:
                 with open(temp_path, "r", encoding="utf-8") as f:
                     content = f.read()
@@ -1009,11 +1011,11 @@ class Repl:
             return result_text
 
         finally:
-            # Clean up temp file
-            if temp_path is not None:
+            # Clean up entire temp directory (catches editor backup files)
+            if temp_dir is not None:
                 try:
-                    os.unlink(temp_path)
-                except (OSError, IOError):
+                    shutil.rmtree(temp_dir, ignore_errors=True)
+                except Exception:
                     pass
 
     def _auto_save(self) -> None:

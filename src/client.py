@@ -291,11 +291,25 @@ class MultiModelClient:
         return self._current_config.max_tokens
 
 
+# Parameter names whose values should be redacted in logs
+SENSITIVE_PARAMS = frozenset({
+    "password", "passwd", "secret", "api_key", "apiKey",
+    "token", "auth_token", "access_token", "private_key",
+    "apikey", "api-key", "api.token",
+})
+
+
 def _summarize_args(args: dict[str, object]) -> str:
-    """Return a concise summary of tool arguments (for logging)."""
+    """Return a concise summary of tool arguments (for logging).
+
+    Sensitive parameter values (passwords, keys, tokens) are
+    automatically redacted as ``****``.
+    """
     parts: list[str] = []
     for k, v in args.items():
-        if isinstance(v, str):
+        if k in SENSITIVE_PARAMS:
+            parts.append(f"{k}=****")
+        elif isinstance(v, str):
             if len(v) > 80:
                 parts.append(f"{k}={v[:80]}...")
             else:

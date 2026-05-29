@@ -19,6 +19,15 @@ def execute(args: dict[str, Any], _ctx: ToolContext) -> str:
     if not url:
         return 'Error: missing required argument "url".'
 
+    # SSRF protection: block private/internal IPs
+    try:
+        from src.utils import validate_url_target
+        ssrf_error = validate_url_target(url)
+        if ssrf_error:
+            return ssrf_error
+    except ImportError:
+        pass
+
     # Use curl to fetch the URL
     try:
         result = subprocess.run(
