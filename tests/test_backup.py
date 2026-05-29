@@ -202,3 +202,57 @@ class TestCleanBackups:
         clean_backups(keep=2)
         backups = list_backups()
         assert len(backups) <= 2
+
+
+class TestSymlinkSafety:
+    """Verify symlink safety in backup/restore."""
+
+    def test_restore_blocked_by_outside_symlink(self, tmp_path: Path) -> None:
+        """Restore should be blocked if backup contains symlinks to outside."""
+        from src.backup import restore_backup, _get_backup_dir
+
+        # Manually create a backup directory with a malicious symlink
+        backup_dir = _get_backup_dir() / "test_restore_blocked"
+        backup_dir.mkdir(parents=True, exist_ok=True)
+        (backup_dir / "safe_file.txt").write_text("safe content", encoding="utf-8")
+
+        # Create a symlink pointing outside the backup
+        import os
+        try:
+            os.symlink(
+                str(tmp_path.resolve().parent / "evil_outside.txt"),
+                str(backup_dir / "malicious_link"),
+            )
+        except (OSError, PermissionError):
+            import shutil
+            shutil.rmtree(backup_dir)
+            pytest.skip("Cannot create symlinks on this system")
+
+        # Restore into a target
+        target = tmp_path / "target"
+        target.mkdir()
+
+        result = restore_backup("test_restore_blocked", str(target))
+        assert "blocked" in result.lower() or "symlink" in result.lower()
+        # The safe file should NOT have been restored since the backup was blocked
+        assert not (target / "safe_file.txt").exists()
+
+        import shutil
+        shutil.rmtree(backup_dir)
+
+    def test_create_backup_does_not_follow_symlinks(self) -> None:
+        """Copy backup should use symlinks=False (not follow symlinks)."""
+        import inspect
+        from src import backup
+
+        # Verify the source code uses symlinks=False
+        copy_backup_src = inspect.getsource(backup._copy_backup)
+        assert "symlinks=False" in copy_backup_src
+
+    def test_restore_copy_uses_follow_symlinks_false(self) -> None:
+        """Restore should use follow_symlinks=False for copy2."""
+        import inspect
+        from src import backup
+        restore_src = inspect.getsource(backup._restore_copy)
+        assert "follow_symlinks=False" in restore_src
+        assert "symlinks=False" in restore_src

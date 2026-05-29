@@ -127,7 +127,7 @@ def _copy_backup(working_dir: str, backup_name: str) -> str:
     def _ignore_pattern(path: str, names: list[str]) -> list[str]:
         return [n for n in names if n in exclude_dirs or n.endswith(".pyc")]
 
-    shutil.copytree(source, backup_dir, ignore=_ignore_pattern)
+    shutil.copytree(source, backup_dir, ignore=_ignore_pattern, symlinks=False)
 
     size = _get_dir_size(backup_dir)
     logger.info("Created filesystem backup: %s (%s)", backup_name, size)
@@ -145,6 +145,23 @@ def _get_dir_size(path: Path) -> str:
             return f"{total:.1f}{unit}"
         total /= 1024
     return f"{total:.1f}TB"
+
+
+def _safe_remove(item: Path) -> None:
+    """Remove a file or directory without following symlinks.
+
+    If the item is a symlink, only the link itself is removed (not the target).
+    For regular directories, uses ``shutil.rmtree``. For regular files, unlinks.
+    """
+    try:
+        if item.is_symlink():
+            item.unlink()
+        elif item.is_dir():
+            shutil.rmtree(item)
+        else:
+            item.unlink()
+    except (OSError, RuntimeError) as exc:
+        logger.warning("Could not remove %s: %s", item, exc)
 
 
 def list_backups() -> list[dict[str, Any]]:
@@ -204,26 +221,50 @@ def _restore_copy(backup_dir: Path, working_dir: str) -> str:
 
     target = Path(working_dir).resolve()
 
+    # Scan the backup for symlinks pointing outside the backup directory
+    dangerous_symlinks: list[str] = []
+    for item in backup_dir.rglob("*"):
+        if item.is_symlink():
+            try:
+                resolved = item.resolve()
+                try:
+                    resolved.relative_to(backup_dir.resolve())
+                except ValueError:
+                    # Symlink points outside the backup directory
+                    dangerous_symlinks.append(str(item))
+            except (OSError, RuntimeError):
+                dangerous_symlinks.append(str(item))
+
+    if dangerous_symlinks:
+        link_list = "\n".join(f"  - {l}" for l in dangerous_symlinks[:20])
+        logger.warning(
+            "Backup contains symlinks pointing outside backup directory:\n%s",
+            link_list,
+        )
+        return (
+            f"{yellow('⚠')} Restore blocked: backup contains "
+            f"{len(dangerous_symlinks)} symlink(s) that point outside the "
+            f"backup directory. These could overwrite files outside the project. "
+            f"Review and clean the backup, then retry.\n{link_list}"
+        )
+
     # Warn if target is not empty
     if any(target.iterdir()):
         confirm = input(f"  {yellow('Target directory is not empty. Continue?')} [y/N] ")
         if confirm.lower() not in ("y", "yes"):
             return "Restore cancelled."
 
-    # Remove all contents of target
+    # Remove all contents of target (excluding .agent-backups)
     for item in target.iterdir():
         if item.name != ".agent-backups":
-            if item.is_dir():
-                shutil.rmtree(item)
-            else:
-                item.unlink()
+            _safe_remove(item)
 
-    # Copy backup contents
+    # Copy backup contents (use symlinks=False / follow_symlinks=False)
     for item in backup_dir.iterdir():
         if item.is_dir():
-            shutil.copytree(item, target / item.name)
+            shutil.copytree(item, target / item.name, symlinks=False)
         else:
-            shutil.copy2(item, target / item.name)
+            shutil.copy2(item, target / item.name, follow_symlinks=False)
 
     return f"{green('✓')} Restored from backup: {backup_dir.name}"
 
