@@ -277,3 +277,158 @@ class TestMCPBridge:
         # Test that the execute function returns a string
         result = native.execute({"sql": "SELECT 1"}, ToolContext(working_directory="."))
         assert isinstance(result, str)
+
+
+# ── Security tests ─────────────────────────────────────────────────────────────
+
+
+class TestMCPBridgeSecurity:
+    """Verify SSRF protection and host allowlisting for MCP SSE servers."""
+
+    def test_parse_rejects_private_ip_sse(self) -> None:
+        """SSE URLs pointing to private IPs should be rejected by SSRF protection."""
+        configs = parse_server_configs([
+            {
+                "name": "bad-server",
+                "transport": "sse",
+                "url": "http://192.168.1.1:8080/mcp",
+            }
+        ])
+        assert len(configs) == 0  # Should be filtered out by SSRF check
+
+    def test_parse_rejects_loopback_sse(self) -> None:
+        """SSE URLs pointing to loopback should be rejected."""
+        configs = parse_server_configs([
+            {
+                "name": "local-server",
+                "transport": "sse",
+                "url": "http://127.0.0.1:8080/mcp",
+            }
+        ])
+        assert len(configs) == 0
+
+    def test_parse_accepts_public_sse(self) -> None:
+        """SSE URLs pointing to public hosts should be accepted."""
+        configs = parse_server_configs([
+            {
+                "name": "public-server",
+                "transport": "sse",
+                "url": "https://api.example.com/mcp",
+            }
+        ])
+        assert len(configs) == 1
+        assert configs[0].name == "public-server"
+
+    def test_parse_accepts_https_public_url(self) -> None:
+        """HTTPS SSE URLs to public hosts should be accepted."""
+        configs = parse_server_configs([
+            {
+                "name": "github-api",
+                "transport": "sse",
+                "url": "https://api.github.com/mcp",
+            }
+        ])
+        assert len(configs) == 1
+        assert configs[0].name == "github-api"
+
+    def test_parse_stdio_not_affected_by_ssrf(self) -> None:
+        """Stdio transport should not be blocked (it doesn't make network requests)."""
+        configs = parse_server_configs([
+            {
+                "name": "local-tool",
+                "transport": "stdio",
+                "command": "uvx",
+                "args": ["mcp-server-sqlite"],
+            }
+        ])
+        assert len(configs) == 1
+        assert configs[0].name == "local-tool"
+
+    def test_parse_knows_verify_tls_default(self) -> None:
+        """verify_tls should default to True for SSE configs."""
+        configs = parse_server_configs([
+            {
+                "name": "test",
+                "transport": "sse",
+                "url": "https://api.example.com/mcp",
+            }
+        ])
+        assert len(configs) == 1
+        assert configs[0].verify_tls is True
+
+    def test_parse_reads_allowed_hosts(self) -> None:
+        """allowed_hosts from config should be parsed."""
+        configs = parse_server_configs([
+            {
+                "name": "test",
+                "transport": "sse",
+                "url": "https://api.example.com/mcp",
+                "allowed_hosts": ["api.example.com"],
+            }
+        ])
+        assert len(configs) == 1
+        assert configs[0].allowed_hosts == ["api.example.com"]
+
+    def test_bridge_applys_global_allowed_hosts(self) -> None:
+        """Global allowed_hosts should apply to SSE servers without their own list."""
+        bridge = MCPBridge(
+            [{"name": "test", "transport": "sse", "url": "https://api.example.com/mcp"}],
+            allowed_hosts=["api.example.com"],
+        )
+        # Access internal sessions to check config
+        for session in bridge._sessions.values():
+            assert session.config.allowed_hosts == ["api.example.com"]
+        bridge.disconnect_all()
+
+    def test_bridge_does_not_override_per_server_allowed_hosts(self) -> None:
+        """Per-server allowed_hosts should take priority over global list."""
+        bridge = MCPBridge(
+            [{
+                "name": "test",
+                "transport": "sse",
+                "url": "https://api.example.com/mcp",
+                "allowed_hosts": ["specific.example.com"],
+            }],
+            allowed_hosts=["global.example.com"],
+        )
+        for session in bridge._sessions.values():
+            assert session.config.allowed_hosts == ["specific.example.com"]
+        bridge.disconnect_all()
+
+    def test_check_allowed_host_allows_matching(self) -> None:
+        """A host matching the allowlist should pass."""
+        bridge = MCPBridge([])
+        cfg = MCPServerConfig(
+            name="test", transport="sse", url="https://api.example.com/mcp",
+            allowed_hosts=["api.example.com"],
+        )
+        result = bridge._check_allowed_host(cfg)
+        assert result is None
+
+    def test_check_allowed_host_blocks_non_matching(self) -> None:
+        """A host not in the allowlist should be blocked."""
+        bridge = MCPBridge([])
+        cfg = MCPServerConfig(
+            name="test", transport="sse", url="https://evil.com/mcp",
+            allowed_hosts=["api.example.com"],
+        )
+        result = bridge._check_allowed_host(cfg)
+        assert result is not None
+        assert "evil.com" in result
+        assert "api.example.com" in result
+
+    def test_check_allowed_host_no_restrictions(self) -> None:
+        """With no allowed_hosts set, any host should pass."""
+        bridge = MCPBridge([])
+        cfg = MCPServerConfig(
+            name="test", transport="sse", url="https://any-host.com/mcp",
+        )
+        assert bridge._check_allowed_host(cfg) is None
+
+    def test_check_allowed_host_stdio_ignored(self) -> None:
+        """Stdio transport should not be subject to host checks."""
+        bridge = MCPBridge([])
+        cfg = MCPServerConfig(
+            name="test", transport="stdio", command="echo",
+        )
+        assert bridge._check_allowed_host(cfg) is None

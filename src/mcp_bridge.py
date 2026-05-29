@@ -72,6 +72,10 @@ class MCPServerConfig:
     """SSE endpoint URL (e.g. ``"https://api.example.com/mcp"``)."""
     headers: dict[str, str] | None = None
     """Optional HTTP headers for SSE transport."""
+    verify_tls: bool = True
+    """Whether to verify TLS certificates for SSE connections (default: True)."""
+    allowed_hosts: list[str] | None = None
+    """Optional: restrict SSE connections to specific hostnames only."""
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -117,6 +121,20 @@ def parse_server_configs(raw: list[dict[str, object]]) -> list[MCPServerConfig]:
                 raw_headers = entry.get("headers")
                 if isinstance(raw_headers, dict):
                     cfg.headers = {str(k): str(v) for k, v in raw_headers.items()}
+                # SSRF protection: block SSE URLs pointing to private/internal IPs
+                try:
+                    from src.utils import validate_url_target
+                    ssrf_error = validate_url_target(str(url))
+                    if ssrf_error:
+                        logger.warning("Skipping MCP server %r: %s", name, ssrf_error)
+                        continue
+                except ImportError:
+                    pass
+                # Read optional security config
+                cfg.verify_tls = bool(entry.get("verify_tls", True))
+                raw_allowed = entry.get("allowed_hosts")
+                if isinstance(raw_allowed, list):
+                    cfg.allowed_hosts = [str(h) for h in raw_allowed]
 
             configs.append(cfg)
             logger.debug("Parsed MCP server config: name=%s transport=%s", name, transport)
@@ -296,7 +314,11 @@ class MCPBridge:
     MCP sessions alive for the duration of the agent session.
     """
 
-    def __init__(self, servers_config: list[dict[str, object]]) -> None:
+    def __init__(
+        self,
+        servers_config: list[dict[str, object]],
+        allowed_hosts: list[str] | None = None,
+    ) -> None:
         self._server_configs = parse_server_configs(servers_config)
         self._sessions: dict[str, MCPSession] = {}
         self._native_tools: list[Tool] = []
@@ -304,6 +326,13 @@ class MCPBridge:
         self._thread: threading.Thread | None = None
         self._lock = threading.Lock()
         self._started = False
+        self._allowed_hosts = allowed_hosts or []
+
+        # Apply global allowed_hosts to any SSE server that doesn't have its own list
+        if self._allowed_hosts:
+            for cfg in self._server_configs:
+                if cfg.transport == "sse" and not cfg.allowed_hosts:
+                    cfg.allowed_hosts = list(self._allowed_hosts)
 
     # ── Public API ────────────────────────────────────────────────────────
 
@@ -494,6 +523,12 @@ class MCPBridge:
 
     async def _connect_one(self, session: MCPSession) -> None:
         """Connect a single session, catching and logging errors."""
+        # Check host allowlist for SSE connections
+        host_error = self._check_allowed_host(session.config)
+        if host_error:
+            session._error = host_error  # type: ignore[attr-defined]
+            logger.warning("MCP server %r blocked: %s", session.config.name, host_error)
+            return
         try:
             await session.connect()
         except Exception as exc:
@@ -503,6 +538,29 @@ class MCPBridge:
             )
             # Mark error on session
             session._error = str(exc)  # type: ignore[attr-defined]
+
+    def _check_allowed_host(self, config: MCPServerConfig) -> str | None:
+        """Check if an SSE server host is in the allowed hosts list.
+
+        Returns an error message if blocked, None if allowed.
+        """
+        if config.transport != "sse" or not config.url:
+            return None
+        if not config.allowed_hosts:
+            return None  # No restrictions configured — allow
+
+        from urllib.parse import urlparse
+        try:
+            hostname = urlparse(config.url).hostname
+        except Exception:
+            return None
+
+        if hostname and hostname not in config.allowed_hosts:
+            return (
+                f"Error: MCP server '{config.name}' host '{hostname}' is not in the "
+                f"allowed hosts list: {config.allowed_hosts}"
+            )
+        return None
 
     async def _disconnect_all_async(self) -> None:
         """Disconnect all sessions concurrently."""
