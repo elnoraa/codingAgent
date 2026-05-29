@@ -157,10 +157,9 @@ class ToolContext:
     def validate_write_path(self, path: str) -> str | None:
         """Validate that a path is within this context's working directory.
 
-        Delegates to ``src.utils.validate_write_path`` (will move to
-        ``src.validation`` in Phase 3 of the restructure).
+        Delegates to ``src.validation.validate_write_path``.
         """
-        from src.utils import validate_write_path as _validate
+        from src.validation import validate_write_path as _validate
         return _validate(path, self.working_directory)
 
 
