@@ -11,7 +11,7 @@ from typing import cast
 
 import pytest
 
-from src.session import save_session, load_session, list_sessions, delete_session
+from src.session import save_session, load_session, list_sessions, delete_session, _redact_text, _redact_messages
 
 
 @pytest.fixture
@@ -161,3 +161,122 @@ def test_round_trip_preserves_data(temp_working_dir: str) -> None:
     assert loaded_msgs[0]["content"] == "first"
     assert loaded_msgs[1]["content"] == "response"
     assert cast("str", data["mode"]) == "plan"
+
+
+# ── Redaction tests ────────────────────────────────────────────────────────────
+
+
+class TestSessionRedaction:
+    """Verify sensitive data redaction in session files."""
+
+    def test_redact_text_api_key(self) -> None:
+        """API keys in text should be redacted."""
+        result = _redact_text("sk-test-key-abcdefghijklmnopqrstuvwx")
+        assert "sk-***REDACTED***" in result
+        assert "sk-test-key-abcdefghijklmnopqrstuvwx" not in result
+
+    def test_redact_text_password(self) -> None:
+        """Password assignments in text should be redacted."""
+        result = _redact_text('password = "mysecret123"')
+        assert "***REDACTED***" in result
+        assert "mysecret123" not in result
+
+    def test_redact_text_normal(self) -> None:
+        """Normal text should be unchanged."""
+        text = "Hello, this is a normal conversation about Python."
+        assert _redact_text(text) == text
+
+    def test_redact_text_empty(self) -> None:
+        """Empty string should return empty."""
+        assert _redact_text("") == ""
+
+    def test_redact_messages_string_content(self) -> None:
+        """String message content should be redacted."""
+        messages: list[dict[str, object]] = [
+            {"role": "user", "content": "My key is sk-test-key-abcdefghijklmnopqrstuvwx"},
+        ]
+        redacted = _redact_messages(messages)
+        # Verify original is not modified
+        orig_content = cast("str", messages[0]["content"])
+        assert "sk-test-key-abcdefghijklmnopqrstuvwx" in orig_content
+        # Verify redacted has the marker
+        content = cast("str", redacted[0].get("content", ""))
+        assert isinstance(content, str)
+        assert "sk-***REDACTED***" in content
+        assert "sk-test-key-abcdefghijklmnopqrstuvwx" not in content
+
+    def test_redact_messages_list_content(self) -> None:
+        """List-type message content (tool results) should be redacted."""
+        messages: list[dict[str, object]] = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "password = hunter2"},
+                ],
+            },
+        ]
+        redacted = _redact_messages(messages)
+        content = redacted[0].get("content", [])
+        assert isinstance(content, list)
+        assert len(content) == 1
+        assert "hunter2" not in str(content)
+
+    def test_session_save_redacts_api_keys(self, temp_working_dir: str) -> None:
+        """Saving a session should redact API keys from stored data."""
+        messages: list[dict[str, object]] = [
+            {"role": "user", "content": "My API key: sk-test-key-abcdefghijklmnopqrstuvwx"},
+        ]
+        path = save_session(
+            name="redact-test",
+            messages=messages,
+            mode="code",
+            working_directory=temp_working_dir,
+            model="test-model",
+        )
+        assert os.path.isfile(path)
+
+        with open(path, encoding="utf-8") as f:
+            data = json.load(f)
+
+        stored_content = data["messages"][0]["content"]
+        assert "sk-***REDACTED***" in stored_content
+        assert "sk-test-key-abcdefghijklmnopqrstuvwx" not in stored_content
+
+    def test_session_save_does_not_modify_original(self, temp_working_dir: str) -> None:
+        """The original messages list should not be modified by save_session."""
+        original_key = "sk-test-key-abcdefghijklmnopqrstuvwx"
+        messages: list[dict[str, object]] = [
+            {"role": "user", "content": f"My API key: {original_key}"},
+        ]
+
+        save_session(
+            name="no-modify-test",
+            messages=messages,
+            mode="code",
+            working_directory=temp_working_dir,
+            model="test-model",
+        )
+
+        # Original should still have the plaintext key
+        orig_content = cast("str", messages[0]["content"])
+        assert original_key in orig_content
+
+    def test_session_round_trip_redacted(self, temp_working_dir: str) -> None:
+        """Saving and loading should preserve the redacted state."""
+        messages: list[dict[str, object]] = [
+            {"role": "user", "content": "password = 'supersecret'"},
+        ]
+        save_session(
+            name="roundtrip-redact",
+            messages=messages,
+            mode="code",
+            working_directory=temp_working_dir,
+            model="test",
+        )
+
+        data = load_session("roundtrip-redact", temp_working_dir)
+        assert data is not None
+        loaded_msgs = cast("list[dict[str, object]]", data.get("messages", []))
+        content: str = cast("str", loaded_msgs[0].get("content", "")) if loaded_msgs else ""
+        assert "supersecret" not in content
+        assert "***REDACTED***" in content

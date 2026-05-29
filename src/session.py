@@ -35,6 +35,70 @@ _SENSITIVE_PATTERNS: list[tuple[str, str]] = [
     (r'(?:password|passwd|secret)\s*[:=]\s*[\'"]?\S+', "potential password/secret"),
 ]
 
+# Sensitive patterns to redact from session data before saving to disk
+_SESSION_REDACT_PATTERNS: list[tuple[str, str]] = [
+    # Anthropic / OpenAI / generic API keys
+    (r'(sk-[a-zA-Z0-9\-]{20,})', 'sk-***REDACTED***'),
+    # AWS access keys
+    (r'(AKIA[0-9A-Z]{16})', 'AKIA***REDACTED***'),
+    # GitHub tokens
+    (r'(ghp_[a-zA-Z0-9]{36})', 'ghp_***REDACTED***'),
+    (r'(github_pat_[a-zA-Z0-9_]{80,})', 'github_pat_***REDACTED***'),
+    # Password/secret assignments
+    (r'(password\s*[:=]\s*["\x27]?)[^"\x27,;\s}]+', r'\1***REDACTED***'),
+    (r'(passwd\s*[:=]\s*["\x27]?)[^"\x27,;\s}]+', r'\1***REDACTED***'),
+    (r'(secret\s*[:=]\s*["\x27]?)[^"\x27,;\s}]+', r'\1***REDACTED***'),
+    # Database connection strings with credentials
+    (r'((?:mongodb(?:\+srv)?|postgres(?:ql)?|mysql|redis)://)[^@\s]+@', r'\1***USER***@'),
+    # JWT tokens
+    (r'(eyJ[a-zA-Z0-9_\-]{10,}\.[a-zA-Z0-9_\-]{10,}\.[a-zA-Z0-9_\-]{10,})', 'eyJ***REDACTED***'),
+    # Private key headers
+    (r'-----BEGIN\s+(RSA|DSA|EC|OPENSSH|PGP)\s+PRIVATE\s+KEY-----', '-----BEGIN REDACTED PRIVATE KEY-----'),
+    # Bearer tokens in headers
+    (r'(Authorization:\s*Bearer\s+)[a-zA-Z0-9._\x2d]+', r'\1***REDACTED***'),
+]
+
+
+def _redact_text(text: str) -> str:
+    """Redact sensitive patterns from a text string.
+
+    Used before saving session data to disk.
+    """
+    if not isinstance(text, str):
+        return text
+    result = text
+    for pattern, replacement in _SESSION_REDACT_PATTERNS:
+        result = re.sub(pattern, replacement, result, flags=re.IGNORECASE)
+    return result
+
+
+def _redact_messages(messages: list[dict[str, object]]) -> list[dict[str, object]]:
+    """Return a deep copy of messages with sensitive content redacted.
+
+    The original messages list is not modified.
+    """
+    redacted: list[dict[str, object]] = []
+    for msg in messages:
+        msg_copy = dict(msg)
+        content = msg_copy.get("content")
+        if isinstance(content, str):
+            msg_copy["content"] = _redact_text(content)
+        elif isinstance(content, list):
+            redacted_blocks: list[dict[str, object]] = []
+            for block in content:
+                if isinstance(block, dict):
+                    block_copy = dict(block)
+                    for key in ("text", "content", "input"):
+                        val = block_copy.get(key)
+                        if isinstance(val, str):
+                            block_copy[key] = _redact_text(val)
+                    redacted_blocks.append(block_copy)
+                else:
+                    redacted_blocks.append(block)  # type: ignore[typeddict-item]
+            msg_copy["content"] = redacted_blocks  # type: ignore[assignment]
+        redacted.append(msg_copy)
+    return redacted
+
 
 def _sessions_dir(working_directory: str) -> str:
     return os.path.join(working_directory, SESSION_DIR)
@@ -114,7 +178,7 @@ def save_session(
         "mode": mode,
         "working_directory": working_directory,
         "model": model,
-        "messages": messages,
+        "messages": _redact_messages(messages),
         "is_autosave": is_autosave,
     }
 
