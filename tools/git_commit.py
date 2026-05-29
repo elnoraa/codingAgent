@@ -96,7 +96,7 @@ def execute(args: dict[str, Any], _ctx: ToolContext) -> str:
             capture_output=True,
             text=True,
             cwd=root_dir,
-            timeout=30,
+            timeout=120,
         )
     except subprocess.TimeoutExpired:
         return "[Error] git commit timed out"
