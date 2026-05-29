@@ -615,3 +615,135 @@ class TestEdgeCases:
         _capture_prints(repl, "/ask")
         _capture_prints(repl, "/code")
         assert repl.mode == "code"
+
+
+# ── Duplicate Output Prevention Tests ─────────────────────────────────
+
+
+class TestNoDuplicateOutput:
+    """Verify the LLM response text is rendered once, not duplicated.
+
+    Previously, text was printed during streaming AND re-rendered with Rich
+    Markdown at the end, causing duplicate output. These tests ensure only
+    a single copy appears.
+    """
+
+    def _run_turn_with_llm_text(
+        self, repl: Any, llm_text_chunks: list[str], mode: str = "code"
+    ) -> str:
+        """Helper: mock chat_with_tools to call on_text with chunks, return captured stdout."""
+        import io
+        import sys
+
+        orig_chat = repl.llm.chat_with_tools
+
+        def mock_chat_with_tools(**kwargs: Any) -> None:
+            on_text = kwargs.get("on_text")
+            if on_text:
+                for chunk in llm_text_chunks:
+                    on_text(chunk)
+
+        repl.llm.chat_with_tools = mock_chat_with_tools  # type: ignore[assignment]
+        repl.mode = mode
+
+        captured = io.StringIO()
+        old_stdout = sys.stdout
+        sys.stdout = captured
+        try:
+            repl._process_turn(user_input="test", color_fn=lambda x: x)
+        except Exception:
+            pass  # Some internal state may not be fully mockable — we capture output before any crash
+        finally:
+            sys.stdout = old_stdout
+            repl.llm.chat_with_tools = orig_chat  # Restore
+
+        return captured.getvalue()
+
+    def test_plain_text_appears_once(self) -> None:
+        """Plain text (no Markdown) should appear exactly once in the output."""
+        repl = _make_repl()
+        output = self._run_turn_with_llm_text(
+            repl,
+            ["Hello, ", "this is ", "plain text"],
+        )
+        # "Hello, this is plain text" should appear exactly once
+        assert output.count("Hello, this is plain text") == 1
+
+    def test_markdown_text_appears_once(self) -> None:
+        """Markdown-formatted text should appear exactly once."""
+        repl = _make_repl()
+        output = self._run_turn_with_llm_text(
+            repl,
+            ["**bold**", " and ", "`code`"],
+        )
+        # Both "bold" and "code" should appear exactly once
+        assert output.count("bold") == 1
+        assert output.count("code") == 1
+
+    def test_no_duplicate_with_headings_and_lists(self) -> None:
+        """Text with headings and lists should not be duplicated."""
+        repl = _make_repl()
+        output = self._run_turn_with_llm_text(
+            repl,
+            ["# Heading\n", "- item 1\n", "- item 2"],
+        )
+        assert output.count("Heading") == 1
+        assert output.count("item 1") == 1
+        assert output.count("item 2") == 1
+
+    def test_multi_round_accumulation(self) -> None:
+        """Text from multiple LLM rounds should appear once in total."""
+        repl = _make_repl()
+        import io
+        import sys
+
+        # Simulate a single chat_with_tools call that internally
+        # does two rounds of text generation with a tool call in between
+        def mock_chat_with_tools(**kwargs: Any) -> None:
+            on_text = kwargs.get("on_text")
+            on_llm_round_start = kwargs.get("on_llm_round_start")
+            on_tool_call = kwargs.get("on_tool_call")
+            on_tool_result_cb = kwargs.get("on_tool_result")
+
+            # Round 1: LLM starts, generates text, then calls a tool
+            if on_llm_round_start:
+                on_llm_round_start()
+            if on_text:
+                on_text("First round text. ")
+            if on_tool_call:
+                on_tool_call("read_file", {"path": "/tmp/test"})
+            if on_tool_result_cb:
+                on_tool_result_cb("read_file", "file contents")
+
+            # Round 2: LLM continues, generates more text
+            if on_llm_round_start:
+                on_llm_round_start()
+            if on_text:
+                on_text("Second round text.")
+
+        repl.llm.chat_with_tools = mock_chat_with_tools  # type: ignore[assignment]
+
+        captured = io.StringIO()
+        old_stdout = sys.stdout
+        sys.stdout = captured
+        try:
+            repl._process_turn(user_input="test", color_fn=lambda x: x)
+        except Exception:
+            pass
+        finally:
+            sys.stdout = old_stdout
+
+        output = captured.getvalue()
+        # Both round's text should appear, but each exactly once
+        assert output.count("First round text.") == 1
+        assert output.count("Second round text.") == 1
+
+    def test_plain_text_with_prefix(self) -> None:
+        """Plain text output should have the ┃ prefix."""
+        repl = _make_repl()
+        output = self._run_turn_with_llm_text(
+            repl,
+            ["just some text"],
+        )
+        assert "┃" in output
+        assert "just some text" in output

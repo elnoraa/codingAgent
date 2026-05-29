@@ -1138,16 +1138,12 @@ class Repl:
                     self._spinner = None
                 if not text_started:
                     text_started = True
-                    # Show streaming prefix
-                    color_fn = self._turn_separator_color()
-                    print(f"  {color_fn('┃')} ", end="", flush=True)
-                print(text, end="", flush=True)
                 _accumulated_text.append(text)
 
             def _restart_spinner() -> None:
                 """Restart the spinner for the next LLM round (e.g. after tool results)."""
                 nonlocal text_started
-                text_started = False  # Reset so streaming prefix shows again
+                text_started = False  # Reset so next round accumulates too
                 if self._spinner is not None:
                     self._spinner.stop()
                 self._spinner = Spinner("thinking...")
@@ -1217,16 +1213,19 @@ class Repl:
                 self._spinner.stop()
                 self._spinner = None
 
-            # ── Re-render final response as Markdown ─────────────────────────
+            # ── Render final response ─────────────────────────────────────────
             if _accumulated_text:
                 full_text = "".join(_accumulated_text)
                 # Process mermaid code blocks
                 from .diagrams import process_mermaid_blocks
                 full_text = process_mermaid_blocks(full_text)
-                # Only re-render if it looks like it contains Markdown formatting
+                # Render with Rich if Markdown formatting detected, else plain text
+                color_fn = self._turn_separator_color()
                 if _contains_markdown(full_text):
-                    print()  # Newline to end streaming line
+                    print(f"  {color_fn('┃')}", end=" ")
                     render_markdown(full_text)
+                else:
+                    print(f"  {color_fn('┃')} {full_text}")
 
             # ── Finalize turn latency timeline ────────────────────────────
             llm_duration = time.time() - self._turn_start_time
