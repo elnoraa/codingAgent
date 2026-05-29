@@ -83,6 +83,14 @@ def _handle_bash_tool(args: dict[str, object], ctx: ToolContext, defn: CustomToo
     Applies the same command-scanner checks as the built-in ``bash`` tool
     to prevent writes outside the working directory.
     """
+    # Log a warning each time a custom bash tool is called
+    logger.warning(
+        "Custom bash tool '%s' is executing a shell command. "
+        "This tool was defined in a config file and executes arbitrary commands. "
+        "Only proceed if you trust the config file.",
+        defn.name,
+    )
+
     command_template = defn.handler_config.get("command", "")
     if not command_template:
         return "Error: No command specified in tool definition."
@@ -187,6 +195,14 @@ def _handle_python_tool(args: dict[str, object], ctx: ToolContext, defn: CustomT
     Uses the same restricted execution environment as the built-in
     ``python`` tool (blocked dangerous imports, write-path enforcement).
     """
+    # Log a warning each time a custom python tool is called
+    logger.warning(
+        "Custom python tool '%s' is executing arbitrary Python code. "
+        "This tool was defined in a config file. "
+        "Only proceed if you trust the config file.",
+        defn.name,
+    )
+
     script = defn.handler_config.get("script", "")
     if not script:
         return "Error: No script specified in tool definition."
@@ -272,6 +288,28 @@ def load_custom_tools(config_path: str | None, working_directory: str) -> list[T
     except (OSError, json.JSONDecodeError) as e:
         logger.warning("Failed to load custom tools config: %s", e)
         return []
+
+    # ── Integrity check (session-modified file detection) ──────────────
+    from tools import was_file_modified_during_session
+    if was_file_modified_during_session(config_path):
+        logger.warning(
+            "Custom tools config '%s' was modified during the current "
+            "session. This could indicate a configuration injection attack.",
+            config_path,
+        )
+        print()
+        print(f"  ⚠  **SECURITY WARNING**")
+        print(f"     Custom tools config '{config_path}' has been modified")
+        print(f"     during this session. This file was written or modified")
+        print(f"     by the AI agent.")
+        print(f"     Proceeding could execute arbitrary commands.")
+        print()
+        response = input("  Load anyway? Only say 'yes' if you wrote this file yourself. [y/N] ").strip().lower()
+        if response not in ("y", "yes"):
+            logger.info("Custom tools loading denied — config was session-modified")
+            print("  Custom tools not loaded (declined security warning).")
+            return []
+        print()
 
     raw_tools: list[dict[str, Any]] = data.get("tools", [])
     if not raw_tools:

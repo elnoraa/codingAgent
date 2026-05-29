@@ -6,6 +6,7 @@ import logging
 import os
 import pkgutil
 import sys
+import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
@@ -35,6 +36,54 @@ def run_post_edit_hooks(filepath: str, result: str) -> str:
             logger = logging.getLogger(__name__)
             logger.debug("Post-edit hook failed: %s", e)
     return result
+
+
+# ── Session file modification tracking ────────────────────────────────────────
+# Tracks file modification times to detect tampering during the session.
+# This prevents plugin/custom-tool injection attacks where the LLM writes a
+# malicious file and then tries to load it.
+
+_SESSION_FILE_TIMESTAMPS: dict[str, float] = {}
+_SESSION_START_TIME: float = 0.0
+
+
+def record_session_start() -> None:
+    """Record the current time as session start time."""
+    global _SESSION_START_TIME
+    _SESSION_START_TIME = time.time()
+
+
+def record_file_timestamp(path: str) -> None:
+    """Record a file's modification time at session start."""
+    try:
+        _SESSION_FILE_TIMESTAMPS[os.path.abspath(path)] = os.path.getmtime(path)
+    except OSError:
+        pass
+
+
+def was_file_modified_during_session(path: str) -> bool:
+    """Check if a file was modified after the session started.
+
+    Returns True if the file's mtime is newer than the session start time.
+    Returns False if the file doesn't exist, can't be checked, or if
+    record_session_start() has not been called yet.
+    """
+    if _SESSION_START_TIME == 0.0:
+        return False  # Session start was never recorded — skip check
+
+    try:
+        abs_path = os.path.abspath(path)
+        mtime = os.path.getmtime(abs_path)
+
+        # If we recorded the timestamp at start, use exact comparison
+        if abs_path in _SESSION_FILE_TIMESTAMPS:
+            recorded = _SESSION_FILE_TIMESTAMPS[abs_path]
+            return abs(mtime - recorded) > 0.1  # Allow small clock skew
+
+        # Fall back to session start time
+        return mtime > _SESSION_START_TIME
+    except OSError:
+        return False  # Can't check — assume not modified
 
 
 @dataclass
