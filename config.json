@@ -1,0 +1,6 @@
+{
+  "notifications": {
+    "enabled": true,
+    "minDuration": 10
+  }
+}

@@ -60,6 +60,10 @@ When saving plans to `plans/pending/`, use the following naming format:
 
 Where `<type>` is one of: `feat`, `fix`, `refactor`, `docs`, `perf`, `ci`, `chore`, `security`, `deps`, `test`, `spike`.
 
+7. Do NOT create aggregate "roadmap" or "catalog" plans that list multiple features.
+   Each feature must have its own individual plan file. For example, if asked to plan
+   five features, create five separate plans — one per feature.
+
 Examples:
 - `33-feat-add-syntax-highlighting.md`
 - `34-fix-crash-on-empty-input.md`

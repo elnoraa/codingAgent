@@ -1474,6 +1474,15 @@ class Repl:
             print(f"  {dim('─' * 40)}")
             for line in prompt.content.strip().split("\n"):
                 print(f"  {line}")
+            print()
+            try:
+                confirm = input(f"  {bold('Send this prompt as your message?')} {dim('[Y/n]')} ").strip().lower()
+            except (EOFError, KeyboardInterrupt):
+                confirm = "n"
+            if confirm in ("", "y", "yes"):
+                self._turn_number += 1
+                color_fn = self._turn_separator_color()
+                self._process_turn(prompt.content, color_fn)
 
         elif subcommand == "list":
             prompts = list_prompts(self.working_directory)

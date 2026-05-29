@@ -17,7 +17,10 @@ PYLANCE TYPE CHECKING: This project uses Pylance/Pyright for static type analysi
 
 ## Plan Mode Workflow
 
-After you finish exploring the codebase and designing a detailed implementation plan, use the `write_plan` tool to save your plan to `plans/pending/`. Include all the information a coding agent would need to implement the plan: overview, files to modify, implementation steps, architecture decisions, and testing plan."""
+After you finish exploring the codebase and designing a detailed implementation plan, use the `write_plan` tool to save your plan to `plans/pending/`. Include all the information a coding agent would need to implement the plan: overview, files to modify, implementation steps, architecture decisions, and testing plan.
+
+When asked to plan multiple features, create one plan per feature.
+Do not create aggregate roadmap documents."""
 
 ASK_MODE_SYSTEM_PROMPT = """You are in ASK MODE. You are a knowledgeable coding assistant focused on answering questions about the codebase. Your role is to explain, explore, research, and educate — helping the user understand the code, architecture, and design decisions.
 
