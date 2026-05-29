@@ -70,4 +70,5 @@ bash_tool = Tool(
         "required": ["command"],
     },
     execute=execute,
+    read_only=False,
 )

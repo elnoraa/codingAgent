@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from tools import Tool, ToolContext, ToolRegistry
 
 
@@ -59,3 +61,19 @@ def test_to_anthropic_tools_read_only() -> None:
 def test_tool_context() -> None:
     ctx = ToolContext(working_directory="/test/dir")
     assert ctx.working_directory == "/test/dir"
+
+
+def test_all_tools_have_explicit_read_only() -> None:
+    """Every registered tool should have an explicit read_only flag."""
+    tools_dir = Path(__file__).resolve().parent.parent / "tools"
+    for f in sorted(tools_dir.iterdir()):
+        if f.suffix != ".py" or f.name in ("__init__.py",):
+            continue
+        # Skip files that don't define a Tool (helpers without Tool definition)
+        content = f.read_text(encoding="utf-8")
+        if "_tool = Tool(" not in content:
+            continue
+        assert "read_only=" in content, (
+            f"Tool file {f.name} is missing explicit read_only flag. "
+            f"Add read_only=True or read_only=False to the Tool() definition."
+        )

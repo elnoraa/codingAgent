@@ -44,4 +44,5 @@ python_tool = Tool(
         "required": ["code"],
     },
     execute=_execute_python,
+    read_only=False,
 )

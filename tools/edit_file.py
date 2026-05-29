@@ -98,4 +98,5 @@ edit_file_tool = Tool(
         "required": ["path", "oldText", "newText"],
     },
     execute=execute,
+    read_only=False,
 )

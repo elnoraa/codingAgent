@@ -129,4 +129,5 @@ git_push_tool = Tool(
         },
     },
     execute=execute,
+    read_only=False,
 )

@@ -26,6 +26,15 @@ Thumbs.db
 
 # Plans — auto-generated, not part of source
 plans/
+# User data — auto-generated or user-created
+plugins/
+prompts/
+snippets/
+tasks/
+sessions/
 
 # Test
 .pytest_cache/
+
+# Backup
+.agent-backups/

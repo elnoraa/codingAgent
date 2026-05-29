@@ -137,4 +137,5 @@ git_branch_tool = Tool(
         "required": ["action"],
     },
     execute=execute,
+    read_only=False,
 )

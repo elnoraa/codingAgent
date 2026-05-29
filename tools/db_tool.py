@@ -248,4 +248,5 @@ db_tool = Tool(
         "required": [],
     },
     execute=execute,
+    read_only=False,
 )

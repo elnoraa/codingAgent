@@ -39,6 +39,7 @@ undo_tool = Tool(
         "required": ["action"],
     },
     execute=lambda args, ctx: _execute(args, ctx),
+    read_only=False,
 )
 
 

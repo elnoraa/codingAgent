@@ -171,4 +171,5 @@ precommit_tool = Tool(
         "required": ["action"],
     },
     execute=execute,
+    read_only=False,
 )

@@ -169,4 +169,5 @@ api_tool = Tool(
         "required": ["url"],
     },
     execute=execute,
+    read_only=False,
 )

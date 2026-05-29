@@ -164,4 +164,5 @@ replace_in_files_tool = Tool(
         "required": ["oldText", "newText"],
     },
     execute=execute,
+    read_only=False,
 )

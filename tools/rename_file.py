@@ -83,4 +83,5 @@ rename_file_tool = Tool(
         "required": ["source", "destination"],
     },
     execute=execute,
+    read_only=False,
 )

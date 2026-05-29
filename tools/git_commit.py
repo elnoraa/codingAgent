@@ -184,4 +184,5 @@ git_commit_tool = Tool(
         },
     },
     execute=execute,
+    read_only=False,
 )

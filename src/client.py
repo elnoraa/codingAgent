@@ -197,6 +197,15 @@ class LlmClient:
                     available = ", ".join(t.name for t in tools.get_all())
                     result = f'Error: unknown tool "{name}". Available tools: {available}'
                     logger.warning("Unknown tool called: %s", name)
+                elif read_only and not tool.read_only:
+                    result = (
+                        f'Error: tool "{name}" is not available in read-only mode. '
+                        f"Switch to CODE mode (use /code) to use this tool."
+                    )
+                    logger.warning(
+                        "Blocked write tool '%s' in read-only mode (agent=%s)",
+                        name, context.agent_id if context else "?",
+                    )
                 elif tool.interactive and on_interactive_tool is not None:
                     # Interactive tool: pause and get user input via callback
                     logger.info("Interactive tool %s called, requesting user input", name)

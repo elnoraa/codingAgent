@@ -69,4 +69,5 @@ write_file_tool = Tool(
         "required": ["path", "content"],
     },
     execute=execute,
+    read_only=False,
 )
