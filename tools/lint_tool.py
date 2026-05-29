@@ -77,10 +77,13 @@ def run_linter(
 
     linter = detect_linter(working_dir)
     if linter is None:
+        logger.info("No linter detected in %s", working_dir)
         return "No linter detected. Supported: ruff, flake8, ESLint"
 
     config = LINTER_CONFIGS[linter]
     cmd = config["fix_cmd"] if (fix and config["fix_cmd"]) else config["check_cmd"]
+
+    logger.info("Running linter: %s on %d file(s), fix=%s", linter, len(files), fix)
 
     try:
         result = subprocess.run(
@@ -107,10 +110,13 @@ def run_linter(
         return f"{yellow('⚠')} {linter} issues:\n{output}"
 
     except FileNotFoundError:
+        logger.warning("Linter %s not installed", linter)
         return f"Error: {linter} not installed. Run 'pip install {linter}' first."
     except subprocess.TimeoutExpired:
+        logger.warning("Linter %s timed out", linter)
         return f"Error: {linter} timed out (30s)"
     except Exception as e:
+        logger.error("Linter %s failed: %s", linter, e)
         return f"Error running {linter}: {e}"
 
 

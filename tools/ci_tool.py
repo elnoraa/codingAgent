@@ -118,18 +118,24 @@ def check_pipeline_status(working_dir: str) -> str:
 
 def execute(args: dict[str, Any], ctx: ToolContext) -> str:
     action = args.get("action", "detect").lower()
+    logger.info("execute: action=%s, provider=%s", action, args.get("provider"))
 
     if action == "detect":
         provider = detect_ci_provider(ctx.working_directory)
         if provider:
+            logger.info("Detected CI provider: %s", provider)
             return f"Detected CI provider: {provider}"
+        logger.info("No CI/CD configuration detected in %s", ctx.working_directory)
         return "No CI/CD configuration detected."
 
     elif action == "validate":
         provider = args.get("provider") or None
-        return validate_ci_config(ctx.working_directory, provider)
+        result = validate_ci_config(ctx.working_directory, provider)
+        logger.info("CI validation result: %s", result[:100])
+        return result
 
     elif action == "status":
+        logger.info("Checking pipeline status in %s", ctx.working_directory)
         return check_pipeline_status(ctx.working_directory)
 
     elif action == "providers" or action == "list":
@@ -141,6 +147,7 @@ def execute(args: dict[str, Any], ctx: ToolContext) -> str:
         return "\n".join(result)
 
     else:
+        logger.warning("Unknown CI action: %s", action)
         return (
             f"Unknown action: {action}\n"
             f"Available actions: detect, validate, status, providers"

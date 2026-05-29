@@ -121,6 +121,8 @@ def execute(args: dict[str, Any], ctx: ToolContext) -> str:
     action = args.get("action", "query")
     query = args.get("query", "")
 
+    logger.info("execute: db_type=%s, action=%s, query_len=%d", db_type, action, len(query))
+
     # Connection parameters
     db_path = args.get("path", "")  # SQLite only
     host = args.get("host", "localhost")
@@ -147,6 +149,7 @@ def execute(args: dict[str, Any], ctx: ToolContext) -> str:
         try:
             # Handle actions
             if action == "tables":
+                logger.info("Fetching schema for database: %s", database or db_path)
                 return f"\n{green(f'Tables in {database or db_path}')}\n{_format_table_schema(conn, db_type)}"
 
             elif action == "query":
@@ -155,6 +158,7 @@ def execute(args: dict[str, Any], ctx: ToolContext) -> str:
 
                 # Check for write operations
                 if _is_write_query(query):
+                    logger.warning("Write query detected: %s", query[:100])
                     if not args.get("confirm"):
                         return (
                             f"{yellow('⚠')} Write query detected: {query[:80]}...\n"
@@ -196,8 +200,10 @@ def execute(args: dict[str, Any], ctx: ToolContext) -> str:
             conn.close()
 
     except ImportError as e:
+        logger.error("Database import error: %s", e)
         return f"{red('✗')} {e}"
     except Exception as e:
+        logger.error("Database error for %s: %s", db_type, e)
         return f"{red('✗')} Database error: {e}"
 
 

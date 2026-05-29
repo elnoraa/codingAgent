@@ -48,11 +48,13 @@ def _load_config(ctx: ToolContext) -> dict[str, Any] | None:
 
 def execute(args: dict[str, Any], ctx: ToolContext) -> str:
     action = args.get("action", "status").lower()
+    logger.info("execute: action=%s", action)
 
     if action == "status" or action == "check":
         # Check if config exists and hooks are installed
         config = _load_config(ctx)
         if config is None:
+            logger.info("No pre-commit config found in %s", ctx.working_directory)
             return "No .pre-commit-config.yaml found in the working directory."
 
         repos = config.get("repos", [])

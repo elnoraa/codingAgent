@@ -70,6 +70,7 @@ def _format_image(image: dict[str, Any]) -> str:
 def execute(args: dict[str, Any], ctx: ToolContext) -> str:
     """Execute a Docker action."""
     action = args.get("action", "ps").lower()
+    logger.info("execute: action=%s", action)
 
     if action == "ps":
         # List containers
@@ -78,6 +79,7 @@ def execute(args: dict[str, Any], ctx: ToolContext) -> str:
             ["ps", "--format", "{{json .}}"] + all_flag, ctx,
         )
         if ret != 0:
+            logger.warning("Docker ps failed: %s", stderr[:200])
             return f"Error: {stderr}"
 
         lines = stdout.split("\n")
@@ -100,6 +102,7 @@ def execute(args: dict[str, Any], ctx: ToolContext) -> str:
             ["images", "--format", "{{json .}}"], ctx,
         )
         if ret != 0:
+            logger.warning("Docker images failed: %s", stderr[:200])
             return f"Error: {stderr}"
 
         lines = stdout.split("\n")
@@ -123,6 +126,8 @@ def execute(args: dict[str, Any], ctx: ToolContext) -> str:
         tag = args.get("tag", "")
         dockerfile = args.get("dockerfile", "")
 
+        logger.info("Docker build: path=%s, tag=%s, dockerfile=%s", path, tag, dockerfile)
+
         cmd = ["build"]
         if tag:
             cmd.extend(["-t", tag])
@@ -132,7 +137,9 @@ def execute(args: dict[str, Any], ctx: ToolContext) -> str:
 
         ret, stdout, stderr = _run_docker(cmd, ctx, timeout=300)
         if ret != 0:
+            logger.warning("Docker build failed: %s", stderr[:200])
             return f"Build failed:\n{stderr}"
+        logger.info("Docker build succeeded")
         return f"Build succeeded:\n{stdout[:2000]}"
 
     elif action == "up":
