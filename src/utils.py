@@ -412,6 +412,56 @@ def print_code(code: str, language: str = "", theme: str = "monokai") -> None:
         print(code)
 
 
+import re as _re_sensitive
+
+# Sensitive patterns to redact before sending message content to LLM
+# for summarization. This prevents secrets from being transmitted to
+# the LLM provider.
+_SUMMARIZATION_REDACT_PATTERNS: list[tuple[str, str]] = [
+    # Anthropic / OpenAI / generic API keys
+    (r'(sk-[a-zA-Z0-9\-]{20,})', 'sk-***REDACTED***'),
+    # AWS access keys
+    (r'(AKIA[0-9A-Z]{16})', 'AKIA***REDACTED***'),
+    # GitHub tokens
+    (r'(ghp_[a-zA-Z0-9]{36})', 'ghp_***REDACTED***'),
+    (r'(github_pat_[a-zA-Z0-9_]{80,})', 'github_pat_***REDACTED***'),
+    # Password/secret assignments
+    (r'(password\s*[:=]\s*["\x27]?)[^"\x27,;\s}]+', r'\1***REDACTED***'),
+    (r'(passwd\s*[:=]\s*["\x27]?)[^"\x27,;\s}]+', r'\1***REDACTED***'),
+    (r'(secret\s*[:=]\s*["\x27]?)[^"\x27,;\s}]+', r'\1***REDACTED***'),
+    # Database connection strings with credentials
+    (r'((?:mongodb(?:\+srv)?|postgres(?:ql)?|mysql|redis)://)[^@\s]+@', r'\1***USER***@'),
+    # JWT tokens
+    (r'(eyJ[a-zA-Z0-9_\-]{10,}\.[a-zA-Z0-9_\-]{10,}\.[a-zA-Z0-9_\-]{10,})', 'eyJ***REDACTED***'),
+    # Private key headers
+    (r'-----BEGIN\s+(RSA|DSA|EC|OPENSSH|PGP)\s+PRIVATE\s+KEY-----', '-----BEGIN REDACTED PRIVATE KEY-----'),
+    # Bearer tokens in headers
+    (r'(Authorization:\s*Bearer\s+)[a-zA-Z0-9._\x2d]+', r'\1***REDACTED***'),
+]
+
+
+def redact_sensitive_content(text: str) -> str:
+    """Redact known sensitive patterns from text content.
+
+    This is used before sending message content to the LLM for
+    summarization to prevent secrets from being transmitted to
+    the LLM provider.
+
+    Args:
+        text: The text to redact.
+
+    Returns:
+        Redacted text with sensitive values replaced.
+    """
+    if not text:
+        return text
+
+    result = text
+    for pattern, replacement in _SUMMARIZATION_REDACT_PATTERNS:
+        result = _re_sensitive.sub(pattern, replacement, result, flags=_re_sensitive.IGNORECASE)
+    return result
+
+
 # ── Conversation Summarization ──────────────────────────────────────────
 
 
@@ -422,6 +472,9 @@ def summarize_conversation(
     """Summarize a list of messages into a condensed form using the LLM.
 
     Returns a summary string that can replace the original messages.
+
+    Note: Sensitive content (API keys, passwords, etc.) is automatically
+    redacted from the messages before sending to the LLM.
     """
     # Build a condensed version of the messages for the summarizer prompt
     text_parts: list[str] = []
@@ -429,13 +482,16 @@ def summarize_conversation(
         role = msg.get("role", "unknown")
         content = msg.get("content", "")
         if isinstance(content, str):
-            text_parts.append(f"[{role}]: {content[:200]}")
+            # Redact sensitive content before summarization
+            redacted = redact_sensitive_content(content[:500])
+            text_parts.append(f"[{role}]: {redacted}")
         elif isinstance(content, list):
             for block in content:
                 if isinstance(block, dict):
                     t = block.get("text") or block.get("content", "")
                     if isinstance(t, str):
-                        text_parts.append(f"[{role}]: {t[:200]}")
+                        redacted = redact_sensitive_content(t[:500])
+                        text_parts.append(f"[{role}]: {redacted}")
 
     conversation_text = "\n".join(text_parts)
 

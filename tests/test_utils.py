@@ -305,6 +305,90 @@ def test_contains_markdown_empty() -> None:
     assert not _contains_markdown("")
 
 
+# ── redact_sensitive_content tests ────────────────────────────────────────────
+
+
+def test_redact_api_key() -> None:
+    """API keys should be redacted."""
+    from src.utils import redact_sensitive_content
+    text = "My API key is sk-ant-abcdefghijklmnop1234567890abcdef"
+    result = redact_sensitive_content(text)
+    assert "sk-***REDACTED***" in result
+    assert "sk-ant-abcdefghijklmnop1234567890abcdef" not in result
+
+
+def test_redact_password() -> None:
+    """Password values should be redacted."""
+    from src.utils import redact_sensitive_content
+    text = 'password = "supersecret123"'
+    result = redact_sensitive_content(text)
+    assert "***REDACTED***" in result
+    assert "supersecret123" not in result
+
+
+def test_redact_connection_string() -> None:
+    """Database connection strings should have credentials redacted."""
+    from src.utils import redact_sensitive_content
+    text = "mongodb://admin:secretpass@localhost:27017/mydb"
+    result = redact_sensitive_content(text)
+    assert "***USER***" in result
+    assert "secretpass" not in result
+
+
+def test_redact_preserves_normal_text() -> None:
+    """Normal text without sensitive data should be unchanged."""
+    from src.utils import redact_sensitive_content
+    text = "The quick brown fox jumps over the lazy dog."
+    result = redact_sensitive_content(text)
+    assert result == text
+
+
+def test_redact_empty_string() -> None:
+    """Empty string should return empty."""
+    from src.utils import redact_sensitive_content
+    assert redact_sensitive_content("") == ""
+
+
+def test_redact_github_token() -> None:
+    """GitHub tokens should be redacted."""
+    from src.utils import redact_sensitive_content
+    text = "token: ghp_abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMN"
+    result = redact_sensitive_content(text)
+    assert "ghp_***REDACTED***" in result
+    assert "ghp_abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMN" not in result
+
+
+def test_redact_multiple_sensitive_items() -> None:
+    """Multiple sensitive items in the same text should all be redacted."""
+    from src.utils import redact_sensitive_content
+    text = 'password = "hello123" and API key = sk-test-key-abcdefghijklmnopqrstuvwx'
+    result = redact_sensitive_content(text)
+    assert "hello123" not in result
+    assert "sk-test-key-abcdefghijklmnopqrstuvwx" not in result
+
+
+def test_summarize_conversation_redacts_content(mocker) -> None:
+    """summarize_conversation should redact sensitive content before sending."""
+    from src.utils import summarize_conversation
+
+    messages: list[dict[str, object]] = [
+        {"role": "user", "content": "My API key is sk-test-key-abcdefghijklmnopqrstuvwx"},
+    ]
+
+    mock_client = mocker.Mock()
+    mock_client.chat_sync.return_value = "Summary with redacted content"
+
+    result = summarize_conversation(messages, mock_client)
+    assert isinstance(result, str)
+
+    # Verify that the redacted content was sent to the LLM
+    call_args = mock_client.chat_sync.call_args
+    assert call_args is not None
+    prompt = call_args[0][0]
+    assert "sk-***REDACTED***" in prompt
+    assert "sk-test-key-abcdefghijklmnopqrstuvwx" not in prompt
+
+
 # ── validate_walk_path tests ──────────────────────────────────────────────────
 
 
