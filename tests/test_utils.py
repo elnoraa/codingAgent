@@ -277,38 +277,38 @@ def test_highlight_code_custom_theme() -> None:
 
 
 def test_contains_markdown_code_block() -> None:
-    from src.repl import _contains_markdown
-    assert _contains_markdown("Some text\n```python\ncode\n```")
+    from src.repl.help_text import contains_markdown
+    assert contains_markdown("Some text\n```python\ncode\n```")
 
 
 def test_contains_markdown_heading() -> None:
-    from src.repl import _contains_markdown
-    assert _contains_markdown("# Heading")
+    from src.repl.help_text import contains_markdown
+    assert contains_markdown("# Heading")
 
 
 def test_contains_markdown_bold() -> None:
-    from src.repl import _contains_markdown
-    assert _contains_markdown("This is **bold**")
+    from src.repl.help_text import contains_markdown
+    assert contains_markdown("This is **bold**")
 
 
 def test_contains_markdown_italic() -> None:
-    from src.repl import _contains_markdown
-    assert _contains_markdown("This is *italic*")
+    from src.repl.help_text import contains_markdown
+    assert contains_markdown("This is *italic*")
 
 
 def test_contains_markdown_list() -> None:
-    from src.repl import _contains_markdown
-    assert _contains_markdown("- item one\n- item two")
+    from src.repl.help_text import contains_markdown
+    assert contains_markdown("- item one\n- item two")
 
 
 def test_contains_markdown_plain_text() -> None:
-    from src.repl import _contains_markdown
-    assert not _contains_markdown("Just plain text without any formatting.")
+    from src.repl.help_text import contains_markdown
+    assert not contains_markdown("Just plain text without any formatting.")
 
 
 def test_contains_markdown_empty() -> None:
-    from src.repl import _contains_markdown
-    assert not _contains_markdown("")
+    from src.repl.help_text import contains_markdown
+    assert not contains_markdown("")
 
 
 # ── validate_length tests ──────────────────────────────────────────────────────

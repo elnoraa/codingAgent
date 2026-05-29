@@ -624,7 +624,7 @@ class TestToolRegistration:
     """Verify every tool module's ``_tool`` variable is imported and registered.
 
     When a new tool module is added to ``tools/``, it must be:
-    1. Imported at the top of ``src/repl.py`` (``from src.tools.<module> import <name>_tool``)
+    1. Imported at the top of ``src/repl/repl.py`` (``from src.tools.<module> import <name>_tool``)
     2. Registered in ``Repl._register_all_tools()`` (``self.tools.register(<name>_tool)``)
 
     This suite catches wiring omissions like the ``edit_plan_tool`` bug where
@@ -668,18 +668,18 @@ class TestToolRegistration:
         return result
 
     def _get_tool_imports_from_repl(self) -> set[str]:
-        """Return the set of ``*_tool`` variable names imported in ``src/repl.py``."""
+        """Return the set of ``*_tool`` variable names imported in ``src/repl/repl.py``."""
         import ast
         from pathlib import Path
 
-        repl_path = Path(__file__).resolve().parent.parent / "src" / "repl.py"
+        repl_path = Path(__file__).resolve().parent.parent / "src" / "repl" / "repl.py"
         source = repl_path.read_text(encoding="utf-8")
         tree = ast.parse(source, filename=str(repl_path))
 
         imports: set[str] = set()
         for node in ast.walk(tree):
             if isinstance(node, ast.ImportFrom):
-                if node.module and "tools." in node.module:
+                if node.module and ("tools." in node.module or node.module == "src.tools"):
                     for alias in node.names:
                         if alias.name.endswith("_tool"):
                             imports.add(alias.name)
@@ -690,10 +690,9 @@ class TestToolRegistration:
         ``_register_all_tools()`` by looking for ``self.tools.register(*)`` calls."""
         from pathlib import Path
 
-        repl_path = Path(__file__).resolve().parent.parent / "src" / "repl.py"
+        repl_path = Path(__file__).resolve().parent.parent / "src" / "repl" / "repl.py"
         source = repl_path.read_text(encoding="utf-8")
 
-        # Extract the body of _register_all_tools
         import re
 
         # Find the method body
@@ -710,7 +709,7 @@ class TestToolRegistration:
         return registered
 
     def test_all_tool_modules_imported(self) -> None:
-        """Every module-level ``*_tool`` in tools/ must be imported in repl.py."""
+        """Every module-level ``*_tool`` in src/tools/ must be imported in repl.py."""
         tool_vars = self._get_tool_vars_from_tools_dir()
         assert tool_vars, "No tool variables found in tools/ — is the scan working?"
 
@@ -723,11 +722,11 @@ class TestToolRegistration:
 
         assert not missing, (
             f"The following tool variable(s) are defined in src/tools/ but NOT imported "
-            f"in src/repl.py:\n" + "\n".join(missing)
+            f"in src/repl/repl.py:\n" + "\n".join(missing)
         )
 
     def test_all_tool_modules_registered(self) -> None:
-        """Every module-level ``*_tool`` in tools/ must be registered via
+        """Every module-level ``*_tool`` in src/tools/ must be registered via
         ``self.tools.register()`` in ``_register_all_tools()``."""
         tool_vars = self._get_tool_vars_from_tools_dir()
         assert tool_vars, "No tool variables found in tools/ — is the scan working?"
