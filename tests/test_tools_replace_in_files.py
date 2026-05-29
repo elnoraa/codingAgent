@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import os
 import tempfile
 from pathlib import Path
+
+import pytest
 
 from tools import ToolContext
 from tools.replace_in_files import replace_in_files_tool
@@ -69,3 +72,37 @@ def test_missing_newText_returns_error() -> None:
 
     result = execute({"oldText": "x"}, ctx)
     assert 'missing required argument "newText"' in result
+
+
+def test_replaces_rejects_symlink_escape(tmp_path: Path) -> None:
+    """replace_in_files should skip symlinks pointing outside working dir."""
+    import os
+
+    outside_file = tmp_path / ".." / "outside.txt"
+    outside_file = outside_file.resolve()
+    outside_file.parent.mkdir(parents=True, exist_ok=True)
+    outside_file.write_text("test content", encoding="utf-8")
+
+    try:
+        os.symlink(str(outside_file), str(tmp_path / "escape.txt"))
+    except (OSError, PermissionError):
+        pytest.skip("Cannot create symlinks on this system")
+
+    # Create a real file inside the working dir
+    real_file = tmp_path / "real.txt"
+    real_file.write_text("test content real", encoding="utf-8")
+
+    ctx = ToolContext(working_directory=str(tmp_path))
+    from tools.replace_in_files import execute
+
+    result = execute({
+        "oldText": "test",
+        "newText": "replaced",
+        "path": str(tmp_path),
+        "maxReplacements": 10,
+    }, ctx)
+
+    # The real file should have been modified
+    assert "1 applied" in result or "2 applied" in result or "skipped" in result.lower()
+    # The outside file should NOT have been modified
+    assert outside_file.read_text(encoding="utf-8") == "test content"

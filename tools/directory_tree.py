@@ -106,6 +106,12 @@ def execute(args: dict[str, Any], ctx: ToolContext) -> str:
             for entry in entries:
                 if entry.name.startswith(".") or entry.name in IGNORE_DIRS:
                     continue
+
+                from src.utils import validate_walk_path
+                walk_error = validate_walk_path(entry.path, ctx.working_directory)
+                if walk_error:
+                    continue
+
                 indent = "  " * depth
                 if entry.is_dir():
                     lines.append(f"{indent}{entry.name}/")
@@ -130,6 +136,11 @@ def execute(args: dict[str, Any], ctx: ToolContext) -> str:
 
         for entry in entries:
             if entry.name.startswith(".") or entry.name in IGNORE_DIRS:
+                continue
+
+            from src.utils import validate_walk_path
+            walk_error = validate_walk_path(entry.path, ctx.working_directory)
+            if walk_error:
                 continue
 
             indent = "  " * depth

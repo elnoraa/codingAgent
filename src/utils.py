@@ -661,6 +661,32 @@ def validate_write_path(path: str, working_directory: str) -> str | None:
     return None
 
 
+def validate_walk_path(path: str, working_directory: str) -> str | None:
+    """Validate that a path discovered during directory walking is within the
+    working directory after resolving all symlinks.
+
+    This is a lightweight check for paths found during ``os.walk`` or
+    ``os.scandir`` traversal. Unlike ``validate_write_path``, it does not
+    perform a full component-by-component symlink audit, but it does reject
+    paths whose resolved (real) location is outside the working directory.
+
+    Returns ``None`` if the path is valid, or an error message string if the
+    path escapes the working directory via symlinks.
+    """
+    from pathlib import Path
+
+    try:
+        resolved = Path(path).resolve()
+        resolved_wd = Path(working_directory).resolve()
+        resolved.relative_to(resolved_wd)
+    except (ValueError, RuntimeError, OSError):
+        return (
+            f"Error: Path '{path}' resolves to outside the working directory "
+            f"'{working_directory}' (possible symlink escape). Skipping."
+        )
+    return None
+
+
 # ── SSRF protection ─────────────────────────────────────────────────────────
 
 import ipaddress as _ipaddress

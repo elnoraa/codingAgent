@@ -34,6 +34,13 @@ def execute(args: dict[str, Any], _ctx: ToolContext) -> str:
     for root, dirs, files in os.walk(search_dir):
         dirs[:] = [d for d in dirs if d not in IGNORE_DIRS and not d.startswith(".")]
 
+        from src.utils import validate_walk_path
+        # Skip directories that are symlinks pointing outside working dir
+        root_error = validate_walk_path(root, _ctx.working_directory)
+        if root_error:
+            dirs.clear()  # Don't recurse into this directory
+            continue
+
         for file in files:
             if file.startswith("."):
                 continue

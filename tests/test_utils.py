@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
+
+import pytest
 
 from src.utils import (
     CHARS_PER_TOKEN,
@@ -300,3 +303,37 @@ def test_contains_markdown_plain_text() -> None:
 def test_contains_markdown_empty() -> None:
     from src.repl import _contains_markdown
     assert not _contains_markdown("")
+
+
+# ── validate_walk_path tests ──────────────────────────────────────────────────
+
+
+def test_validate_walk_path_within_directory(tmp_path: Path) -> None:
+    """A path inside the working directory should pass validation."""
+    from src.utils import validate_walk_path
+    inner_path = tmp_path / "subdir" / "file.py"
+    inner_path.parent.mkdir(parents=True)
+    inner_path.write_text("")
+    assert validate_walk_path(str(inner_path), str(tmp_path)) is None
+
+
+def test_validate_walk_path_outside_directory(tmp_path: Path) -> None:
+    """A path outside the working directory should fail validation."""
+    from src.utils import validate_walk_path
+    assert validate_walk_path("/etc/passwd", str(tmp_path)) is not None
+
+
+def test_validate_walk_path_symlink_escape(tmp_path: Path) -> None:
+    """A symlink pointing outside working directory should fail."""
+    from src.utils import validate_walk_path
+    import os
+
+    # Create a symlink inside tmp_path that points outside
+    link_path = tmp_path / "escape_link"
+    try:
+        os.symlink(str(tmp_path.resolve().parent / "outside.txt"), str(link_path))
+    except (OSError, PermissionError):
+        pytest.skip("Cannot create symlink on this system")
+
+    result = validate_walk_path(str(link_path), str(tmp_path))
+    assert result is not None

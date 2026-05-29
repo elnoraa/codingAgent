@@ -39,6 +39,13 @@ def execute(args: dict[str, Any], _ctx: ToolContext) -> str:
     elif os.path.isdir(path):
         for root, dirs, files in os.walk(path):
             dirs[:] = [d for d in dirs if d not in IGNORE_DIRS and not d.startswith(".")]
+
+            from src.utils import validate_walk_path
+            root_error = validate_walk_path(root, _ctx.working_directory)
+            if root_error:
+                dirs.clear()
+                continue
+
             for f in files:
                 if f.endswith(".py"):
                     files_to_check.append(os.path.join(root, f))
