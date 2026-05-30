@@ -4,6 +4,16 @@ These are MANDATORY rules. The coding agent MUST follow all instructions in this
 
 ## Workflow Rules
 
+0. **STARTUP RITUAL (MANDATORY — run this at the beginning of EVERY task)**: Before touching any code or running any tool that modifies files, execute these checks in order:
+
+   a. **Check for existing plan**: Run `list_directory("plans/pending/")` to see if a plan already exists for this task.
+   b. **Check current branch**: Run `git_branch(action="list")` to confirm which branch you're on.
+   c. **If no plan exists**: Call `write_plan` to create one in `plans/pending/`. Do NOT skip this step — do not write code without a plan.
+   d. **If on main (or not on a task branch)**: Create and switch to a feature branch via `git_branch(action="create", name="<task-branch>")` then `git_branch(action="switch", name="<task-branch>")`.
+   e. **Confirm before proceeding**: State clearly in your response: "Check passed — plan exists in plans/pending/, on branch <branch-name>."
+
+   Violating any of (a)–(d) = breaking the rules. The startup ritual is not optional.
+
 1. **Plan-first cycle**: When starting a new task, first check `plans/pending/` — if a plan exists
    there that matches the task, implement it. If no plan exists, create a new plan using `write_plan`
    and save it to `plans/pending/` following the naming convention below.
