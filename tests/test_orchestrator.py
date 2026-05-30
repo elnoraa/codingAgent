@@ -6,10 +6,9 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from src.orchestrator import Orchestrator, AgentHandle
 from src.client import LlmClient
+from src.orchestrator import AgentHandle, Orchestrator
 from src.tools import ToolContext
-
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -106,7 +105,10 @@ class TestSpawnAgent:
 
     def test_spawn_with_model_override(self, orchestrator: Orchestrator) -> None:
         handle = orchestrator.spawn_agent(
-            None, "task", model="claude-3-opus", max_tokens=8192,
+            None,
+            "task",
+            model="claude-3-opus",
+            max_tokens=8192,
         )
         agent = orchestrator._agents[handle.agent_id]
         assert agent.config.llm.model == "claude-3-opus"

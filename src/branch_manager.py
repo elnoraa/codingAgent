@@ -3,9 +3,8 @@
 from __future__ import annotations
 
 import copy
-import logging
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any
 
 from .logging_config import get_logger
@@ -16,6 +15,7 @@ logger = get_logger(__name__)
 @dataclass
 class Branch:
     """A forked conversation branch."""
+
     name: str
     parent: str  # Name of the parent branch (empty for main)
     created_at: float
@@ -32,9 +32,9 @@ class Branch:
         if elapsed < 60:
             return f"{elapsed:.0f}s ago"
         elif elapsed < 3600:
-            return f"{elapsed/60:.0f}m ago"
+            return f"{elapsed / 60:.0f}m ago"
         else:
-            return f"{elapsed/3600:.1f}h ago"
+            return f"{elapsed / 3600:.1f}h ago"
 
 
 class BranchManager:
@@ -143,7 +143,7 @@ class BranchManager:
         }
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "BranchManager":
+    def from_dict(cls, data: dict[str, Any]) -> BranchManager:
         """Create from saved session data."""
         manager = cls()
         manager._active_branch = data.get("active_branch", "main")

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from src.agent import Agent, AgentConfig, AgentResult, AgentCallbacks
+from src.agent import Agent, AgentConfig
 
 
 def _make_config(**overrides: object) -> AgentConfig:
@@ -83,14 +83,16 @@ def test_get_last_assistant_text_list() -> None:
     config = _make_config()
     agent = Agent(agent_id="last-list", config=config)
     agent.send_message("User msg", role="user")
-    agent.messages.append({
-        "role": "assistant",
-        "content": [
-            {"type": "text", "text": "Hello"},
-            {"type": "tool_use", "name": "read_file", "input": {"path": "x.py"}},
-            {"type": "text", "text": "World"},
-        ],
-    })
+    agent.messages.append(
+        {
+            "role": "assistant",
+            "content": [
+                {"type": "text", "text": "Hello"},
+                {"type": "tool_use", "name": "read_file", "input": {"path": "x.py"}},
+                {"type": "text", "text": "World"},
+            ],
+        }
+    )
     result = agent.get_last_assistant_text()
     assert "Hello" in result
     assert "World" in result

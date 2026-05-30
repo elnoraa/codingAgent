@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from src.tools import ToolContext
-from src.tools.environment import execute, environment_tool
+from src.tools.environment import environment_tool, execute
 
 
 def test_tool_definition() -> None:

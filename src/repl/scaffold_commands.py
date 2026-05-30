@@ -10,7 +10,7 @@ if TYPE_CHECKING:
     from src.repl.repl import Repl
 
 
-def handle_scaffold(repl: "Repl", args: str) -> None:
+def handle_scaffold(repl: Repl, args: str) -> None:
     """Handle /scaffold commands."""
     from src.scaffold import list_templates, scaffold_project, show_template
 

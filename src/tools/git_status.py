@@ -1,13 +1,11 @@
 from __future__ import annotations
 
-import logging
 import os
 import subprocess
 from typing import Any
 
-from src.tools import Tool, ToolContext
-
 from src.logging_config import get_logger
+from src.tools import Tool, ToolContext
 
 logger = get_logger(__name__)
 
@@ -45,7 +43,7 @@ def execute(args: dict[str, Any], _ctx: ToolContext) -> str:
             timeout=15,
         )
         branch = branch_result.stdout.strip()
-    except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
+    except subprocess.CalledProcessError, subprocess.TimeoutExpired:
         branch = "(unknown)"
 
     # ── Status (short) ───────────────────────────────────────────────────
@@ -59,7 +57,7 @@ def execute(args: dict[str, Any], _ctx: ToolContext) -> str:
             timeout=15,
         )
         status_lines = status_result.stdout.strip()
-    except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
+    except subprocess.CalledProcessError, subprocess.TimeoutExpired:
         status_lines = ""
 
     # ── Staged vs unstaged counts ───────────────────────────────────────
@@ -103,7 +101,7 @@ def execute(args: dict[str, Any], _ctx: ToolContext) -> str:
             )
             if log_result.stdout.strip():
                 unpushed_count = len(log_result.stdout.strip().split("\n"))
-    except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
+    except subprocess.CalledProcessError, subprocess.TimeoutExpired:
         pass  # No upstream configured
 
     # ── Build output ────────────────────────────────────────────────────

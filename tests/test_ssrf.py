@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import socket
+
 from src.utils import validate_url_target
 
 
@@ -123,6 +124,7 @@ class TestDnsRebindingDetection:
 
     def test_consistent_dns_allowed(self) -> None:
         """Consistent DNS resolution should be allowed."""
+
         def _consistent_resolver(hostname: str) -> list[str]:
             return ["93.184.216.34"]
 
@@ -150,6 +152,7 @@ class TestDnsRebindingDetection:
 
     def test_empty_resolution_allowed(self) -> None:
         """Unresolvable hostnames should be allowed (let connection fail naturally)."""
+
         def _empty_resolver(hostname: str) -> list[str]:
             raise socket.gaierror("Name or service not known")
 
@@ -161,6 +164,7 @@ class TestDnsRebindingDetection:
 
     def test_first_resolution_private_blocked(self) -> None:
         """If first resolution is private, it should be blocked immediately."""
+
         def _private_resolver(hostname: str) -> list[str]:
             return ["192.168.1.1"]
 

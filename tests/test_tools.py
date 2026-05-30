@@ -88,6 +88,7 @@ class TestBashToolEnvVarDetection:
     def test_detect_echo_api_key(self) -> None:
         """Echo of ANTHROPIC_API_KEY should be detected."""
         from src.tools.bash_tool import _check_for_sensitive_env_access
+
         result = _check_for_sensitive_env_access("echo $ANTHROPIC_API_KEY")
         assert result is not None
         assert "ANTHROPIC_API_KEY" in result
@@ -95,12 +96,14 @@ class TestBashToolEnvVarDetection:
     def test_detect_echo_braces(self) -> None:
         """Echo with ${} syntax should be detected."""
         from src.tools.bash_tool import _check_for_sensitive_env_access
+
         result = _check_for_sensitive_env_access("echo ${ANTHROPIC_API_KEY}")
         assert result is not None
 
     def test_no_false_positive_on_safe_vars(self) -> None:
         """Safe environment variables should not be flagged."""
         from src.tools.bash_tool import _check_for_sensitive_env_access
+
         assert _check_for_sensitive_env_access("echo $HOME") is None
         assert _check_for_sensitive_env_access("echo $PATH") is None
         assert _check_for_sensitive_env_access("echo $USER") is None
@@ -108,6 +111,7 @@ class TestBashToolEnvVarDetection:
     def test_no_false_positive_on_normal_commands(self) -> None:
         """Normal commands without env var access should not be flagged."""
         from src.tools.bash_tool import _check_for_sensitive_env_access
+
         assert _check_for_sensitive_env_access("ls -la") is None
         assert _check_for_sensitive_env_access("python -m pytest tests/") is None
         assert _check_for_sensitive_env_access("git status") is None

@@ -14,7 +14,6 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, cast
 
-
 logger = logging.getLogger(__name__)
 
 
@@ -156,8 +155,13 @@ def _get_file_listing(directory: str, max_depth: int = 3) -> list[dict[str, Any]
     root = Path(directory)
 
     ignore_dirs = {
-        ".git", "__pycache__", ".venv", "node_modules", ".mypy_cache",
-        ".pytest_cache", ".agent-backups",
+        ".git",
+        "__pycache__",
+        ".venv",
+        "node_modules",
+        ".mypy_cache",
+        ".pytest_cache",
+        ".agent-backups",
     }
 
     try:
@@ -169,13 +173,13 @@ def _get_file_listing(directory: str, max_depth: int = 3) -> list[dict[str, Any]
                 depth = len(rel.parts)
                 if depth <= max_depth:
                     try:
-                        files.append({
-                            "path": str(rel),
-                            "size": path.stat().st_size,
-                            "modified": datetime.fromtimestamp(
-                                path.stat().st_mtime
-                            ).isoformat(),
-                        })
+                        files.append(
+                            {
+                                "path": str(rel),
+                                "size": path.stat().st_size,
+                                "modified": datetime.fromtimestamp(path.stat().st_mtime).isoformat(),
+                            }
+                        )
                     except OSError:
                         pass
     except Exception:
@@ -211,8 +215,7 @@ def export_full_session(
     # Add metadata
     if metadata:
         # Remove sensitive data before export
-        safe_metadata = {k: v for k, v in metadata.items()
-                        if k not in ("api_key", "password", "secret")}
+        safe_metadata = {k: v for k, v in metadata.items() if k not in ("api_key", "password", "secret")}
         session_data["metadata"] = safe_metadata
     else:
         session_data["metadata"] = {}
@@ -227,10 +230,7 @@ def export_full_session(
         # Convert snapshots to serializable format
         serialized_snapshots: dict[str, list[dict[str, str]]] = {}
         for filepath, snap_list in snapshots.items():
-            serialized_snapshots[filepath] = [
-                {"timestamp": ts, "content": content}
-                for ts, content in snap_list
-            ]
+            serialized_snapshots[filepath] = [{"timestamp": ts, "content": content} for ts, content in snap_list]
         session_data["snapshots"] = serialized_snapshots
 
     # Add branches
@@ -293,7 +293,7 @@ def export_summary(data: dict[str, Any]) -> str:
     """Generate a human-readable summary of an exported session."""
     lines: list[str] = []
     lines.append(f"\n{'=' * 60}")
-    lines.append(f"  Session Export Summary")
+    lines.append("  Session Export Summary")
     lines.append(f"{'=' * 60}")
 
     meta = data.get("metadata", {})

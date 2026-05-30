@@ -11,10 +11,10 @@ from pathlib import Path
 import pytest
 
 from src.plugin_loader import (
+    PluginLoader,
+    _get_signing_key,
     _sign_allowlist,
     _verify_allowlist,
-    _get_signing_key,
-    PluginLoader,
 )
 
 
@@ -173,6 +173,7 @@ class TestPluginInjectionPrevention:
 
             # Record timestamp as if it was there at session start
             from src.tools import record_file_timestamp
+
             record_file_timestamp(str(plugin_file))
 
             # "Modify" it during the session
@@ -194,6 +195,7 @@ class TestPluginInjectionPrevention:
             plugin_file.write_text("__version__ = '1.0.0'\n")
 
             from src.tools import record_file_timestamp
+
             record_file_timestamp(str(plugin_file))
 
             # Don't modify it — check should be clean

@@ -7,11 +7,8 @@ Provides two backup methods:
 
 from __future__ import annotations
 
-import logging
-import os
 import shutil
 import subprocess
-import time
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -36,7 +33,9 @@ def _is_git_repo(working_dir: str) -> bool:
     try:
         result = subprocess.run(
             ["git", "rev-parse", "--git-dir"],
-            capture_output=True, text=True, cwd=working_dir,
+            capture_output=True,
+            text=True,
+            cwd=working_dir,
             timeout=5,
         )
         return result.returncode == 0
@@ -55,7 +54,6 @@ def create_backup(working_dir: str, method: str = "auto", label: str = "") -> st
     Returns:
         Success or error message
     """
-    from .utils import green
 
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     backup_name = f"backup_{timestamp}"
@@ -81,20 +79,28 @@ def _git_backup(working_dir: str, backup_name: str) -> str:
     # Check for uncommitted changes
     result = subprocess.run(
         ["git", "status", "--porcelain"],
-        capture_output=True, text=True, cwd=working_dir, timeout=5,
+        capture_output=True,
+        text=True,
+        cwd=working_dir,
+        timeout=5,
     )
 
     if result.stdout.strip():
         # There are uncommitted changes — stash them first
         subprocess.run(
             ["git", "stash", "push", "-m", f"auto-backup {backup_name}"],
-            capture_output=True, cwd=working_dir, timeout=10,
+            capture_output=True,
+            cwd=working_dir,
+            timeout=10,
         )
 
     # Create a backup branch
     branch_result = subprocess.run(
         ["git", "branch", backup_name],
-        capture_output=True, text=True, cwd=working_dir, timeout=10,
+        capture_output=True,
+        text=True,
+        cwd=working_dir,
+        timeout=10,
     )
 
     if branch_result.returncode != 0:
@@ -104,7 +110,9 @@ def _git_backup(working_dir: str, backup_name: str) -> str:
     if result.stdout.strip():
         subprocess.run(
             ["git", "stash", "pop"],
-            capture_output=True, cwd=working_dir, timeout=10,
+            capture_output=True,
+            cwd=working_dir,
+            timeout=10,
         )
 
     logger.info("Created git backup: %s", backup_name)
@@ -120,8 +128,14 @@ def _copy_backup(working_dir: str, backup_name: str) -> str:
 
     # Define exclusions
     exclude_dirs = {
-        ".git", "__pycache__", ".venv", "node_modules", ".mypy_cache",
-        ".pytest_cache", ".agent-backups", ".claude",
+        ".git",
+        "__pycache__",
+        ".venv",
+        "node_modules",
+        ".mypy_cache",
+        ".pytest_cache",
+        ".agent-backups",
+        ".claude",
     }
 
     def _ignore_pattern(path: str, names: list[str]) -> list[str]:
@@ -137,9 +151,7 @@ def _copy_backup(working_dir: str, backup_name: str) -> str:
 
 def _get_dir_size(path: Path) -> str:
     """Get human-readable directory size."""
-    total = sum(
-        f.stat().st_size for f in path.rglob("*") if f.is_file()
-    )
+    total = sum(f.stat().st_size for f in path.rglob("*") if f.is_file())
     for unit in ("B", "KB", "MB", "GB"):
         if total < 1024:
             return f"{total:.1f}{unit}"
@@ -173,28 +185,34 @@ def list_backups() -> list[dict[str, Any]]:
     for d in backup_dir.iterdir():
         if d.is_dir() and d.name.startswith("backup_"):
             size = _get_dir_size(d)
-            backups.append({
-                "name": d.name,
-                "type": "filesystem",
-                "size": size,
-                "created": datetime.fromtimestamp(d.stat().st_mtime),
-            })
+            backups.append(
+                {
+                    "name": d.name,
+                    "type": "filesystem",
+                    "size": size,
+                    "created": datetime.fromtimestamp(d.stat().st_mtime),
+                }
+            )
 
     # Check git backups (branches starting with backup_)
     try:
         result = subprocess.run(
             ["git", "branch", "--list", "backup_*"],
-            capture_output=True, text=True, timeout=5,
+            capture_output=True,
+            text=True,
+            timeout=5,
         )
         for branch in result.stdout.strip().split("\n"):
             branch = branch.strip().lstrip("* ")
             if branch:
-                backups.append({
-                    "name": branch,
-                    "type": "git",
-                    "size": "-",
-                    "created": None,
-                })
+                backups.append(
+                    {
+                        "name": branch,
+                        "type": "git",
+                        "size": "-",
+                        "created": None,
+                    }
+                )
     except Exception:
         pass
 
@@ -203,7 +221,6 @@ def list_backups() -> list[dict[str, Any]]:
 
 def restore_backup(name: str, working_dir: str) -> str:
     """Restore a backup by name."""
-    from .utils import green, yellow
 
     backup_dir = _get_backup_dir() / name
 
@@ -232,7 +249,7 @@ def _restore_copy(backup_dir: Path, working_dir: str) -> str:
                 except ValueError:
                     # Symlink points outside the backup directory
                     dangerous_symlinks.append(str(item))
-            except (OSError, RuntimeError):
+            except OSError, RuntimeError:
                 dangerous_symlinks.append(str(item))
 
     if dangerous_symlinks:
@@ -277,7 +294,10 @@ def _restore_git(name: str, working_dir: str) -> str:
         # Checkout the backup branch (detached HEAD)
         result = subprocess.run(
             ["git", "checkout", name],
-            capture_output=True, text=True, cwd=working_dir, timeout=10,
+            capture_output=True,
+            text=True,
+            cwd=working_dir,
+            timeout=10,
         )
         if result.returncode == 0:
             return f"{green('✓')} Restored git backup: {name} (detached HEAD — use 'git checkout main' to return)"
@@ -307,7 +327,8 @@ def clean_backups(keep: int = 5) -> str:
         try:
             subprocess.run(
                 ["git", "branch", "-D", name],
-                capture_output=True, timeout=5,
+                capture_output=True,
+                timeout=5,
             )
         except Exception:
             pass

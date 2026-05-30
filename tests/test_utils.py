@@ -2,14 +2,16 @@
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
 import pytest
 
 from src.utils import (
-    CHARS_PER_TOKEN,
-    TRIM_THRESHOLD,
+    MAX_CODE_LENGTH,
+    MAX_COMMAND_LENGTH,
+    MAX_PATH_LENGTH,
+    MAX_QUERY_LENGTH,
+    MAX_TEXT_LENGTH,
     _message_token_count,
     _strip_orphaned_tool_results,
     blue,
@@ -23,11 +25,6 @@ from src.utils import (
     red,
     trim_messages,
     validate_length,
-    MAX_CODE_LENGTH,
-    MAX_COMMAND_LENGTH,
-    MAX_QUERY_LENGTH,
-    MAX_TEXT_LENGTH,
-    MAX_PATH_LENGTH,
     yellow,
 )
 
@@ -174,6 +171,7 @@ def test_strip_orphaned_tool_results_drops_orphan() -> None:
 def test_render_markdown_plain_text() -> None:
     """Plain text without markdown should print without error."""
     from src.utils import render_markdown
+
     # Should not raise
     render_markdown("Hello, this is plain text.")
 
@@ -181,6 +179,7 @@ def test_render_markdown_plain_text() -> None:
 def test_render_markdown_with_code_block() -> None:
     """Code blocks should render without error."""
     from src.utils import render_markdown
+
     text = '```python\nprint("hello")\n```'
     render_markdown(text)
 
@@ -188,12 +187,14 @@ def test_render_markdown_with_code_block() -> None:
 def test_render_markdown_empty() -> None:
     """Empty string should not raise."""
     from src.utils import render_markdown
+
     render_markdown("")
 
 
 def test_render_markdown_headings() -> None:
     """Headings and formatting should render without error."""
     from src.utils import render_markdown
+
     text = "# Heading\n\n**bold** and *italic* text"
     render_markdown(text)
 
@@ -203,38 +204,45 @@ def test_render_markdown_headings() -> None:
 
 def test_detect_language_python() -> None:
     from src.utils import detect_language
+
     assert detect_language("main.py") == "python"
 
 
 def test_detect_language_javascript() -> None:
     from src.utils import detect_language
+
     assert detect_language("script.js") == "javascript"
 
 
 def test_detect_language_typescript() -> None:
     from src.utils import detect_language
+
     assert detect_language("app.ts") == "typescript"
 
 
 def test_detect_language_markdown() -> None:
     from src.utils import detect_language
+
     assert detect_language("README.md") == "markdown"
 
 
 def test_detect_language_unknown_extension() -> None:
     from src.utils import detect_language
+
     assert detect_language("file.unknown") == ""
 
 
 def test_detect_language_code_block_tag() -> None:
     """Code block tags take precedence over file extension."""
     from src.utils import detect_language
+
     assert detect_language("file.py", code_block_tag="javascript") == "javascript"
 
 
 def test_detect_language_empty() -> None:
     """Empty filename and tag returns empty string."""
     from src.utils import detect_language
+
     assert detect_language() == ""
 
 
@@ -244,6 +252,7 @@ def test_detect_language_empty() -> None:
 def test_highlight_code_python() -> None:
     """Highlighting Python code should produce ANSI output."""
     from src.utils import highlight_code
+
     result = highlight_code('print("hello")', language="python")
     assert isinstance(result, str)
     assert len(result) > 0
@@ -254,6 +263,7 @@ def test_highlight_code_python() -> None:
 def test_highlight_code_no_language() -> None:
     """Highlighting without a language should still work."""
     from src.utils import highlight_code
+
     result = highlight_code('print("hello")')
     assert isinstance(result, str)
 
@@ -261,6 +271,7 @@ def test_highlight_code_no_language() -> None:
 def test_highlight_code_empty() -> None:
     """Empty code should not raise."""
     from src.utils import highlight_code
+
     result = highlight_code("")
     assert isinstance(result, str)
 
@@ -268,6 +279,7 @@ def test_highlight_code_empty() -> None:
 def test_highlight_code_custom_theme() -> None:
     """Custom theme should be applied."""
     from src.utils import highlight_code
+
     result = highlight_code('print("hello")', language="python", theme="native")
     assert isinstance(result, str)
     assert len(result) > 0
@@ -278,36 +290,43 @@ def test_highlight_code_custom_theme() -> None:
 
 def test_contains_markdown_code_block() -> None:
     from src.repl.help_text import contains_markdown
+
     assert contains_markdown("Some text\n```python\ncode\n```")
 
 
 def test_contains_markdown_heading() -> None:
     from src.repl.help_text import contains_markdown
+
     assert contains_markdown("# Heading")
 
 
 def test_contains_markdown_bold() -> None:
     from src.repl.help_text import contains_markdown
+
     assert contains_markdown("This is **bold**")
 
 
 def test_contains_markdown_italic() -> None:
     from src.repl.help_text import contains_markdown
+
     assert contains_markdown("This is *italic*")
 
 
 def test_contains_markdown_list() -> None:
     from src.repl.help_text import contains_markdown
+
     assert contains_markdown("- item one\n- item two")
 
 
 def test_contains_markdown_plain_text() -> None:
     from src.repl.help_text import contains_markdown
+
     assert not contains_markdown("Just plain text without any formatting.")
 
 
 def test_contains_markdown_empty() -> None:
     from src.repl.help_text import contains_markdown
+
     assert not contains_markdown("")
 
 
@@ -353,6 +372,7 @@ def test_max_length_constants_are_positive() -> None:
 def test_redact_api_key() -> None:
     """API keys should be redacted."""
     from src.utils import redact_sensitive_content
+
     text = "My API key is sk-ant-abcdefghijklmnop1234567890abcdef"
     result = redact_sensitive_content(text)
     assert "sk-***REDACTED***" in result
@@ -362,6 +382,7 @@ def test_redact_api_key() -> None:
 def test_redact_password() -> None:
     """Password values should be redacted."""
     from src.utils import redact_sensitive_content
+
     text = 'password = "supersecret123"'
     result = redact_sensitive_content(text)
     assert "***REDACTED***" in result
@@ -371,6 +392,7 @@ def test_redact_password() -> None:
 def test_redact_connection_string() -> None:
     """Database connection strings should have credentials redacted."""
     from src.utils import redact_sensitive_content
+
     text = "mongodb://admin:secretpass@localhost:27017/mydb"
     result = redact_sensitive_content(text)
     assert "***USER***" in result
@@ -380,6 +402,7 @@ def test_redact_connection_string() -> None:
 def test_redact_preserves_normal_text() -> None:
     """Normal text without sensitive data should be unchanged."""
     from src.utils import redact_sensitive_content
+
     text = "The quick brown fox jumps over the lazy dog."
     result = redact_sensitive_content(text)
     assert result == text
@@ -388,12 +411,14 @@ def test_redact_preserves_normal_text() -> None:
 def test_redact_empty_string() -> None:
     """Empty string should return empty."""
     from src.utils import redact_sensitive_content
+
     assert redact_sensitive_content("") == ""
 
 
 def test_redact_github_token() -> None:
     """GitHub tokens should be redacted."""
     from src.utils import redact_sensitive_content
+
     text = "token: ghp_abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMN"
     result = redact_sensitive_content(text)
     assert "ghp_***REDACTED***" in result
@@ -403,6 +428,7 @@ def test_redact_github_token() -> None:
 def test_redact_multiple_sensitive_items() -> None:
     """Multiple sensitive items in the same text should all be redacted."""
     from src.utils import redact_sensitive_content
+
     text = 'password = "hello123" and API key = sk-test-key-abcdefghijklmnopqrstuvwx'
     result = redact_sensitive_content(text)
     assert "hello123" not in result
@@ -437,6 +463,7 @@ def test_summarize_conversation_redacts_content(mocker) -> None:
 def test_validate_walk_path_within_directory(tmp_path: Path) -> None:
     """A path inside the working directory should pass validation."""
     from src.utils import validate_walk_path
+
     inner_path = tmp_path / "subdir" / "file.py"
     inner_path.parent.mkdir(parents=True)
     inner_path.write_text("")
@@ -446,19 +473,21 @@ def test_validate_walk_path_within_directory(tmp_path: Path) -> None:
 def test_validate_walk_path_outside_directory(tmp_path: Path) -> None:
     """A path outside the working directory should fail validation."""
     from src.utils import validate_walk_path
+
     assert validate_walk_path("/etc/passwd", str(tmp_path)) is not None
 
 
 def test_validate_walk_path_symlink_escape(tmp_path: Path) -> None:
     """A symlink pointing outside working directory should fail."""
-    from src.utils import validate_walk_path
     import os
+
+    from src.utils import validate_walk_path
 
     # Create a symlink inside tmp_path that points outside
     link_path = tmp_path / "escape_link"
     try:
         os.symlink(str(tmp_path.resolve().parent / "outside.txt"), str(link_path))
-    except (OSError, PermissionError):
+    except OSError, PermissionError:
         pytest.skip("Cannot create symlink on this system")
 
     result = validate_walk_path(str(link_path), str(tmp_path))
@@ -471,6 +500,7 @@ def test_validate_walk_path_symlink_escape(tmp_path: Path) -> None:
 def test_strip_dangerous_ansi_clear_screen() -> None:
     """Clear screen sequence should be stripped."""
     from src.utils import strip_dangerous_ansi
+
     result = strip_dangerous_ansi("Hello\x1b[2JWorld")
     assert "HelloWorld" in result
     assert "\x1b[2J" not in result
@@ -479,6 +509,7 @@ def test_strip_dangerous_ansi_clear_screen() -> None:
 def test_strip_dangerous_ansi_cursor_position() -> None:
     """Cursor positioning sequences should be stripped."""
     from src.utils import strip_dangerous_ansi
+
     result = strip_dangerous_ansi("\x1b[10;5Hmalicious")
     assert "malicious" in result
     assert "\x1b[10;5H" not in result
@@ -487,6 +518,7 @@ def test_strip_dangerous_ansi_cursor_position() -> None:
 def test_strip_dangerous_ansi_title_set() -> None:
     """Terminal title setting sequences should be stripped."""
     from src.utils import strip_dangerous_ansi
+
     result = strip_dangerous_ansi("\x1b]0;Fake Prompt\x07")
     assert "Fake Prompt" not in result
 
@@ -494,6 +526,7 @@ def test_strip_dangerous_ansi_title_set() -> None:
 def test_strip_dangerous_ansi_hide_cursor() -> None:
     """Cursor hide/show sequences should be stripped."""
     from src.utils import strip_dangerous_ansi
+
     result = strip_dangerous_ansi("Hello\x1b[?25lWorld")
     assert "HelloWorld" in result
     assert "\x1b[?25l" not in result
@@ -502,6 +535,7 @@ def test_strip_dangerous_ansi_hide_cursor() -> None:
 def test_strip_dangerous_preserves_colors() -> None:
     """Normal color sequences should be preserved."""
     from src.utils import strip_dangerous_ansi
+
     text = "\033[32mGreen text\033[0m"
     result = strip_dangerous_ansi(text)
     assert "\033[32m" in result
@@ -511,11 +545,13 @@ def test_strip_dangerous_preserves_colors() -> None:
 def test_strip_dangerous_empty_string() -> None:
     """Empty string should return empty."""
     from src.utils import strip_dangerous_ansi
+
     assert strip_dangerous_ansi("") == ""
 
 
 def test_strip_dangerous_no_ansi() -> None:
     """Plain text without ANSI should be unchanged."""
     from src.utils import strip_dangerous_ansi
+
     text = "Hello, World!"
     assert strip_dangerous_ansi(text) == text

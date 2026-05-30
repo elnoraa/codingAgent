@@ -5,12 +5,12 @@ Uses watchdog (optional) for efficient monitoring, with polling fallback.
 
 from __future__ import annotations
 
-import logging
 import os
 import threading
 import time
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 from .logging_config import get_logger
 
@@ -49,8 +49,8 @@ class FileWatcher:
     def _init_watchdog(self) -> None:
         """Try to initialize watchdog-based monitoring."""
         try:
-            from watchdog.observers import Observer  # type: ignore[import-untyped]
             from watchdog.events import FileSystemEventHandler  # type: ignore[import-untyped]
+            from watchdog.observers import Observer  # type: ignore[import-untyped]
 
             class _Handler(FileSystemEventHandler):
                 def __init__(self, callback: Callable[[list[str]], None]):
@@ -76,10 +76,7 @@ class FileWatcher:
         if self._on_change:
             # Filter by pattern if set
             if self._pattern:
-                changed_paths = [
-                    p for p in changed_paths
-                    if self._pattern in p
-                ]
+                changed_paths = [p for p in changed_paths if self._pattern in p]
             if changed_paths:
                 self._on_change(changed_paths)
 
@@ -105,7 +102,8 @@ class FileWatcher:
         if self._watchdog_observer:
             for watch_path in self._paths:
                 self._watchdog_observer.schedule(
-                    self._watchdog_handler, watch_path,
+                    self._watchdog_handler,
+                    watch_path,
                     recursive=self._recursive,
                 )
             self._watchdog_observer.start()
@@ -184,7 +182,8 @@ class FileWatcher:
             self._paths.append(path)
             if self._use_watchdog and self._watchdog_observer:
                 self._watchdog_observer.schedule(
-                    self._watchdog_handler, path,
+                    self._watchdog_handler,
+                    path,
                     recursive=self._recursive,
                 )
 

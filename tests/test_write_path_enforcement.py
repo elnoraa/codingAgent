@@ -6,9 +6,8 @@ import os
 import tempfile
 from pathlib import Path
 
-from src.tools import Tool, ToolContext
+from src.tools import ToolContext
 from src.utils import validate_write_path
-
 
 # ── Test the core validation function ─────────────────────────────────────
 
@@ -235,6 +234,7 @@ def test_git_tools_enforce_working_directory() -> None:
 
         # Initialize a git repo inside the working dir (so the tool works)
         import subprocess
+
         subprocess.run(["git", "init"], cwd=tmpdir, capture_output=True)
 
         # Valid path should work
@@ -276,6 +276,7 @@ def test_diff_tool_enforces_working_directory() -> None:
 
 # ── Atomic write-path validation tests ─────────────────────────────
 
+
 class TestAtomicWritePathValidation:
     """Verify that the atomic write-path validator detects symlink escapes
     even when a symlink is created between the initial check and the write."""
@@ -283,6 +284,7 @@ class TestAtomicWritePathValidation:
     def test_atomic_validation_detects_symlink_escape(self) -> None:
         """validate_write_path_atomic should detect a symlink pointing outside."""
         from src.utils import validate_write_path_atomic
+
         _check_symlink_support()
 
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -312,18 +314,21 @@ class TestAtomicWritePathValidation:
         with tempfile.TemporaryDirectory() as tmpdir:
             # Use a different temp dir that's outside our workdir
             import tempfile as _tf
+
             other_dir = _tf.mkdtemp()
             try:
                 result = validate_write_path_atomic(other_dir, tmpdir)
                 assert result is not None
             finally:
                 import shutil
+
                 shutil.rmtree(other_dir, ignore_errors=True)
 
     def test_write_file_atomic_check_blocks_created_symlink(self) -> None:
         """write_file should re-check path right before the write, catching a
         symlink created after the initial validation."""
         from src.tools.write_file import execute as write_execute
+
         _check_symlink_support()
 
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -349,6 +354,7 @@ class TestAtomicWritePathValidation:
     def test_edit_file_atomic_check_blocks_created_symlink(self) -> None:
         """edit_file should re-check path right before the write."""
         from src.tools.edit_file import execute as edit_execute
+
         _check_symlink_support()
 
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -372,6 +378,7 @@ def _check_symlink_support() -> None:
     """Check if the OS supports creating symlinks. Skip test if not."""
     if os.name == "nt":
         import pytest
+
         try:
             test_link = os.path.join(tempfile.mkdtemp(), "_symlink_test")
             os.symlink(__file__, test_link)

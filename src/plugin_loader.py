@@ -8,14 +8,15 @@ import importlib
 import importlib.util
 import inspect
 import json
-import logging
 import os
 import sys
-from dataclasses import dataclass, field
+from collections.abc import Callable
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
-from src.tools import Tool, ToolContext
+from src.tools import Tool
+
 from .logging_config import get_logger
 
 logger = get_logger(__name__)
@@ -59,6 +60,7 @@ def _verify_allowlist(allowlist: dict[str, str], signature: str, key: bytes) -> 
 @dataclass
 class PluginInfo:
     """Information about a loaded plugin."""
+
     name: str
     version: str
     description: str
@@ -91,9 +93,7 @@ class PluginLoader:
         for entry in self._plugins_dir.iterdir():
             if entry.is_dir() and not entry.name.startswith(("__", ".")):
                 plugin_file = entry / "plugin.py"
-                if plugin_file.exists():
-                    plugins.append(entry.name)
-                elif (entry / "__init__.py").exists():
+                if plugin_file.exists() or (entry / "__init__.py").exists():
                     plugins.append(entry.name)
 
         return sorted(plugins)
@@ -130,21 +130,25 @@ class PluginLoader:
 
         # ── Integrity check (session-modified file detection) ──────────
         from src.tools import was_file_modified_during_session
+
         if was_file_modified_during_session(str(entry_point)):
             logger.warning(
                 "Plugin '%s' entry point '%s' was modified during the current "
                 "session. This could indicate a plugin injection attack.",
-                name, entry_point,
+                name,
+                entry_point,
             )
             if interactive:
                 print()
-                print(f"  ⚠  **SECURITY WARNING**")
+                print("  ⚠  **SECURITY WARNING**")
                 print(f"     Plugin '{name}' has been modified during this session.")
-                print(f"     This file was written or modified by the AI agent.")
-                print(f"     Proceeding could execute arbitrary code.")
+                print("     This file was written or modified by the AI agent.")
+                print("     Proceeding could execute arbitrary code.")
                 print(f"     Path: {entry_point}")
                 print()
-                response = input("  Load anyway? Only say 'yes' if you wrote this file yourself. [y/N] ").strip().lower()
+                response = (
+                    input("  Load anyway? Only say 'yes' if you wrote this file yourself. [y/N] ").strip().lower()
+                )
                 if response not in ("y", "yes"):
                     logger.info("Plugin '%s' loading denied — file was session-modified", name)
                     print(f"  Plugin '{name}' not loaded (declined security warning).")
@@ -169,7 +173,7 @@ class PluginLoader:
                 print(f"     Description: {metadata.get('description', 'No description')}")
                 print(f"     Path:      {entry_point}")
                 print()
-                print(f"  Load this plugin? It will have full access to your system.")
+                print("  Load this plugin? It will have full access to your system.")
                 response = input("  [y/N] ").strip().lower()
                 if response not in ("y", "yes"):
                     logger.info("Plugin '%s' loading denied by user", name)
@@ -217,6 +221,7 @@ class PluginLoader:
     def _hash_file(self, path: Path) -> str:
         """Return the SHA-256 hex digest of a file."""
         import hashlib
+
         h = hashlib.sha256()
         h.update(path.read_bytes())
         return h.hexdigest()
@@ -234,7 +239,7 @@ class PluginLoader:
 
         try:
             data = json.loads(allowlist_path.read_text(encoding="utf-8"))
-        except (json.JSONDecodeError, OSError):
+        except json.JSONDecodeError, OSError:
             return {}
 
         # Extract signature and allowed dict
@@ -260,8 +265,7 @@ class PluginLoader:
             signing_key = _get_signing_key()
             if signing_key:
                 logger.warning(
-                    "Plugin allowlist is not signed but %s is set. "
-                    "The allowlist will be signed on next update.",
+                    "Plugin allowlist is not signed but %s is set. The allowlist will be signed on next update.",
                     _PLUGIN_SIGNING_KEY_ENV,
                 )
             return data
@@ -288,16 +292,21 @@ class PluginLoader:
         module-level string assignments using the AST module.
         """
         import ast
+
         metadata: dict[str, str] = {}
         try:
             tree = ast.parse(entry_point.read_text(encoding="utf-8"))
             for node in ast.walk(tree):
                 if isinstance(node, ast.Assign):
                     for target in node.targets:
-                        if isinstance(target, ast.Name) and target.id in ("__author__", "__version__", "__description__"):
+                        if isinstance(target, ast.Name) and target.id in (
+                            "__author__",
+                            "__version__",
+                            "__description__",
+                        ):
                             if isinstance(node.value, ast.Constant) and isinstance(node.value.value, str):
                                 metadata[target.id] = node.value.value
-        except (SyntaxError, OSError):
+        except SyntaxError, OSError:
             pass
         return metadata
 

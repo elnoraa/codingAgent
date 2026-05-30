@@ -1,13 +1,11 @@
 from __future__ import annotations
 
-import logging
 import os
 import subprocess
 from typing import Any
 
-from src.tools import Tool, ToolContext
-
 from src.logging_config import get_logger
+from src.tools import Tool, ToolContext
 
 logger = get_logger(__name__)
 
@@ -75,7 +73,7 @@ def execute(args: dict[str, Any], _ctx: ToolContext) -> str:
             timeout=15,
         )
         unpushed_count = len(unpushed.stdout.strip().split("\n")) if unpushed.stdout.strip() else 0
-    except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
+    except subprocess.CalledProcessError, subprocess.TimeoutExpired:
         unpushed_count = 0  # Might not have upstream set yet
 
     # Push to remote

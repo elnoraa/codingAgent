@@ -2,8 +2,7 @@
 
 from __future__ import annotations
 
-from src.tools import ToolContext
-from src.tools.docker_tool import docker_tool, execute
+from src.tools.docker_tool import docker_tool
 
 
 def test_tool_definition() -> None:

@@ -9,9 +9,6 @@ from __future__ import annotations
 
 import os
 
-from .formatting import dim
-
-
 # ── Markdown Rendering & Syntax Highlighting ──────────────────────────────
 
 
@@ -26,8 +23,8 @@ def render_markdown(text: str, syntax_theme: str = "monokai") -> None:
 
     text = strip_dangerous_ansi(text)
     try:
-        from rich.markdown import Markdown as RichMarkdown
         from rich import print as rich_print
+        from rich.markdown import Markdown as RichMarkdown
 
         md = RichMarkdown(text, code_theme=syntax_theme)
         rich_print(md)
@@ -92,9 +89,10 @@ def highlight_code(code: str, language: str = "", theme: str = "monokai") -> str
 
     code = strip_dangerous_ansi(code)
     try:
-        from rich.syntax import Syntax
         from io import StringIO
+
         from rich.console import Console
+        from rich.syntax import Syntax
 
         syntax = Syntax(code, language, theme=theme, line_numbers=False)
         # Convert the rich renderable to an ANSI string

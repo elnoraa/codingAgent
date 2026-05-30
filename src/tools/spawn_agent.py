@@ -6,8 +6,8 @@ runs independently with its own message history and tools.
 
 from __future__ import annotations
 
-from src.tools import Tool, ToolContext
 from src.logging_config import get_logger
+from src.tools import Tool, ToolContext
 
 logger = get_logger(__name__)
 

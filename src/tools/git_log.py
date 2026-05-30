@@ -6,13 +6,12 @@ evolution, see what changed, and when.
 
 from __future__ import annotations
 
-import logging
 import os
 import subprocess
 from typing import Any
 
-from src.tools import Tool, ToolContext
 from src.logging_config import get_logger
+from src.tools import Tool, ToolContext
 
 logger = get_logger(__name__)
 
@@ -31,7 +30,10 @@ def execute(args: dict[str, Any], _ctx: ToolContext) -> str:
     try:
         subprocess.run(
             ["git", "rev-parse", "--git-dir"],
-            capture_output=True, cwd=root_dir, check=True, timeout=15,
+            capture_output=True,
+            cwd=root_dir,
+            check=True,
+            timeout=15,
         )
     except subprocess.CalledProcessError:
         return f"[Error] {root_dir} is not inside a git repository"
@@ -43,7 +45,10 @@ def execute(args: dict[str, Any], _ctx: ToolContext) -> str:
     try:
         count_result = subprocess.run(
             ["git", "rev-list", "--count", branch or "HEAD"],
-            capture_output=True, text=True, cwd=root_dir, timeout=15,
+            capture_output=True,
+            text=True,
+            cwd=root_dir,
+            timeout=15,
         )
         if count_result.returncode == 0:
             total = count_result.stdout.strip()
@@ -60,7 +65,11 @@ def execute(args: dict[str, Any], _ctx: ToolContext) -> str:
 
     try:
         result = subprocess.run(
-            cmd, capture_output=True, text=True, cwd=root_dir, timeout=30,
+            cmd,
+            capture_output=True,
+            text=True,
+            cwd=root_dir,
+            timeout=30,
         )
     except subprocess.TimeoutExpired:
         return "[Error] git log timed out after 30s"

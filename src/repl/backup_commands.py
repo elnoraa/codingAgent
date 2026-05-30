@@ -4,15 +4,15 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from src.formatting import bold, dim, green, red
+from src.formatting import bold, dim, green
 
 if TYPE_CHECKING:
     from src.repl.repl import Repl
 
 
-def handle_backup(repl: "Repl", args: str) -> None:
+def handle_backup(repl: Repl, args: str) -> None:
     """Handle /backup commands."""
-    from src.backup import create_backup, list_backups, restore_backup, clean_backups
+    from src.backup import clean_backups, create_backup, list_backups, restore_backup
 
     parts = args.strip().split(maxsplit=1)
     subcmd = parts[0].lower() if parts else ""

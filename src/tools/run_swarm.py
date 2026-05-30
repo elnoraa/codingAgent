@@ -9,11 +9,10 @@ Supports patterns:
 from __future__ import annotations
 
 import threading
-import time
 from typing import Any
 
-from src.tools import Tool, ToolContext
 from src.logging_config import get_logger
+from src.tools import Tool, ToolContext
 
 logger = get_logger(__name__)
 
@@ -38,7 +37,8 @@ def _run_sequential_swarm(
     for i, role in enumerate(agent_roles):
         agent_task = (
             f"{current_task}\n\nContext from previous step:\n{results[-1] if results else 'N/A'}"
-            if i > 0 else current_task
+            if i > 0
+            else current_task
         )
         lines.append(f"**Step {i + 1}:** Spawning {role} agent...")
 
@@ -56,10 +56,7 @@ def _run_sequential_swarm(
                 lines.append(f"  ⚠ Error: {agent_result.error}")
                 break
 
-            preview = (
-                agent_result.output[:300] if agent_result.output
-                else "(no output)"
-            )
+            preview = agent_result.output[:300] if agent_result.output else "(no output)"
             lines.append(f"  Result: {preview}")
             results.append(agent_result.output)
 
@@ -213,7 +210,7 @@ def _execute_run_swarm(args: dict[str, object], context: ToolContext) -> str:
         return "Error: 'task' parameter is required."
 
     agent_id = getattr(context, "agent_id", "main")
-    agent_roles = args.get("agent_roles", None)
+    agent_roles = args.get("agent_roles")
     agent_count = int(str(args.get("agent_count", 2)))
 
     try:
@@ -234,10 +231,7 @@ def _execute_run_swarm(args: dict[str, object], context: ToolContext) -> str:
             return _run_broadcast_swarm(orchestrator, agent_id, task, count, context)
 
         else:
-            return (
-                f"Error: Unknown swarm pattern '{pattern}'. "
-                f"Available: sequential, debate, broadcast."
-            )
+            return f"Error: Unknown swarm pattern '{pattern}'. Available: sequential, debate, broadcast."
 
     except Exception as exc:
         logger.error("run_swarm failed: %s", exc, exc_info=True)
@@ -268,8 +262,7 @@ run_swarm_tool = Tool(
                 "type": "array",
                 "items": {"type": "string"},
                 "description": (
-                    "Roles for each agent (for sequential pattern). "
-                    "Example: ['planner', 'implementer', 'reviewer']"
+                    "Roles for each agent (for sequential pattern). Example: ['planner', 'implementer', 'reviewer']"
                 ),
             },
             "agent_count": {

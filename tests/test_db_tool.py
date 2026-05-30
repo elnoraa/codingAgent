@@ -4,20 +4,17 @@ from __future__ import annotations
 
 import sqlite3
 import tempfile
+from collections.abc import Generator
 from pathlib import Path
-from typing import Any
 
 import pytest
 
-from src.tools import Tool, ToolContext
-from src.tools.db_tool import execute, _is_write_query, _format_table_schema
-
-
-from collections.abc import Generator
+from src.tools import ToolContext
+from src.tools.db_tool import _format_table_schema, _is_write_query, execute
 
 
 @pytest.fixture
-def tmp_db() -> Generator[str, None, None]:
+def tmp_db() -> Generator[str]:
     """Create a temporary SQLite database with a test table."""
     with tempfile.TemporaryDirectory() as tmpdir:
         db_path = str(Path(tmpdir) / "test.db")
@@ -32,7 +29,7 @@ def tmp_db() -> Generator[str, None, None]:
 
 
 @pytest.fixture
-def ctx() -> Generator[ToolContext, None, None]:
+def ctx() -> Generator[ToolContext]:
     yield ToolContext(working_directory="/tmp")
 
 
@@ -56,9 +53,7 @@ class TestFormatTableSchema:
             db_path = str(Path(tmpdir) / "test.db")
             conn = sqlite3.connect(db_path)
             try:
-                conn.execute(
-                    "CREATE TABLE \"users'; DROP TABLE users; --\" (id INTEGER)"
-                )
+                conn.execute('CREATE TABLE "users\'; DROP TABLE users; --" (id INTEGER)')
                 conn.commit()
 
                 # This should not raise an error (which would indicate SQL injection)
@@ -72,9 +67,7 @@ class TestFormatTableSchema:
             # Verify the table is still there (the dangerous name wasn't executed)
             conn2 = sqlite3.connect(db_path)
             try:
-                tables = conn2.execute(
-                    "SELECT name FROM sqlite_master WHERE type='table'"
-                ).fetchall()
+                tables = conn2.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()
                 assert len(tables) >= 1  # Our table still exists
             finally:
                 conn2.close()
@@ -137,81 +130,105 @@ class TestExecute:
 
     def test_execute_select(self, ctx: ToolContext, tmp_db: str) -> None:
         """SELECT queries should return results."""
-        result = execute({
-            "type": "sqlite",
-            "action": "query",
-            "query": "SELECT * FROM users ORDER BY id",
-            "path": tmp_db,
-        }, ctx)
+        result = execute(
+            {
+                "type": "sqlite",
+                "action": "query",
+                "query": "SELECT * FROM users ORDER BY id",
+                "path": tmp_db,
+            },
+            ctx,
+        )
         assert "Alice" in result
         assert "Bob" in result
         assert "Query Results" in result
 
     def test_execute_tables(self, ctx: ToolContext, tmp_db: str) -> None:
         """Tables action should show schema."""
-        result = execute({
-            "type": "sqlite",
-            "action": "tables",
-            "path": tmp_db,
-        }, ctx)
+        result = execute(
+            {
+                "type": "sqlite",
+                "action": "tables",
+                "path": tmp_db,
+            },
+            ctx,
+        )
         assert "users" in result
 
     def test_write_query_needs_confirm(self, ctx: ToolContext, tmp_db: str) -> None:
         """Write queries should require confirm=True."""
-        result = execute({
-            "type": "sqlite",
-            "action": "query",
-            "query": "DELETE FROM users WHERE id=1",
-            "path": tmp_db,
-            "confirm": False,
-        }, ctx)
+        result = execute(
+            {
+                "type": "sqlite",
+                "action": "query",
+                "query": "DELETE FROM users WHERE id=1",
+                "path": tmp_db,
+                "confirm": False,
+            },
+            ctx,
+        )
         assert "confirm" in result.lower() or "write" in result.lower()
 
     def test_write_query_with_confirm(self, ctx: ToolContext, tmp_db: str) -> None:
         """Write queries with confirm=True should execute."""
-        result = execute({
-            "type": "sqlite",
-            "action": "query",
-            "query": "DELETE FROM users WHERE id=1",
-            "path": tmp_db,
-            "confirm": True,
-        }, ctx)
+        result = execute(
+            {
+                "type": "sqlite",
+                "action": "query",
+                "query": "DELETE FROM users WHERE id=1",
+                "path": tmp_db,
+                "confirm": True,
+            },
+            ctx,
+        )
         assert "row(s) affected" in result
 
     def test_execute_missing_path(self, ctx: ToolContext) -> None:
         """Missing path for SQLite should return error."""
-        result = execute({
-            "type": "sqlite",
-            "action": "tables",
-            "path": "",
-        }, ctx)
+        result = execute(
+            {
+                "type": "sqlite",
+                "action": "tables",
+                "path": "",
+            },
+            ctx,
+        )
         assert "Error" in result or "required" in result.lower()
 
     def test_execute_bad_query(self, ctx: ToolContext, tmp_db: str) -> None:
         """Invalid SQL should return an error, not crash."""
-        result = execute({
-            "type": "sqlite",
-            "action": "query",
-            "query": "SELECT invalid_sql FROM nowhere",
-            "path": tmp_db,
-        }, ctx)
+        result = execute(
+            {
+                "type": "sqlite",
+                "action": "query",
+                "query": "SELECT invalid_sql FROM nowhere",
+                "path": tmp_db,
+            },
+            ctx,
+        )
         assert "Error" in result or "error" in result.lower()
 
     def test_execute_empty_query(self, ctx: ToolContext, tmp_db: str) -> None:
         """Empty query should return error."""
-        result = execute({
-            "type": "sqlite",
-            "action": "query",
-            "query": "",
-            "path": tmp_db,
-        }, ctx)
+        result = execute(
+            {
+                "type": "sqlite",
+                "action": "query",
+                "query": "",
+                "path": tmp_db,
+            },
+            ctx,
+        )
         assert "Error" in result or "required" in result.lower()
 
     def test_execute_unknown_action(self, ctx: ToolContext, tmp_db: str) -> None:
         """Unknown action should return error."""
-        result = execute({
-            "type": "sqlite",
-            "action": "nonexistent",
-            "path": tmp_db,
-        }, ctx)
+        result = execute(
+            {
+                "type": "sqlite",
+                "action": "nonexistent",
+                "path": tmp_db,
+            },
+            ctx,
+        )
         assert "Error" in result or "unknown" in result.lower()

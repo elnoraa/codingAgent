@@ -2,14 +2,12 @@
 
 from __future__ import annotations
 
-import pytest
-
 from src.diagrams import (
+    MERMAID_BLOCK_RE,
     extract_mermaid_blocks,
     get_mermaid_url,
-    render_diagram_ascii,
     process_mermaid_blocks,
-    MERMAID_BLOCK_RE,
+    render_diagram_ascii,
 )
 
 
@@ -26,11 +24,7 @@ class TestExtractMermaidBlocks:
         assert blocks == []
 
     def test_multiple_blocks(self) -> None:
-        text = (
-            "```mermaid\ngraph LR\nA-->B\n```\n"
-            "text\n"
-            "```mermaid\nsequenceDiagram\nA->>B: Hi\n```"
-        )
+        text = "```mermaid\ngraph LR\nA-->B\n```\ntext\n```mermaid\nsequenceDiagram\nA->>B: Hi\n```"
         blocks = extract_mermaid_blocks(text)
         assert len(blocks) == 2
         assert "graph LR" in blocks[0]["code"]
@@ -47,7 +41,7 @@ class TestExtractMermaidBlocks:
         blocks = extract_mermaid_blocks(text)
         assert len(blocks) == 1
         # Verify positions
-        assert text[blocks[0]["start"]:blocks[0]["end"]] == "```mermaid\ngraph TD\nA-->B\n```"
+        assert text[blocks[0]["start"] : blocks[0]["end"]] == "```mermaid\ngraph TD\nA-->B\n```"
 
 
 class TestGetMermaidUrl:
@@ -61,7 +55,7 @@ class TestGetMermaidUrl:
         code = "graph LR; A-->B;"
         url = get_mermaid_url(code)
         # URL should contain a base64-like component after the base URL
-        query_part = url[len("https://mermaid.ink/img/"):]
+        query_part = url[len("https://mermaid.ink/img/") :]
         assert len(query_part) > 5
 
     def test_different_inputs_produce_different_urls(self) -> None:

@@ -11,7 +11,7 @@ from typing import cast
 
 import pytest
 
-from src.session import save_session, load_session, list_sessions, delete_session, _redact_text, _redact_messages
+from src.session import _redact_messages, _redact_text, delete_session, list_sessions, load_session, save_session
 
 
 @pytest.fixture
@@ -99,12 +99,18 @@ def test_list_sessions_empty(temp_working_dir: str) -> None:
 
 def test_list_sessions_returns_sorted(temp_working_dir: str) -> None:
     save_session(
-        name="alpha", messages=[], mode="code",
-        working_directory=temp_working_dir, model="m1",
+        name="alpha",
+        messages=[],
+        mode="code",
+        working_directory=temp_working_dir,
+        model="m1",
     )
     save_session(
-        name="beta", messages=[{"role": "user", "content": "x"}], mode="plan",
-        working_directory=temp_working_dir, model="m2",
+        name="beta",
+        messages=[{"role": "user", "content": "x"}],
+        mode="plan",
+        working_directory=temp_working_dir,
+        model="m2",
     )
 
     sessions = list_sessions(temp_working_dir)
@@ -122,8 +128,11 @@ def test_list_sessions_ignores_non_json(temp_working_dir: str) -> None:
     (s_dir / "readme.txt").write_text("not a session", encoding="utf-8")
 
     save_session(
-        name="valid", messages=[], mode="code",
-        working_directory=temp_working_dir, model="m",
+        name="valid",
+        messages=[],
+        mode="code",
+        working_directory=temp_working_dir,
+        model="m",
     )
 
     sessions = list_sessions(temp_working_dir)
@@ -133,8 +142,11 @@ def test_list_sessions_ignores_non_json(temp_working_dir: str) -> None:
 
 def test_delete_session_removes_file(temp_working_dir: str) -> None:
     save_session(
-        name="temp", messages=[], mode="code",
-        working_directory=temp_working_dir, model="m",
+        name="temp",
+        messages=[],
+        mode="code",
+        working_directory=temp_working_dir,
+        model="m",
     )
     assert delete_session("temp", temp_working_dir) is True
     assert load_session("temp", temp_working_dir) is None
@@ -150,8 +162,11 @@ def test_round_trip_preserves_data(temp_working_dir: str) -> None:
         {"role": "assistant", "content": "response"},
     ]
     save_session(
-        name="roundtrip", messages=original_messages, mode="plan",
-        working_directory=temp_working_dir, model="deepseek-chat",
+        name="roundtrip",
+        messages=original_messages,
+        mode="plan",
+        working_directory=temp_working_dir,
+        model="deepseek-chat",
     )
 
     data = load_session("roundtrip", temp_working_dir)
@@ -300,6 +315,7 @@ def test_save_session_truncates_long_name(temp_working_dir: str) -> None:
     )
     assert "Error" not in path
     import os as _os
+
     filename = _os.path.basename(path)
     saved_name = filename.replace(".json", "")
     assert len(saved_name) <= _MAX_FILENAME_LENGTH

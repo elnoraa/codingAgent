@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import pytest
+
 from src.tools import ToolContext
-from src.tools.ask_user import execute, ask_user_tool, AskUserException
+from src.tools.ask_user import AskUserException, ask_user_tool, execute
 
 
 def test_tool_definition() -> None:

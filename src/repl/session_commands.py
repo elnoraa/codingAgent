@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, cast
 
-from src.formatting import bold, dim, green, red, cyan
+from src.formatting import bold, cyan, dim, green, red
 
 if TYPE_CHECKING:
     from src.repl.repl import Repl
@@ -13,7 +13,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-def handle_session_save(repl: "Repl", parts: list[str]) -> None:
+def handle_session_save(repl: Repl, parts: list[str]) -> None:
     """Save the current session."""
     from src.session import save_session
 
@@ -40,7 +40,7 @@ def handle_session_save(repl: "Repl", parts: list[str]) -> None:
         print(f"  {green('✓')} {dim('Session saved to')} {cyan(result)}")
 
 
-def handle_session_load(repl: "Repl", parts: list[str]) -> None:
+def handle_session_load(repl: Repl, parts: list[str]) -> None:
     """Load a saved session."""
     from src.session import load_session
 
@@ -70,7 +70,7 @@ def handle_session_load(repl: "Repl", parts: list[str]) -> None:
     print(f"  {green('✓')} {dim('Loaded session:')} {cyan(name)} {dim(f'({msg_count} messages, {loaded_mode} mode)')}")
 
 
-def handle_session_list(repl: "Repl") -> None:
+def handle_session_list(repl: Repl) -> None:
     """List all saved sessions."""
     from src.session import list_sessions
 
@@ -92,7 +92,7 @@ def handle_session_list(repl: "Repl") -> None:
         print(f"  {cyan(name.rjust(20))}  {dim(display_time)}  {dim(f'({msg_count} msgs, {mode})')}")
 
 
-def handle_persona(repl: "Repl", parts: list[str]) -> None:
+def handle_persona(repl: Repl, parts: list[str]) -> None:
     """Set or clear the custom persona."""
     if len(parts) < 2:
         print(f"  {dim('Usage: /persona <text>')}")

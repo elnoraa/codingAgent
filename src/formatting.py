@@ -8,12 +8,10 @@ from __future__ import annotations
 
 import difflib
 import json
-import os
 import sys
 import threading
 import time
-from typing import Any, TextIO
-
+from typing import TextIO
 
 # ── ANSI color helpers ─────────────────────────────────────────────────────
 
@@ -114,6 +112,7 @@ def print_panel(title: str, content: str, style: str = "cyan") -> None:
     try:
         from rich.console import Console
         from rich.panel import Panel
+
         console = Console()
         console.print(Panel(content, title=title, border_style=style))
     except ImportError:
@@ -129,6 +128,7 @@ def print_table(title: str, columns: list[str], rows: list[list[str]]) -> None:
     try:
         from rich.console import Console
         from rich.table import Table
+
         table = Table(title=title, title_style="bold")
         for col in columns:
             table.add_column(col)
@@ -152,6 +152,7 @@ def print_separator(style: str = "dim") -> None:
     try:
         from rich.console import Console
         from rich.rule import Rule
+
         Console().print(Rule(style=style))
     except ImportError:
         print(f"  {'─' * 60}")
@@ -202,7 +203,7 @@ class Spinner:
             # Test if the terminal supports braille characters
             "⠋".encode(encoding)
             self._chars = self.SPINNER_CHARS_BRAILLE
-        except (UnicodeEncodeError, UnicodeDecodeError):
+        except UnicodeEncodeError, UnicodeDecodeError:
             self._chars = self.SPINNER_CHARS_ASCII
 
     @property
@@ -254,12 +255,14 @@ def show_diff_and_confirm(original: str, modified: str, filepath: str) -> bool:
 
     Returns True if user confirms, False if user rejects.
     """
-    diff_lines = list(difflib.unified_diff(
-        original.splitlines(keepends=True),
-        modified.splitlines(keepends=True),
-        fromfile=filepath,
-        tofile=filepath,
-    ))
+    diff_lines = list(
+        difflib.unified_diff(
+            original.splitlines(keepends=True),
+            modified.splitlines(keepends=True),
+            fromfile=filepath,
+            tofile=filepath,
+        )
+    )
 
     if not diff_lines:
         return True  # No changes
@@ -279,6 +282,6 @@ def show_diff_and_confirm(original: str, modified: str, filepath: str) -> bool:
     print(f"\n  {yellow('Apply these changes?')} [Y/n] ", end="", flush=True)
     try:
         response = input().strip().lower()
-    except (EOFError, KeyboardInterrupt):
+    except EOFError, KeyboardInterrupt:
         response = "n"
     return response in ("", "y", "yes")

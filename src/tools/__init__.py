@@ -22,10 +22,10 @@ from src.tool_base import (
     Tool,
     ToolContext,
     ToolRegistry,
+    record_file_timestamp,
+    record_session_start,
     register_post_edit_hook,
     run_post_edit_hooks,
-    record_session_start,
-    record_file_timestamp,
     was_file_modified_during_session,
 )
 
@@ -46,15 +46,15 @@ def _reload_src_modules() -> None:
     """
     # Reload in dependency order (modules with no src.* deps first)
     _modules = [
-        "src.logging_config",   # no src.* dependencies
-        "src.mode",             # no src.* dependencies
-        "src.plan",             # depends on src.logging_config
-        "src.session",          # depends on src.logging_config
-        "src.profiles",         # depends on src.logging_config
-        "src.notifications",    # depends on src.logging_config
-        "src.prompts",          # depends on src.mode
-        "src.python_repl",      # depends on src.logging_config
-        "src.client",           # depends on src.logging_config
+        "src.logging_config",  # no src.* dependencies
+        "src.mode",  # no src.* dependencies
+        "src.plan",  # depends on src.logging_config
+        "src.session",  # depends on src.logging_config
+        "src.profiles",  # depends on src.logging_config
+        "src.notifications",  # depends on src.logging_config
+        "src.prompts",  # depends on src.mode
+        "src.python_repl",  # depends on src.logging_config
+        "src.client",  # depends on src.logging_config
     ]
     for mod_name in _modules:
         if mod_name in sys.modules:

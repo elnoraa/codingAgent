@@ -9,15 +9,14 @@ from pathlib import Path
 import pytest
 
 from src.backup import (
-    create_backup,
-    list_backups,
-    restore_backup,
-    clean_backups,
     _get_backup_dir,
     _get_dir_size,
     _is_git_repo,
+    clean_backups,
+    create_backup,
+    list_backups,
+    restore_backup,
 )
-
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -27,11 +26,13 @@ def _init_git_repo(tmp_path: Path) -> None:
     subprocess.run(["git", "init"], cwd=tmp_path, capture_output=True)
     subprocess.run(
         ["git", "config", "user.email", "test@test.com"],
-        cwd=tmp_path, capture_output=True,
+        cwd=tmp_path,
+        capture_output=True,
     )
     subprocess.run(
         ["git", "config", "user.name", "Test"],
-        cwd=tmp_path, capture_output=True,
+        cwd=tmp_path,
+        capture_output=True,
     )
     # Create and commit an initial file so git has something to work with
     (tmp_path / "README.md").write_text("# Test Project")
@@ -128,7 +129,10 @@ class TestCreateBackup:
         assert "backup" in result.lower() or "✓" in result
         # Check that a backup branch was created
         branches = subprocess.run(
-            ["git", "branch"], cwd=tmp_path, capture_output=True, text=True,
+            ["git", "branch"],
+            cwd=tmp_path,
+            capture_output=True,
+            text=True,
         )
         assert "backup_" in branches.stdout
 
@@ -209,7 +213,7 @@ class TestSymlinkSafety:
 
     def test_restore_blocked_by_outside_symlink(self, tmp_path: Path) -> None:
         """Restore should be blocked if backup contains symlinks to outside."""
-        from src.backup import restore_backup, _get_backup_dir
+        from src.backup import _get_backup_dir, restore_backup
 
         # Manually create a backup directory with a malicious symlink
         backup_dir = _get_backup_dir() / "test_restore_blocked"
@@ -217,14 +221,14 @@ class TestSymlinkSafety:
         (backup_dir / "safe_file.txt").write_text("safe content", encoding="utf-8")
 
         # Create a symlink pointing outside the backup
-        import os
         try:
             os.symlink(
                 str(tmp_path.resolve().parent / "evil_outside.txt"),
                 str(backup_dir / "malicious_link"),
             )
-        except (OSError, PermissionError):
+        except OSError, PermissionError:
             import shutil
+
             shutil.rmtree(backup_dir)
             pytest.skip("Cannot create symlinks on this system")
 
@@ -238,11 +242,13 @@ class TestSymlinkSafety:
         assert not (target / "safe_file.txt").exists()
 
         import shutil
+
         shutil.rmtree(backup_dir)
 
     def test_create_backup_does_not_follow_symlinks(self) -> None:
         """Copy backup should use symlinks=False (not follow symlinks)."""
         import inspect
+
         from src import backup
 
         # Verify the source code uses symlinks=False
@@ -252,7 +258,9 @@ class TestSymlinkSafety:
     def test_restore_copy_uses_follow_symlinks_false(self) -> None:
         """Restore should use follow_symlinks=False for copy2."""
         import inspect
+
         from src import backup
+
         restore_src = inspect.getsource(backup._restore_copy)
         assert "follow_symlinks=False" in restore_src
         assert "symlinks=False" in restore_src

@@ -1,13 +1,11 @@
 from __future__ import annotations
 
-import logging
 import os
 import subprocess
 from typing import Any
 
-from src.tools import Tool, ToolContext
-
 from src.logging_config import get_logger
+from src.tools import Tool, ToolContext
 
 logger = get_logger(__name__)
 
@@ -131,7 +129,9 @@ def _generate_commit_message(diff_text: str, diff_stat: str) -> str:
     has_css = any(f.endswith(css_exts) for f in changed_files)
     has_docs = any(f.endswith(doc_exts) for f in changed_files)
     has_tests = any("test" in f.lower() for f in changed_files)
-    has_config = any(f in ("package.json", "pyproject.toml", "setup.py", "setup.cfg", "Cargo.toml", "go.mod") for f in changed_files)
+    has_config = any(
+        f in ("package.json", "pyproject.toml", "setup.py", "setup.cfg", "Cargo.toml", "go.mod") for f in changed_files
+    )
 
     # Build message
     parts: list[str] = []

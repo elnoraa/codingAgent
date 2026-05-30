@@ -7,19 +7,25 @@ line-level error details.
 
 from __future__ import annotations
 
-import logging
 import os
 import py_compile
 from typing import Any
 
-from src.tools import Tool, ToolContext
 from src.logging_config import get_logger
+from src.tools import Tool, ToolContext
 
 logger = get_logger(__name__)
 
-IGNORE_DIRS = frozenset({
-    "node_modules", ".git", "__pycache__", ".venv", ".mypy_cache", ".pytest_cache",
-})
+IGNORE_DIRS = frozenset(
+    {
+        "node_modules",
+        ".git",
+        "__pycache__",
+        ".venv",
+        ".mypy_cache",
+        ".pytest_cache",
+    }
+)
 
 
 def execute(args: dict[str, Any], _ctx: ToolContext) -> str:
@@ -41,6 +47,7 @@ def execute(args: dict[str, Any], _ctx: ToolContext) -> str:
             dirs[:] = [d for d in dirs if d not in IGNORE_DIRS and not d.startswith(".")]
 
             from src.utils import validate_walk_path
+
             root_error = validate_walk_path(root, _ctx.working_directory)
             if root_error:
                 dirs.clear()
@@ -66,7 +73,9 @@ def execute(args: dict[str, Any], _ctx: ToolContext) -> str:
             msg = str(exc)
             results.append(f"ERR {filepath}  {msg}")
 
-    summary = f"\n{'─' * 40}\nChecked {len(files_to_check)} file(s): {len(files_to_check) - errors} passed, {errors} failed."
+    summary = (
+        f"\n{'─' * 40}\nChecked {len(files_to_check)} file(s): {len(files_to_check) - errors} passed, {errors} failed."
+    )
     return "\n".join(results) + summary
 
 

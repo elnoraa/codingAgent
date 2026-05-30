@@ -24,11 +24,14 @@ def test_accepts_oldText() -> None:
         ctx = ToolContext(working_directory=tmp)
         from src.tools.edit_file import execute
 
-        result = execute({
-            "path": filepath,
-            "oldText": "hello",
-            "newText": "hi",
-        }, ctx)
+        result = execute(
+            {
+                "path": filepath,
+                "oldText": "hello",
+                "newText": "hi",
+            },
+            ctx,
+        )
 
         assert "Applied edit" in result
         assert Path(filepath).read_text(encoding="utf-8") == "hi world"
@@ -43,11 +46,14 @@ def test_accepts_old_string() -> None:
         ctx = ToolContext(working_directory=tmp)
         from src.tools.edit_file import execute
 
-        result = execute({
-            "path": filepath,
-            "old_string": "hello",
-            "new_string": "hi",
-        }, ctx)
+        result = execute(
+            {
+                "path": filepath,
+                "old_string": "hello",
+                "new_string": "hi",
+            },
+            ctx,
+        )
 
         assert "Applied edit" in result
         assert Path(filepath).read_text(encoding="utf-8") == "hi world"
@@ -62,12 +68,15 @@ def test_oldText_takes_precedence_over_old_string() -> None:
         ctx = ToolContext(working_directory=tmp)
         from src.tools.edit_file import execute
 
-        result = execute({
-            "path": filepath,
-            "oldText": "alpha",
-            "old_string": "beta",
-            "newText": "gamma",
-        }, ctx)
+        result = execute(
+            {
+                "path": filepath,
+                "oldText": "alpha",
+                "old_string": "beta",
+                "newText": "gamma",
+            },
+            ctx,
+        )
 
         assert "Applied edit" in result
         assert Path(filepath).read_text(encoding="utf-8") == "gamma beta"

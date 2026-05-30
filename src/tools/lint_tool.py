@@ -5,13 +5,10 @@ Auto-detects configured linters and runs them on modified files.
 
 from __future__ import annotations
 
-import json
-import logging
 import os
 import subprocess
 from typing import Any
 
-from src.tools import Tool, ToolContext
 from src.logging_config import get_logger
 
 logger = get_logger(__name__)
@@ -29,8 +26,7 @@ LINTER_CONFIGS: dict[str, dict[str, Any]] = {
         "fix_cmd": None,  # flake8 has no auto-fix
     },
     "eslint": {
-        "config_files": [".eslintrc.js", ".eslintrc.json", ".eslintrc.yaml",
-                         ".eslintrc.yml", "eslint.config.js"],
+        "config_files": [".eslintrc.js", ".eslintrc.json", ".eslintrc.yaml", ".eslintrc.yml", "eslint.config.js"],
         "check_cmd": ["npx", "eslint"],
         "fix_cmd": ["npx", "eslint", "--fix"],
     },
@@ -73,7 +69,7 @@ def run_linter(
     Returns:
         Lint output or error message
     """
-    from src.utils import green, yellow, red
+    from src.utils import green, yellow
 
     linter = detect_linter(working_dir)
     if linter is None:
@@ -135,6 +131,7 @@ def _lint_post_edit_hook(filepath: str, result: str) -> str:
 # Register hook when module loads
 try:
     from src.tools import register_post_edit_hook
+
     register_post_edit_hook(_lint_post_edit_hook)
 except ImportError:
     pass

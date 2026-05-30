@@ -11,10 +11,8 @@ with a ``.encrypted`` extension instead of ``.json``.
 from __future__ import annotations
 
 import json
-import logging
 import os
 import re
-import time
 from datetime import datetime
 from pathlib import Path
 from typing import Any, cast
@@ -34,31 +32,31 @@ SESSION_KEY_ENV = "CODING_AGENT_SESSION_KEY"
 # Patterns that may indicate sensitive content in messages
 _SENSITIVE_PATTERNS: list[tuple[str, str]] = [
     (r'[\'"]?(?:sk-[a-zA-Z0-9]{20,})[\'"]?', "API key (e.g. sk-...)"),
-    (r'(?:ANTHROPIC_API_KEY|OPENAI_API_KEY|API_KEY)', "API key environment variable"),
+    (r"(?:ANTHROPIC_API_KEY|OPENAI_API_KEY|API_KEY)", "API key environment variable"),
     (r'(?:password|passwd|secret)\s*[:=]\s*[\'"]?\S+', "potential password/secret"),
 ]
 
 # Sensitive patterns to redact from session data before saving to disk
 _SESSION_REDACT_PATTERNS: list[tuple[str, str]] = [
     # Anthropic / OpenAI / generic API keys
-    (r'(sk-[a-zA-Z0-9\-]{20,})', 'sk-***REDACTED***'),
+    (r"(sk-[a-zA-Z0-9\-]{20,})", "sk-***REDACTED***"),
     # AWS access keys
-    (r'(AKIA[0-9A-Z]{16})', 'AKIA***REDACTED***'),
+    (r"(AKIA[0-9A-Z]{16})", "AKIA***REDACTED***"),
     # GitHub tokens
-    (r'(ghp_[a-zA-Z0-9]{36})', 'ghp_***REDACTED***'),
-    (r'(github_pat_[a-zA-Z0-9_]{80,})', 'github_pat_***REDACTED***'),
+    (r"(ghp_[a-zA-Z0-9]{36})", "ghp_***REDACTED***"),
+    (r"(github_pat_[a-zA-Z0-9_]{80,})", "github_pat_***REDACTED***"),
     # Password/secret assignments
-    (r'(password\s*[:=]\s*["\x27]?)[^"\x27,;\s}]+', r'\1***REDACTED***'),
-    (r'(passwd\s*[:=]\s*["\x27]?)[^"\x27,;\s}]+', r'\1***REDACTED***'),
-    (r'(secret\s*[:=]\s*["\x27]?)[^"\x27,;\s}]+', r'\1***REDACTED***'),
+    (r'(password\s*[:=]\s*["\x27]?)[^"\x27,;\s}]+', r"\1***REDACTED***"),
+    (r'(passwd\s*[:=]\s*["\x27]?)[^"\x27,;\s}]+', r"\1***REDACTED***"),
+    (r'(secret\s*[:=]\s*["\x27]?)[^"\x27,;\s}]+', r"\1***REDACTED***"),
     # Database connection strings with credentials
-    (r'((?:mongodb(?:\+srv)?|postgres(?:ql)?|mysql|redis)://)[^@\s]+@', r'\1***USER***@'),
+    (r"((?:mongodb(?:\+srv)?|postgres(?:ql)?|mysql|redis)://)[^@\s]+@", r"\1***USER***@"),
     # JWT tokens
-    (r'(eyJ[a-zA-Z0-9_\-]{10,}\.[a-zA-Z0-9_\-]{10,}\.[a-zA-Z0-9_\-]{10,})', 'eyJ***REDACTED***'),
+    (r"(eyJ[a-zA-Z0-9_\-]{10,}\.[a-zA-Z0-9_\-]{10,}\.[a-zA-Z0-9_\-]{10,})", "eyJ***REDACTED***"),
     # Private key headers
-    (r'-----BEGIN\s+(RSA|DSA|EC|OPENSSH|PGP)\s+PRIVATE\s+KEY-----', '-----BEGIN REDACTED PRIVATE KEY-----'),
+    (r"-----BEGIN\s+(RSA|DSA|EC|OPENSSH|PGP)\s+PRIVATE\s+KEY-----", "-----BEGIN REDACTED PRIVATE KEY-----"),
     # Bearer tokens in headers
-    (r'(Authorization:\s*Bearer\s+)[a-zA-Z0-9._\x2d]+', r'\1***REDACTED***'),
+    (r"(Authorization:\s*Bearer\s+)[a-zA-Z0-9._\x2d]+", r"\1***REDACTED***"),
 ]
 
 
@@ -114,10 +112,12 @@ def _get_cipher() -> Any | None:
         return None
     try:
         from cryptography.fernet import Fernet
+
         # If key is not a raw 44-char Fernet key, derive one via SHA-256
         if len(key) != 44:
             import base64
             import hashlib
+
             derived = hashlib.sha256(key.encode()).digest()
             key = base64.urlsafe_b64encode(derived)
         return Fernet(key)
@@ -139,8 +139,7 @@ def _check_sensitive_content(messages: list[dict[str, object]]) -> list[str]:
             for pattern, desc in _SENSITIVE_PATTERNS:
                 if re.search(pattern, content, re.IGNORECASE):
                     warnings.append(
-                        f"Potential {desc} detected in message content. "
-                        f"Set {SESSION_KEY_ENV} for encryption."
+                        f"Potential {desc} detected in message content. Set {SESSION_KEY_ENV} for encryption."
                     )
                     break  # One warning per message
         elif isinstance(content, list):
@@ -151,8 +150,7 @@ def _check_sensitive_content(messages: list[dict[str, object]]) -> list[str]:
                     for pattern, desc in _SENSITIVE_PATTERNS:
                         if re.search(pattern, block_content, re.IGNORECASE):
                             warnings.append(
-                                f"Potential {desc} detected in tool output. "
-                                f"Set {SESSION_KEY_ENV} for encryption."
+                                f"Potential {desc} detected in tool output. Set {SESSION_KEY_ENV} for encryption."
                             )
                             break
     return warnings
@@ -201,7 +199,13 @@ def save_session(
         encrypted = cipher.encrypt(json_bytes)
         with open(filepath, "wb") as f:
             f.write(encrypted)
-        logger.info("Session saved (encrypted): name=%s, mode=%s, messages=%d, file=%s", safe_name, mode, len(messages), filepath)
+        logger.info(
+            "Session saved (encrypted): name=%s, mode=%s, messages=%d, file=%s",
+            safe_name,
+            mode,
+            len(messages),
+            filepath,
+        )
     else:
         # Plain JSON save
         filepath = os.path.join(s_dir, f"{safe_name}.json")
@@ -224,7 +228,7 @@ def load_session(name: str, working_directory: str) -> dict[str, object] | None:
     filepath = os.path.join(s_dir, f"{safe_name}.json")
     if os.path.isfile(filepath):
         try:
-            with open(filepath, "r", encoding="utf-8") as f:
+            with open(filepath, encoding="utf-8") as f:
                 data: dict[str, object] = json.load(f)
             msg_count = len(cast("list[object]", data.get("messages", [])))
             logger.info("Session loaded: name=%s, messages=%d, mode=%s", safe_name, msg_count, data.get("mode", "?"))
@@ -245,7 +249,9 @@ def load_session(name: str, working_directory: str) -> dict[str, object] | None:
                 decrypted = cipher.decrypt(f.read())
             data = json.loads(decrypted.decode("utf-8"))
             msg_count = len(cast("list[object]", data.get("messages", [])))
-            logger.info("Session loaded (encrypted): name=%s, messages=%d, mode=%s", safe_name, msg_count, data.get("mode", "?"))
+            logger.info(
+                "Session loaded (encrypted): name=%s, messages=%d, mode=%s", safe_name, msg_count, data.get("mode", "?")
+            )
             return data
         except Exception as exc:
             logger.warning("Failed to load encrypted session %s: %s", safe_name, exc)
@@ -275,30 +281,34 @@ def list_sessions(working_directory: str) -> list[dict[str, object]]:
                     data = json.loads(decrypted.decode("utf-8"))
                 else:
                     # Can't read encrypted files without key, show basic info
-                    sessions.append({
-                        "name": fname[:-10],  # Remove .encrypted
-                        "saved_at": "unknown (encrypted)",
-                        "mode": "unknown",
-                        "model": "unknown",
-                        "message_count": 0,
-                        "filepath": filepath,
-                        "encrypted": True,
-                    })
+                    sessions.append(
+                        {
+                            "name": fname[:-10],  # Remove .encrypted
+                            "saved_at": "unknown (encrypted)",
+                            "mode": "unknown",
+                            "model": "unknown",
+                            "message_count": 0,
+                            "filepath": filepath,
+                            "encrypted": True,
+                        }
+                    )
                     continue
             else:
-                with open(filepath, "r", encoding="utf-8") as f:
+                with open(filepath, encoding="utf-8") as f:
                     data = json.load(f)
 
-            sessions.append({
-                "name": data.get("name", fname[:-5] if fname.endswith(".json") else fname[:-10]),
-                "saved_at": data.get("saved_at", "unknown"),
-                "mode": data.get("mode", "unknown"),
-                "model": data.get("model", "unknown"),
-                "message_count": len(cast("list[object]", data.get("messages", []))),
-                "filepath": filepath,
-                "encrypted": fname.endswith(".encrypted"),
-            })
-        except (json.JSONDecodeError, OSError):
+            sessions.append(
+                {
+                    "name": data.get("name", fname[:-5] if fname.endswith(".json") else fname[:-10]),
+                    "saved_at": data.get("saved_at", "unknown"),
+                    "mode": data.get("mode", "unknown"),
+                    "model": data.get("model", "unknown"),
+                    "message_count": len(cast("list[object]", data.get("messages", []))),
+                    "filepath": filepath,
+                    "encrypted": fname.endswith(".encrypted"),
+                }
+            )
+        except json.JSONDecodeError, OSError:
             continue
 
     # Sort newest first

@@ -18,7 +18,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    import types
+    pass
 
 _logger = logging.getLogger(__name__)
 
@@ -120,7 +120,7 @@ class ToolContext:
         if self.file_snapshots is None:
             return
         try:
-            with open(path, "r", encoding="utf-8") as _f:
+            with open(path, encoding="utf-8") as _f:
                 content = _f.read()
         except FileNotFoundError:
             content = ""
@@ -151,7 +151,7 @@ class ToolContext:
             with open(path, "w", encoding="utf-8") as _f:
                 _f.write(content)
             return True
-        except (IndexError, OSError):
+        except IndexError, OSError:
             return False
 
     def validate_write_path(self, path: str) -> str | None:
@@ -160,6 +160,7 @@ class ToolContext:
         Delegates to ``src.validation.validate_write_path``.
         """
         from src.validation import validate_write_path as _validate
+
         return _validate(path, self.working_directory)
 
 
@@ -226,6 +227,7 @@ class ToolRegistry:
         Returns the number of tools registered.
         """
         from src.tools import reload_tools
+
         self._tools.clear()
         discovered = reload_tools()
         for tool in discovered:

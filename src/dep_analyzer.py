@@ -7,9 +7,7 @@ depends on by analyzing imports using the `ast` module.
 from __future__ import annotations
 
 import ast
-import logging
 import os
-from typing import cast
 
 from .logging_config import get_logger
 
@@ -35,7 +33,9 @@ class ImportGraph:
 
         for root, dirs, files in os.walk(directory):
             # Skip hidden dirs and common non-project dirs
-            dirs[:] = [d for d in dirs if not d.startswith(".") and d not in ("__pycache__", "node_modules", "venv", ".venv")]
+            dirs[:] = [
+                d for d in dirs if not d.startswith(".") and d not in ("__pycache__", "node_modules", "venv", ".venv")
+            ]
             for fname in files:
                 if not fname.endswith(".py"):
                     continue
@@ -71,16 +71,17 @@ class ImportGraph:
         self._built = True
         logger.info(
             "Import graph built: %d files, %d import relationships",
-            len(self._imports), sum(len(v) for v in self._imports.values()),
+            len(self._imports),
+            sum(len(v) for v in self._imports.values()),
         )
 
     def _parse_imports(self, filepath: str) -> set[str]:
         """Parse a Python file and extract all imported module names."""
         imports: set[str] = set()
         try:
-            with open(filepath, "r", encoding="utf-8", errors="replace") as f:
+            with open(filepath, encoding="utf-8", errors="replace") as f:
                 tree = ast.parse(f.read(), filename=filepath)
-        except (SyntaxError, OSError):
+        except SyntaxError, OSError:
             return imports
 
         for node in ast.walk(tree):

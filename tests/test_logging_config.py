@@ -10,8 +10,12 @@ from collections.abc import Iterator
 import pytest
 
 from src.logging_config import (
-    setup_logging, get_logger, AestFormatter, SensitiveDataFilter,
-    LOG_FORMAT, DATE_FORMAT,
+    DATE_FORMAT,
+    LOG_FORMAT,
+    AestFormatter,
+    SensitiveDataFilter,
+    get_logger,
+    setup_logging,
 )
 
 
@@ -134,10 +138,13 @@ class TestSensitiveDataFilter:
     def test_redacts_api_key(self) -> None:
         """API keys in log messages should be redacted."""
         record = logging.LogRecord(
-            name="test", level=logging.INFO,
-            pathname=__file__, lineno=42,
+            name="test",
+            level=logging.INFO,
+            pathname=__file__,
+            lineno=42,
             msg="Using API key: sk-ant-abcdefghijklmnop1234567890abcdef",
-            args=(), exc_info=None,
+            args=(),
+            exc_info=None,
         )
         assert SensitiveDataFilter().filter(record)
         assert "sk-***REDACTED***" in record.msg
@@ -146,10 +153,13 @@ class TestSensitiveDataFilter:
     def test_redacts_password(self) -> None:
         """Password values in log messages should be redacted."""
         record = logging.LogRecord(
-            name="test", level=logging.INFO,
-            pathname=__file__, lineno=42,
+            name="test",
+            level=logging.INFO,
+            pathname=__file__,
+            lineno=42,
             msg='password = "supersecret123"',
-            args=(), exc_info=None,
+            args=(),
+            exc_info=None,
         )
         assert SensitiveDataFilter().filter(record)
         assert "***REDACTED***" in record.msg
@@ -159,9 +169,13 @@ class TestSensitiveDataFilter:
         """Normal log messages without sensitive data should be unchanged."""
         original = "File written successfully: /home/user/project/main.py"
         record = logging.LogRecord(
-            name="test", level=logging.INFO,
-            pathname=__file__, lineno=42,
-            msg=original, args=(), exc_info=None,
+            name="test",
+            level=logging.INFO,
+            pathname=__file__,
+            lineno=42,
+            msg=original,
+            args=(),
+            exc_info=None,
         )
         assert SensitiveDataFilter().filter(record)
         assert record.msg == original
@@ -171,10 +185,13 @@ class TestSensitiveDataFilter:
         # The pattern needs to match. We'll use a message format where
         # the arg appears in a context the filter recognizes as sensitive.
         record = logging.LogRecord(
-            name="test", level=logging.INFO,
-            pathname=__file__, lineno=42,
+            name="test",
+            level=logging.INFO,
+            pathname=__file__,
+            lineno=42,
             msg="password=%s",
-            args=("my_secret_pass",), exc_info=None,
+            args=("my_secret_pass",),
+            exc_info=None,
         )
         assert SensitiveDataFilter().filter(record)
         # The record.msg should have been redacted, including the %s placeholder
@@ -203,10 +220,13 @@ class TestSensitiveDataFilter:
     def test_redacts_connection_string(self) -> None:
         """Database connection strings in logs should have credentials redacted."""
         record = logging.LogRecord(
-            name="test", level=logging.INFO,
-            pathname=__file__, lineno=42,
+            name="test",
+            level=logging.INFO,
+            pathname=__file__,
+            lineno=42,
             msg="Connecting to mongodb://admin:secretpass@localhost:27017/mydb",
-            args=(), exc_info=None,
+            args=(),
+            exc_info=None,
         )
         assert SensitiveDataFilter().filter(record)
         assert "***USER***" in record.msg
@@ -216,10 +236,13 @@ class TestSensitiveDataFilter:
     def test_redacts_jwt_token(self) -> None:
         """JWT tokens in logs should be redacted."""
         record = logging.LogRecord(
-            name="test", level=logging.INFO,
-            pathname=__file__, lineno=42,
+            name="test",
+            level=logging.INFO,
+            pathname=__file__,
+            lineno=42,
             msg="Token: eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjMifQ.sflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c",
-            args=(), exc_info=None,
+            args=(),
+            exc_info=None,
         )
         assert SensitiveDataFilter().filter(record)
         assert "eyJ***REDACTED***" in record.msg
@@ -227,10 +250,13 @@ class TestSensitiveDataFilter:
     def test_redacts_private_key_header(self) -> None:
         """Private key markers in logs should be redacted."""
         record = logging.LogRecord(
-            name="test", level=logging.INFO,
-            pathname=__file__, lineno=42,
+            name="test",
+            level=logging.INFO,
+            pathname=__file__,
+            lineno=42,
             msg="-----BEGIN RSA PRIVATE KEY-----",
-            args=(), exc_info=None,
+            args=(),
+            exc_info=None,
         )
         assert SensitiveDataFilter().filter(record)
         assert "REDACTED" in record.msg
@@ -239,9 +265,13 @@ class TestSensitiveDataFilter:
     def test_filter_returns_true(self) -> None:
         """The filter should always return True (never suppress records)."""
         record = logging.LogRecord(
-            name="test", level=logging.DEBUG,
-            pathname=__file__, lineno=42,
-            msg="debug message", args=(), exc_info=None,
+            name="test",
+            level=logging.DEBUG,
+            pathname=__file__,
+            lineno=42,
+            msg="debug message",
+            args=(),
+            exc_info=None,
         )
         assert SensitiveDataFilter().filter(record) is True
         assert record.msg == "debug message"
@@ -249,8 +279,10 @@ class TestSensitiveDataFilter:
     def test_redacts_bearer_token_in_args(self) -> None:
         """Bearer tokens passed as formatting args should be redacted."""
         record = logging.LogRecord(
-            name="test", level=logging.INFO,
-            pathname=__file__, lineno=42,
+            name="test",
+            level=logging.INFO,
+            pathname=__file__,
+            lineno=42,
             msg="Auth header: %s",
             args=("Bearer eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjMifQ.sflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c",),
             exc_info=None,

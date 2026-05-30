@@ -1,11 +1,9 @@
 from __future__ import annotations
 
-import logging
 from typing import Any
 
-from src.tools import Tool, ToolContext
-
 from src.logging_config import get_logger
+from src.tools import Tool, ToolContext
 
 logger = get_logger(__name__)
 
@@ -19,9 +17,9 @@ def execute(args: dict[str, Any], _ctx: ToolContext) -> str:
         return 'Error: missing required argument "query".'
 
     try:
-        import urllib.request
-        import urllib.parse
         import re
+        import urllib.parse
+        import urllib.request
 
         encoded = urllib.parse.quote(query)
         url = f"https://html.duckduckgo.com/html/?q={encoded}"
@@ -66,7 +64,7 @@ def execute(args: dict[str, Any], _ctx: ToolContext) -> str:
         return "\n".join(lines).strip()
 
     except ImportError:
-        return 'Error: urllib is not available (standard library issue).'
+        return "Error: urllib is not available (standard library issue)."
     except Exception as exc:
         return f"Error searching the web: {exc}"
 

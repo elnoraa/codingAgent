@@ -7,7 +7,7 @@ import tempfile
 from pathlib import Path
 
 from src.tools import ToolContext
-from src.tools.git_log import git_log_tool, execute
+from src.tools.git_log import execute, git_log_tool
 
 
 def _init_repo(path: str) -> None:

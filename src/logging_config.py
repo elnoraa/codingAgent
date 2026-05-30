@@ -12,7 +12,6 @@ from __future__ import annotations
 
 import datetime
 import logging
-import os
 import re as _re
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
@@ -30,27 +29,27 @@ _AEST_TZ = datetime.timezone(datetime.timedelta(hours=10))
 
 _SENSITIVE_LOG_PATTERNS: list[tuple[str, str]] = [
     # Anthropic / OpenAI / generic API keys (sk-... with alphanumeric and dashes)
-    (r'(sk-[a-zA-Z0-9\-]{20,})', 'sk-***REDACTED***'),
+    (r"(sk-[a-zA-Z0-9\-]{20,})", "sk-***REDACTED***"),
     # API key env var assignments in logs (e.g. ANTHROPIC_API_KEY=sk-...)
-    (r'(ANTHROPIC_API_KEY[^a-zA-Z0-9]\s*["\x27]?)[a-zA-Z0-9_\-]+', r'\1***REDACTED***'),
-    (r'(OPENAI_API_KEY[^a-zA-Z0-9]\s*["\x27]?)[a-zA-Z0-9_\-]+', r'\1***REDACTED***'),
+    (r'(ANTHROPIC_API_KEY[^a-zA-Z0-9]\s*["\x27]?)[a-zA-Z0-9_\-]+', r"\1***REDACTED***"),
+    (r'(OPENAI_API_KEY[^a-zA-Z0-9]\s*["\x27]?)[a-zA-Z0-9_\-]+', r"\1***REDACTED***"),
     # Password/secret assignments (e.g. password = "mypass" or password: mypass)
-    (r'(password\s*[:=]\s*["\x27]?)[^"\x27,;\s}]+', r'\1***REDACTED***'),
-    (r'(passwd\s*[:=]\s*["\x27]?)[^"\x27,;\s}]+', r'\1***REDACTED***'),
-    (r'(secret\s*[:=]\s*["\x27]?)[^"\x27,;\s}]+', r'\1***REDACTED***'),
+    (r'(password\s*[:=]\s*["\x27]?)[^"\x27,;\s}]+', r"\1***REDACTED***"),
+    (r'(passwd\s*[:=]\s*["\x27]?)[^"\x27,;\s}]+', r"\1***REDACTED***"),
+    (r'(secret\s*[:=]\s*["\x27]?)[^"\x27,;\s}]+', r"\1***REDACTED***"),
     # Database connection strings with credentials
-    (r'((?:mongodb(?:\+srv)?|postgres(?:ql)?|mysql|redis)://)[^@\s]+@', r'\1***USER***@'),
+    (r"((?:mongodb(?:\+srv)?|postgres(?:ql)?|mysql|redis)://)[^@\s]+@", r"\1***USER***@"),
     # AWS access keys
-    (r'(AKIA[0-9A-Z]{16})', 'AKIA***REDACTED***'),
+    (r"(AKIA[0-9A-Z]{16})", "AKIA***REDACTED***"),
     # Bearer tokens in headers
-    (r'(Authorization:\s*Bearer\s+)[a-zA-Z0-9._\x2d]+', r'\1***REDACTED***'),
+    (r"(Authorization:\s*Bearer\s+)[a-zA-Z0-9._\x2d]+", r"\1***REDACTED***"),
     # GitHub tokens
-    (r'(ghp_[a-zA-Z0-9]{36})', 'ghp_***REDACTED***'),
-    (r'(github_pat_[a-zA-Z0-9_]{80,})', 'github_pat_***REDACTED***'),
+    (r"(ghp_[a-zA-Z0-9]{36})", "ghp_***REDACTED***"),
+    (r"(github_pat_[a-zA-Z0-9_]{80,})", "github_pat_***REDACTED***"),
     # JWT tokens
-    (r'(eyJ[a-zA-Z0-9_\-]{10,}\.[a-zA-Z0-9_\-]{10,}\.[a-zA-Z0-9_\-]{10,})', 'eyJ***REDACTED***'),
+    (r"(eyJ[a-zA-Z0-9_\-]{10,}\.[a-zA-Z0-9_\-]{10,}\.[a-zA-Z0-9_\-]{10,})", "eyJ***REDACTED***"),
     # Private key headers
-    (r'-----BEGIN\s+(RSA|DSA|EC|OPENSSH|PGP)\s+PRIVATE\s+KEY-----', '-----BEGIN REDACTED PRIVATE KEY-----'),
+    (r"-----BEGIN\s+(RSA|DSA|EC|OPENSSH|PGP)\s+PRIVATE\s+KEY-----", "-----BEGIN REDACTED PRIVATE KEY-----"),
 ]
 
 
@@ -85,7 +84,7 @@ class AestFormatter(logging.Formatter):
 
     def formatTime(self, record: logging.LogRecord, datefmt: str | None = None) -> str:
         """Format the record's timestamp in AEST."""
-        created_utc = datetime.datetime.fromtimestamp(record.created, tz=datetime.timezone.utc)
+        created_utc = datetime.datetime.fromtimestamp(record.created, tz=datetime.UTC)
         aest_time = created_utc.astimezone(_AEST_TZ)
         if datefmt:
             return aest_time.strftime(datefmt)

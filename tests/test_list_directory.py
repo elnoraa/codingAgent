@@ -6,7 +6,7 @@ import tempfile
 from pathlib import Path
 
 from src.tools import ToolContext
-from src.tools.list_directory import list_directory_tool, execute
+from src.tools.list_directory import execute, list_directory_tool
 
 
 def test_tool_definition() -> None:

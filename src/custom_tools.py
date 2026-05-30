@@ -15,21 +15,21 @@ without writing Python code. Supports handler types: bash, http, python.
 from __future__ import annotations
 
 import json
-import logging
 import os
 import re as _re
 import subprocess
 from dataclasses import dataclass, field
 from typing import Any
 
-from .logging_config import get_logger
 from src.tools import Tool, ToolContext
+
+from .logging_config import get_logger
 
 logger = get_logger(__name__)
 
 # Characters that have special meaning in shell and should be blocked
 # in template substitutions for bash-type custom tools
-_SHELL_DANGEROUS_PATTERN = _re.compile(r'[;&|`$(){}]')
+_SHELL_DANGEROUS_PATTERN = _re.compile(r"[;&|`$(){}]")
 
 logger = get_logger(__name__)
 
@@ -37,6 +37,7 @@ logger = get_logger(__name__)
 @dataclass
 class CustomToolDef:
     """Definition of a custom tool from config."""
+
     name: str
     description: str
     input_schema: dict[str, object]
@@ -57,10 +58,7 @@ def _validate_template_value(value: str, handler_type: str) -> str | None:
 
     if handler_type == "bash":
         if _SHELL_DANGEROUS_PATTERN.search(value):
-            return (
-                f"Error: Template substitution value contains shell metacharacters "
-                f"that are not allowed: {value!r}"
-            )
+            return f"Error: Template substitution value contains shell metacharacters that are not allowed: {value!r}"
         if value.startswith("-"):
             return (
                 f"Error: Template substitution value starts with '-' which could "
@@ -170,6 +168,7 @@ def _handle_http_tool(args: dict[str, object], ctx: ToolContext, defn: CustomToo
     # SSRF protection: block requests to private/internal IPs
     try:
         from src.utils import validate_url_target
+
         error = validate_url_target(url)
         if error:
             return error
@@ -177,9 +176,9 @@ def _handle_http_tool(args: dict[str, object], ctx: ToolContext, defn: CustomToo
         pass
 
     try:
-        import urllib.request
         import urllib.error
         import urllib.parse
+        import urllib.request
 
         req = urllib.request.Request(url, method=method)
         with urllib.request.urlopen(req, timeout=15) as response:
@@ -211,6 +210,7 @@ def _handle_python_tool(args: dict[str, object], ctx: ToolContext, defn: CustomT
     if ctx.working_directory:
         try:
             from src.python_repl import PythonRepl
+
             repl = PythonRepl(restrict_to_working_directory=ctx.working_directory)
             # Prepend args as variable assignments so the script can use them
             preamble = "\n".join(f"{k} = {v!r}" for k, v in args.items())
@@ -283,7 +283,7 @@ def load_custom_tools(config_path: str | None, working_directory: str) -> list[T
         return []
 
     try:
-        with open(config_path, "r", encoding="utf-8") as f:
+        with open(config_path, encoding="utf-8") as f:
             data: dict[str, Any] = json.load(f)
     except (OSError, json.JSONDecodeError) as e:
         logger.warning("Failed to load custom tools config: %s", e)
@@ -291,6 +291,7 @@ def load_custom_tools(config_path: str | None, working_directory: str) -> list[T
 
     # ── Integrity check (session-modified file detection) ──────────────
     from src.tools import was_file_modified_during_session
+
     if was_file_modified_during_session(config_path):
         logger.warning(
             "Custom tools config '%s' was modified during the current "
@@ -298,11 +299,11 @@ def load_custom_tools(config_path: str | None, working_directory: str) -> list[T
             config_path,
         )
         print()
-        print(f"  ⚠  **SECURITY WARNING**")
+        print("  ⚠  **SECURITY WARNING**")
         print(f"     Custom tools config '{config_path}' has been modified")
-        print(f"     during this session. This file was written or modified")
-        print(f"     by the AI agent.")
-        print(f"     Proceeding could execute arbitrary commands.")
+        print("     during this session. This file was written or modified")
+        print("     by the AI agent.")
+        print("     Proceeding could execute arbitrary commands.")
         print()
         response = input("  Load anyway? Only say 'yes' if you wrote this file yourself. [y/N] ").strip().lower()
         if response not in ("y", "yes"):
@@ -334,7 +335,8 @@ def load_custom_tools(config_path: str | None, working_directory: str) -> list[T
                     "Loading custom tool '%s' with type '%s' — this tool can "
                     "execute arbitrary %s commands. Ensure the config file is "
                     "trustworthy.",
-                    name, handler_type,
+                    name,
+                    handler_type,
                     "shell" if handler_type == "bash" else "Python",
                 )
 

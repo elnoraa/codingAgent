@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import logging
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -8,6 +7,7 @@ from typing import Any, cast
 
 from anthropic import Anthropic
 from anthropic.types import MessageParam, ToolParam
+
 from src.tools import Tool, ToolContext, ToolRegistry
 
 from .logging_config import get_logger
@@ -90,7 +90,9 @@ class LlmClient:
                     delay = compute_backoff(attempt)
                     logger.warning(
                         "Transient API error (attempt %d/5): %s. Retrying in %.1fs...",
-                        attempt + 1, exc, delay,
+                        attempt + 1,
+                        exc,
+                        delay,
                     )
                     if on_retry:
                         on_retry(attempt + 1, delay)
@@ -127,7 +129,9 @@ class LlmClient:
                     delay = compute_backoff(attempt)
                     logger.warning(
                         "Transient API error (attempt %d/5): %s. Retrying in %.1fs...",
-                        attempt + 1, exc, delay,
+                        attempt + 1,
+                        exc,
+                        delay,
                     )
                     time.sleep(delay)
                     last_exception = exc
@@ -204,7 +208,8 @@ class LlmClient:
                     )
                     logger.warning(
                         "Blocked write tool '%s' in read-only mode (agent=%s)",
-                        name, context.agent_id if context else "?",
+                        name,
+                        context.agent_id if context else "?",
                     )
                 elif tool.interactive and on_interactive_tool is not None:
                     # Interactive tool: pause and get user input via callback
@@ -238,6 +243,7 @@ class LlmClient:
 @dataclass
 class ModelConfig:
     """Configuration for a single model."""
+
     model: str
     max_tokens: int = 8192
     temperature: float = 0.7
@@ -292,11 +298,22 @@ class MultiModelClient:
 
 
 # Parameter names whose values should be redacted in logs
-SENSITIVE_PARAMS = frozenset({
-    "password", "passwd", "secret", "api_key", "apiKey",
-    "token", "auth_token", "access_token", "private_key",
-    "apikey", "api-key", "api.token",
-})
+SENSITIVE_PARAMS = frozenset(
+    {
+        "password",
+        "passwd",
+        "secret",
+        "api_key",
+        "apiKey",
+        "token",
+        "auth_token",
+        "access_token",
+        "private_key",
+        "apikey",
+        "api-key",
+        "api.token",
+    }
+)
 
 
 def _summarize_args(args: dict[str, object]) -> str:

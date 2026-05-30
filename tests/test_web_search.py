@@ -2,8 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterator
-from typing import Any, cast
+from typing import cast
 
 from src.tools import ToolContext
 from src.tools.web_search import execute, web_search_tool

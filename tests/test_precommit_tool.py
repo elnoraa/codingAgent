@@ -3,10 +3,9 @@
 from __future__ import annotations
 
 import tempfile
-from pathlib import Path
 
 from src.tools import ToolContext
-from src.tools.precommit_tool import precommit_tool, execute
+from src.tools.precommit_tool import execute, precommit_tool
 
 
 def test_tool_definition() -> None:

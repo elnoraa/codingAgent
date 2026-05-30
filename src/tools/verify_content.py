@@ -7,13 +7,12 @@ edits were applied correctly without reading the entire file.
 
 from __future__ import annotations
 
-import logging
 import os
 import re
 from typing import Any
 
-from src.tools import Tool, ToolContext
 from src.logging_config import get_logger
+from src.tools import Tool, ToolContext
 
 logger = get_logger(__name__)
 

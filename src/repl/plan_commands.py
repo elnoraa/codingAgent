@@ -4,16 +4,17 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from src.formatting import bold, dim, green, yellow, cyan, red
+from src.formatting import bold, cyan, dim, green, red, yellow
 from src.repl.help_text import plan_name_from_text
 
 if TYPE_CHECKING:
     from src.repl.repl import Repl
 
 
-def _get_last_assistant_text(repl: "Repl") -> str:
+def _get_last_assistant_text(repl: Repl) -> str:
     """Get the last assistant text response from messages."""
     from typing import cast
+
     for msg in reversed(repl.messages):
         if msg.get("role") == "assistant":
             content = msg.get("content", "")
@@ -31,7 +32,7 @@ def _get_last_assistant_text(repl: "Repl") -> str:
     return ""
 
 
-def handle_plan_save(repl: "Repl", cmd: str) -> None:
+def handle_plan_save(repl: Repl, cmd: str) -> None:
     """Handle /plan save <name>."""
     from src.plan import save_pending_plan
 
@@ -57,9 +58,9 @@ def handle_plan_save(repl: "Repl", cmd: str) -> None:
         print(f"  {red('✗ Error saving plan:')} {exc}")
 
 
-def handle_plan_create(repl: "Repl", parts: list[str]) -> None:
+def handle_plan_create(repl: Repl, parts: list[str]) -> None:
     """Handle /plan create <topic> — generate a structured plan template."""
-    from src.plan import save_pending_plan, generate_plan_template
+    from src.plan import generate_plan_template, save_pending_plan
 
     topic_parts = parts[1:] if len(parts) > 1 else []
     if not topic_parts:
@@ -80,9 +81,9 @@ def handle_plan_create(repl: "Repl", parts: list[str]) -> None:
         print(f"  {red('✗ Error creating plan:')} {exc}")
 
 
-def handle_plan_list(repl: "Repl", subcommand: str = "") -> None:
+def handle_plan_list(repl: Repl, subcommand: str = "") -> None:
     """Handle /plan list and /plan list completed."""
-    from src.plan import list_pending_plans, list_completed_plans
+    from src.plan import list_completed_plans, list_pending_plans
 
     show_completed = subcommand == "completed"
     if show_completed:

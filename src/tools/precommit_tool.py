@@ -2,13 +2,12 @@
 
 from __future__ import annotations
 
-import logging
 import os
 import subprocess
 from typing import Any
 
-from src.tools import Tool, ToolContext
 from src.logging_config import get_logger
+from src.tools import Tool, ToolContext
 
 logger = get_logger(__name__)
 
@@ -20,7 +19,9 @@ def _run_precommit(cmd: list[str], ctx: ToolContext, timeout: int = 60) -> tuple
     try:
         result = subprocess.run(
             ["pre-commit"] + cmd,
-            capture_output=True, text=True, cwd=ctx.working_directory,
+            capture_output=True,
+            text=True,
+            cwd=ctx.working_directory,
             timeout=timeout,
         )
         return result.returncode, result.stdout.strip(), result.stderr.strip()
@@ -39,6 +40,7 @@ def _load_config(ctx: ToolContext) -> dict[str, Any] | None:
         return None
     try:
         import yaml
+
         with open(config_path) as f:
             return yaml.safe_load(f)
     except Exception as e:
@@ -63,7 +65,7 @@ def execute(args: dict[str, Any], ctx: ToolContext) -> str:
         installed = os.path.exists(os.path.join(ctx.working_directory, ".git", "hooks", "pre-commit"))
 
         result = [
-            f"\n  Pre-commit Configuration:",
+            "\n  Pre-commit Configuration:",
             f"  {'─' * 40}",
             f"  Config: {os.path.join(ctx.working_directory, PRE_COMMIT_CONFIG)}",
             f"  Hooks installed: {'Yes' if installed else 'No'}",
@@ -133,10 +135,7 @@ def execute(args: dict[str, Any], ctx: ToolContext) -> str:
         return f"Cache cleaned.\n{stdout}"
 
     else:
-        return (
-            f"Unknown action: {action}\n"
-            f"Available actions: status, install, run, update, validate, clean"
-        )
+        return f"Unknown action: {action}\nAvailable actions: status, install, run, update, validate, clean"
 
 
 precommit_tool = Tool(

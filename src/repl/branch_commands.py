@@ -4,13 +4,13 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from src.formatting import bold, dim, green, red, cyan
+from src.formatting import bold, dim, green, red
 
 if TYPE_CHECKING:
     from src.repl.repl import Repl
 
 
-def handle_fork(repl: "Repl", args: str) -> None:
+def handle_fork(repl: Repl, args: str) -> None:
     """Fork the conversation at the current point."""
     from src.branch_manager import BranchManager
 
@@ -26,7 +26,7 @@ def handle_fork(repl: "Repl", args: str) -> None:
         print("  Cannot fork 'main' branch.")
         return
 
-    if not hasattr(repl, '_branch_manager') or repl._branch_manager is None:
+    if not hasattr(repl, "_branch_manager") or repl._branch_manager is None:
         repl._branch_manager = BranchManager(repl.messages)
 
     if repl._branch_manager.fork(name, description):
@@ -35,11 +35,11 @@ def handle_fork(repl: "Repl", args: str) -> None:
         print(f"  {red('✗')} Branch '{name}' already exists.")
 
 
-def handle_branch(repl: "Repl", args: str) -> None:
+def handle_branch(repl: Repl, args: str) -> None:
     """Switch to or manage branches."""
     from src.branch_manager import BranchManager
 
-    if not hasattr(repl, '_branch_manager') or repl._branch_manager is None:
+    if not hasattr(repl, "_branch_manager") or repl._branch_manager is None:
         repl._branch_manager = BranchManager(repl.messages)
 
     parts = args.strip().split(maxsplit=1)
@@ -80,9 +80,9 @@ def handle_branch(repl: "Repl", args: str) -> None:
 
     else:
         print(f"  Active branch: {green(repl._branch_manager.active_branch)}")
-        print(f"  Use: /branch list, /branch switch <name>, /branch delete <name>")
+        print("  Use: /branch list, /branch switch <name>, /branch delete <name>")
 
 
-def handle_branches(repl: "Repl", args: str) -> None:
+def handle_branches(repl: Repl, args: str) -> None:
     """Alias for /branches list."""
     handle_branch(repl, "list")

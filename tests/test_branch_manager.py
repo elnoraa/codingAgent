@@ -4,10 +4,7 @@ from __future__ import annotations
 
 import time
 
-from typing import Any
-
 from src.branch_manager import Branch, BranchManager
-
 
 # ── Branch dataclass tests ────────────────────────────────────────────────
 

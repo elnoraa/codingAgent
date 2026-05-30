@@ -4,19 +4,29 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from src.formatting import bold, dim, green, yellow, red, cyan
+from src.formatting import bold, dim, green, red, yellow
 
 if TYPE_CHECKING:
     from src.repl.repl import Repl
 
 
-def handle_task(repl: "Repl", args: str) -> None:
+def handle_task(repl: Repl, args: str) -> None:
     """Handle /task commands."""
     from datetime import datetime as _dt
+
     from src.task_manager import (
-        STATUS_IN_PROGRESS, STATUS_COMPLETED, STATUS_FAILED, STATUS_PENDING,
-        TaskStep, create_task, load_task,
-        list_tasks, complete_step, delete_task, update_context, _save_task,
+        STATUS_COMPLETED,
+        STATUS_FAILED,
+        STATUS_IN_PROGRESS,
+        STATUS_PENDING,
+        TaskStep,
+        _save_task,
+        complete_step,
+        create_task,
+        delete_task,
+        list_tasks,
+        load_task,
+        update_context,
     )
 
     parts = args.strip().split(maxsplit=2)

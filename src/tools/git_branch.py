@@ -2,12 +2,11 @@
 
 from __future__ import annotations
 
-import logging
 import subprocess
 from typing import Any
 
-from src.tools import Tool, ToolContext
 from src.logging_config import get_logger
+from src.tools import Tool, ToolContext
 
 logger = get_logger(__name__)
 
@@ -17,7 +16,9 @@ def _run_git(cmd: list[str], ctx: ToolContext) -> tuple[int, str, str]:
     try:
         result = subprocess.run(
             ["git"] + cmd,
-            capture_output=True, text=True, cwd=ctx.working_directory,
+            capture_output=True,
+            text=True,
+            cwd=ctx.working_directory,
             timeout=30,
         )
         return result.returncode, result.stdout.strip(), result.stderr.strip()
@@ -96,10 +97,7 @@ def execute(args: dict[str, Any], ctx: ToolContext) -> str:
         return stdout or "(no differences)"
 
     else:
-        return (
-            f"Unknown action: {action}\n"
-            f"Available actions: list, create, switch, merge, delete, force_delete, diff"
-        )
+        return f"Unknown action: {action}\nAvailable actions: list, create, switch, merge, delete, force_delete, diff"
 
 
 git_branch_tool = Tool(

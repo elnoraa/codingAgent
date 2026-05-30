@@ -6,7 +6,7 @@ import tempfile
 from pathlib import Path
 
 from src.tools import ToolContext
-from src.tools.rename_file import rename_file_tool, execute
+from src.tools.rename_file import execute, rename_file_tool
 
 
 def test_tool_definition() -> None:
@@ -31,10 +31,13 @@ def test_rename_file_basic() -> None:
 def test_rename_missing_source() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         ctx = ToolContext(working_directory=tmp)
-        result = execute({
-            "source": str(Path(tmp) / "nonexistent.txt"),
-            "destination": str(Path(tmp) / "new.txt"),
-        }, ctx)
+        result = execute(
+            {
+                "source": str(Path(tmp) / "nonexistent.txt"),
+                "destination": str(Path(tmp) / "new.txt"),
+            },
+            ctx,
+        )
         assert "Error" in result or "not found" in result.lower()
 
 

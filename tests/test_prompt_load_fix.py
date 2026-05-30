@@ -10,13 +10,11 @@ If any of these tests fail, it means a fix was regressed.
 
 from __future__ import annotations
 
-import os
 import tempfile
 from pathlib import Path
 
-from src.prompts import BUILTIN_PROMPTS, load_prompt
 from src.mode import PLAN_MODE_SYSTEM_PROMPT
-
+from src.prompts import BUILTIN_PROMPTS, load_prompt
 
 # ── Tests for Bug 1: /prompt load ──────────────────────────────────────
 

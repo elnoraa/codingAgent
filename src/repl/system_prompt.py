@@ -12,9 +12,9 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-def build_system_prompt(repl: "Repl") -> str:
+def build_system_prompt(repl: Repl) -> str:
     """Build the system prompt for the current mode, including persona, rules, and context files."""
-    from src.mode import PLAN_MODE_SYSTEM_PROMPT, ASK_MODE_SYSTEM_PROMPT
+    from src.mode import ASK_MODE_SYSTEM_PROMPT, PLAN_MODE_SYSTEM_PROMPT
 
     if repl.mode == "plan":
         base = PLAN_MODE_SYSTEM_PROMPT
@@ -29,7 +29,7 @@ def build_system_prompt(repl: "Repl") -> str:
     coding_agent_path = os.path.join(repl.working_directory, "coding-agent.md")
     if os.path.isfile(coding_agent_path):
         try:
-            with open(coding_agent_path, "r", encoding="utf-8") as f:
+            with open(coding_agent_path, encoding="utf-8") as f:
                 rules_text = f.read().strip()
             if rules_text:
                 coding_agent_rules = (
@@ -37,7 +37,7 @@ def build_system_prompt(repl: "Repl") -> str:
                     "The following rules are MANDATORY and MUST be followed at all times:\n"
                     f"{rules_text}"
                 )
-        except (OSError, IOError):
+        except OSError:
             pass  # If we can't read it, silently skip
 
     # Restart instruction (CODE mode only)
@@ -95,6 +95,7 @@ def build_system_prompt(repl: "Repl") -> str:
     context_section = ""
     if repl._context_files:
         import glob as _glob
+
         injected: list[str] = []
         for pattern in repl._context_files:
             matched = _glob.glob(os.path.join(repl.working_directory, pattern))
@@ -102,19 +103,16 @@ def build_system_prompt(repl: "Repl") -> str:
                 if not os.path.isfile(filepath):
                     continue
                 try:
-                    with open(filepath, "r", encoding="utf-8", errors="replace") as f:
+                    with open(filepath, encoding="utf-8", errors="replace") as f:
                         content = f.read(2000)  # cap at 2000 chars
                     relpath = os.path.relpath(filepath, repl.working_directory)
-                    injected.append(
-                        f"### `{relpath}`\n```\n{content}\n```"
-                    )
-                except (OSError, IOError):
+                    injected.append(f"### `{relpath}`\n```\n{content}\n```")
+                except OSError:
                     continue
         if injected:
             context_section = (
                 "\n\n## Project Context Files\n"
-                "The following key project files are provided for context:\n\n"
-                + "\n\n".join(injected)
+                "The following key project files are provided for context:\n\n" + "\n\n".join(injected)
             )
 
     return (
@@ -131,7 +129,7 @@ def build_system_prompt(repl: "Repl") -> str:
     )
 
 
-def build_orchestrator_system_prompt(repl: "Repl") -> str:
+def build_orchestrator_system_prompt(repl: Repl) -> str:
     """Return a base system prompt for the orchestrator (less decoration)."""
     return (
         f"Current working directory: {repl.working_directory}\n"

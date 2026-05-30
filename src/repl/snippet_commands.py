@@ -4,14 +4,14 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from src.formatting import bold, dim, green, red
+from src.formatting import bold, green, red
 from src.repl.ui import format_size
 
 if TYPE_CHECKING:
     from src.repl.repl import Repl
 
 
-def _get_last_assistant_response(repl: "Repl") -> str:
+def _get_last_assistant_response(repl: Repl) -> str:
     """Get the last assistant text response."""
     for msg in reversed(repl.messages):
         if msg.get("role") == "assistant":
@@ -21,9 +21,9 @@ def _get_last_assistant_response(repl: "Repl") -> str:
     return ""
 
 
-def handle_snippet(repl: "Repl", args: str) -> None:
+def handle_snippet(repl: Repl, args: str) -> None:
     """Handle /snippet commands."""
-    from src.snippets import list_snippets, save_snippet, load_snippet, delete_snippet
+    from src.snippets import delete_snippet, list_snippets, load_snippet, save_snippet
 
     parts = args.strip().split(maxsplit=1)
     subcommand = parts[0].lower() if parts else ""
@@ -36,8 +36,8 @@ def handle_snippet(repl: "Repl", args: str) -> None:
             return
         print(f"\n  {bold('Saved Snippets')}")
         for s in snippets:
-            desc = f" — {s['description']}" if s['description'] else ""
-            size_str = format_size(s['size'])
+            desc = f" — {s['description']}" if s["description"] else ""
+            size_str = format_size(s["size"])
             print(f"  {green(s['name'])}{desc} ({size_str})")
 
     elif subcommand == "save":

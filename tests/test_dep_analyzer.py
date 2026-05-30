@@ -1,4 +1,5 @@
 """Tests for the dependency graph / impact analyzer."""
+
 from __future__ import annotations
 
 import os

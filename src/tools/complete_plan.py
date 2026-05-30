@@ -2,9 +2,9 @@ from __future__ import annotations
 
 from typing import Any
 
-from src.tools import Tool, ToolContext
-from src.plan import complete_plan
 from src.logging_config import get_logger
+from src.plan import complete_plan
+from src.tools import Tool, ToolContext
 
 logger = get_logger(__name__)
 

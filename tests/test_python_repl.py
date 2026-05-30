@@ -1,4 +1,5 @@
 """Tests for the Python REPL integration."""
+
 from __future__ import annotations
 
 from src.python_repl import PythonRepl

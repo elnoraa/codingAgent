@@ -6,7 +6,7 @@ import tempfile
 from pathlib import Path
 
 from src.tools import ToolContext
-from src.tools.verify_content import verify_content_tool, execute
+from src.tools.verify_content import execute, verify_content_tool
 
 
 def test_tool_definition() -> None:
@@ -55,11 +55,14 @@ def test_regex_matching() -> None:
         f = Path(tmp) / "test.txt"
         f.write_text("error: something broke at line 42", encoding="utf-8")
         ctx = ToolContext(working_directory=tmp)
-        result = execute({
-            "path": str(f),
-            "shouldContain": [r"error:.*line \d+"],
-            "regex": True,
-        }, ctx)
+        result = execute(
+            {
+                "path": str(f),
+                "shouldContain": [r"error:.*line \d+"],
+                "regex": True,
+            },
+            ctx,
+        )
         assert "PASS" in result
 
 

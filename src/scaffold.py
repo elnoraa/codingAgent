@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import logging
 import os
 import re
 import shutil
@@ -27,22 +26,26 @@ def list_templates() -> list[dict[str, Any]]:
     if BUILTIN_TEMPLATES_DIR.exists():
         for d in BUILTIN_TEMPLATES_DIR.iterdir():
             if d.is_dir():
-                templates.append({
-                    "name": d.name,
-                    "builtin": True,
-                    "description": _get_template_description(d),
-                })
+                templates.append(
+                    {
+                        "name": d.name,
+                        "builtin": True,
+                        "description": _get_template_description(d),
+                    }
+                )
 
     # Scan custom templates
     custom_dir = CUSTOM_TEMPLATES_DIR.resolve()
     if custom_dir.exists():
         for d in custom_dir.iterdir():
             if d.is_dir() and d.name not in [t["name"] for t in templates]:
-                templates.append({
-                    "name": d.name,
-                    "builtin": False,
-                    "description": _get_template_description(d),
-                })
+                templates.append(
+                    {
+                        "name": d.name,
+                        "builtin": False,
+                        "description": _get_template_description(d),
+                    }
+                )
 
     return sorted(templates, key=lambda t: t["name"])
 
@@ -65,9 +68,11 @@ def _get_template_description(template_dir: Path) -> str:
 
 def _substitute_variables(content: str, variables: dict[str, str]) -> str:
     """Replace {{variable}} placeholders with actual values."""
+
     def _replace(match: re.Match[str]) -> str:
         key = match.group(1).strip()
         return variables.get(key, match.group(0))
+
     return re.sub(r"\{\{(\w+)\}\}", _replace, content)
 
 
@@ -88,7 +93,6 @@ def scaffold_project(
     Returns:
         Success or error message
     """
-    from .utils import green
 
     # Find template source
     template_dir = _find_template(template_name)

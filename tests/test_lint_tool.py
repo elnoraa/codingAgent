@@ -6,7 +6,7 @@ import tempfile
 from pathlib import Path
 from unittest.mock import patch
 
-from src.tools.lint_tool import detect_linter, run_linter, _lint_post_edit_hook
+from src.tools.lint_tool import _lint_post_edit_hook, detect_linter, run_linter
 
 
 class TestDetectLinter:
@@ -25,17 +25,13 @@ class TestDetectLinter:
 
     def test_detects_ruff_via_pyproject(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
-            (Path(tmp) / "pyproject.toml").write_text(
-                '[tool.ruff]\nline-length = 100\n', encoding="utf-8"
-            )
+            (Path(tmp) / "pyproject.toml").write_text("[tool.ruff]\nline-length = 100\n", encoding="utf-8")
             result = detect_linter(tmp)
             assert result == "ruff"
 
     def test_pyproject_without_ruff_ignored(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
-            (Path(tmp) / "pyproject.toml").write_text(
-                '[tool.black]\nline-length = 100\n', encoding="utf-8"
-            )
+            (Path(tmp) / "pyproject.toml").write_text("[tool.black]\nline-length = 100\n", encoding="utf-8")
             result = detect_linter(tmp)
             assert result is None
 

@@ -6,20 +6,29 @@ Read-only by default; writes require explicit confirmation.
 
 from __future__ import annotations
 
-import logging
 import sqlite3
 from typing import Any
 
-from src.tools import Tool, ToolContext
 from src.logging_config import get_logger
+from src.tools import Tool, ToolContext
 
 logger = get_logger(__name__)
 
 # DDL statements that modify data — requires confirmation
-WRITE_STATEMENTS = frozenset({
-    "INSERT", "UPDATE", "DELETE", "DROP", "CREATE", "ALTER",
-    "TRUNCATE", "REPLACE", "GRANT", "REVOKE",
-})
+WRITE_STATEMENTS = frozenset(
+    {
+        "INSERT",
+        "UPDATE",
+        "DELETE",
+        "DROP",
+        "CREATE",
+        "ALTER",
+        "TRUNCATE",
+        "REPLACE",
+        "GRANT",
+        "REVOKE",
+    }
+)
 
 
 def _is_write_query(query: str) -> bool:
@@ -39,9 +48,13 @@ def _connect_postgres(host: str, port: int, database: str, user: str, password: 
     """Connect to PostgreSQL."""
     try:
         import psycopg2  # type: ignore[import-untyped]
+
         conn = psycopg2.connect(
-            host=host, port=port, database=database,
-            user=user, password=password,
+            host=host,
+            port=port,
+            database=database,
+            user=user,
+            password=password,
         )
         return conn
     except ImportError:
@@ -52,9 +65,13 @@ def _connect_mysql(host: str, port: int, database: str, user: str, password: str
     """Connect to MySQL."""
     try:
         import pymysql  # type: ignore[import-untyped]
+
         conn = pymysql.connect(
-            host=host, port=port, database=database,
-            user=user, password=password,
+            host=host,
+            port=port,
+            database=database,
+            user=user,
+            password=password,
         )
         return conn
     except ImportError:
@@ -63,12 +80,10 @@ def _connect_mysql(host: str, port: int, database: str, user: str, password: str
 
 def _format_table_schema(conn: Any, db_type: str) -> str:
     """Get schema information for all tables."""
-    from src.utils import green, dim
+    from src.utils import green
 
     if db_type == "sqlite":
-        cursor = conn.execute(
-            "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name"
-        )
+        cursor = conn.execute("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")
         table_names = [row[0] for row in cursor.fetchall()]
 
         result: list[str] = []
@@ -119,7 +134,7 @@ def _format_table_schema(conn: Any, db_type: str) -> str:
 
 def execute(args: dict[str, Any], ctx: ToolContext) -> str:
     """Execute a database action."""
-    from src.utils import green, bold, dim, yellow, red
+    from src.utils import bold, dim, green, red, yellow
 
     db_type = args.get("type", "sqlite")
     action = args.get("action", "query")
@@ -137,7 +152,8 @@ def execute(args: dict[str, Any], ctx: ToolContext) -> str:
 
     # Validate query length
     if query:
-        from src.utils import validate_length, MAX_QUERY_LENGTH
+        from src.utils import MAX_QUERY_LENGTH, validate_length
+
         error = validate_length(query, MAX_QUERY_LENGTH, "SQL query")
         if error:
             return error

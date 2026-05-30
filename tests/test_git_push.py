@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from src.tools import ToolContext
-from src.tools.git_push import git_push_tool, execute
+from src.tools.git_push import execute, git_push_tool
 
 
 def test_tool_definition() -> None:
@@ -13,6 +13,7 @@ def test_tool_definition() -> None:
 
 def test_execute_not_a_repo() -> None:
     import tempfile
+
     with tempfile.TemporaryDirectory() as tmp:
         ctx = ToolContext(working_directory=tmp)
         result = execute({"branch": "main", "path": tmp}, ctx)

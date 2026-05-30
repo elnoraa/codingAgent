@@ -11,14 +11,15 @@ from __future__ import annotations
 
 from src.tools import Tool, ToolContext
 
-_python_repl_instance: "PythonRepl | None" = None  # type: ignore[name-defined]
+_python_repl_instance: PythonRepl | None = None  # type: ignore[name-defined]
 
 
-def _get_repl(ctx: ToolContext | None = None) -> "PythonRepl":  # type: ignore[name-defined]
+def _get_repl(ctx: ToolContext | None = None) -> PythonRepl:  # type: ignore[name-defined]
     """Get or create the shared PythonRepl instance."""
     global _python_repl_instance
     if _python_repl_instance is None:
         from src.python_repl import PythonRepl
+
         working_dir = ctx.working_directory if ctx else None
         _python_repl_instance = PythonRepl(restrict_to_working_directory=working_dir)
     return _python_repl_instance
@@ -28,10 +29,11 @@ def _execute_python(args: dict[str, object], ctx: ToolContext) -> str:
     """Execute Python code and return the output."""
     code_str = args.get("code", "")
     if not isinstance(code_str, str) or not code_str.strip():
-        return "Error: No code provided. Use {\"code\": \"...\"}."
+        return 'Error: No code provided. Use {"code": "..."}.'
 
     # Validate code length
-    from src.utils import validate_length, MAX_CODE_LENGTH
+    from src.utils import MAX_CODE_LENGTH, validate_length
+
     error = validate_length(code_str, MAX_CODE_LENGTH, "Python code")
     if error:
         return error

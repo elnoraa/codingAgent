@@ -5,7 +5,7 @@ from __future__ import annotations
 from unittest.mock import patch
 
 from src.tools import ToolContext
-from src.tools.url_fetch import url_fetch_tool, execute
+from src.tools.url_fetch import execute, url_fetch_tool
 
 
 def test_tool_definition() -> None:
@@ -48,11 +48,15 @@ def test_execute_content_truncation() -> None:
     long_content = "hello world " * 1000  # ~12KB
 
     with patch("subprocess.run") as mock_run:
-        mock_result = type("Result", (), {
-            "returncode": 0,
-            "stdout": long_content,
-            "stderr": "",
-        })()
+        mock_result = type(
+            "Result",
+            (),
+            {
+                "returncode": 0,
+                "stdout": long_content,
+                "stderr": "",
+            },
+        )()
         mock_run.return_value = mock_result
 
         result = execute({"url": "https://example.com", "maxLength": 100}, ctx)

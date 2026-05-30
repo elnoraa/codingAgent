@@ -7,18 +7,17 @@ but can also run standalone.
 
 from __future__ import annotations
 
-import logging
 import os
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any
 
 import anthropic
 
+from src.tools import Tool, ToolContext, ToolRegistry
+
 from .client import LlmClient
 from .logging_config import get_logger
-from src.tools import Tool, ToolContext, ToolRegistry
 from .utils import estimate_tokens, trim_messages
 
 logger = get_logger(__name__)
@@ -98,7 +97,10 @@ class Agent:
 
         logger.info(
             "Agent initialized: id=%s, role=%s, mode=%s, model=%s",
-            agent_id, config.role, config.mode, config.llm.model,
+            agent_id,
+            config.role,
+            config.mode,
+            config.llm.model,
         )
 
     # ── Public API ─────────────────────────────────────────────────────────
@@ -180,10 +182,7 @@ class Agent:
 
         try:
             # ── Token tracking ─────────────────────────────────────────────
-            tokens_before = sum(
-                estimate_tokens(str(m.get("content", "")))
-                for m in self.messages
-            )
+            tokens_before = sum(estimate_tokens(str(m.get("content", ""))) for m in self.messages)
 
             # ── Environment variables for tools ────────────────────────────
             os.environ["CODING_AGENT_MODE"] = self.config.mode
@@ -201,22 +200,17 @@ class Agent:
                 on_text=callbacks.on_text if callbacks and callbacks.on_text else _noop_on_text,
                 on_tool_call=callbacks.on_tool_call if callbacks and callbacks.on_tool_call else _noop_on_tool_call,
                 on_tool_result=(
-                    lambda name, r: (callbacks.on_tool_result(name, r) if callbacks and callbacks.on_tool_result else None)
+                    lambda name, r: (
+                        callbacks.on_tool_result(name, r) if callbacks and callbacks.on_tool_result else None
+                    )
                 ),
                 read_only=self.is_read_only,
-                on_llm_round_start=(
-                    callbacks.on_llm_round_start if callbacks else None
-                ),
-                on_interactive_tool=(
-                    callbacks.on_interactive_tool if callbacks else None
-                ),
+                on_llm_round_start=(callbacks.on_llm_round_start if callbacks else None),
+                on_interactive_tool=(callbacks.on_interactive_tool if callbacks else None),
             )
 
             # ── Token accounting ───────────────────────────────────────────
-            tokens_after = sum(
-                estimate_tokens(str(m.get("content", "")))
-                for m in self.messages
-            )
+            tokens_after = sum(estimate_tokens(str(m.get("content", ""))) for m in self.messages)
             turn_tokens = tokens_after - tokens_before
             estimated_input = turn_tokens // 2
             estimated_output = turn_tokens - estimated_input
@@ -267,7 +261,7 @@ class Agent:
 
     def _build_system_prompt(self) -> str:
         """Build the full system prompt for this agent's role and config."""
-        from .mode import PLAN_MODE_SYSTEM_PROMPT, ASK_MODE_SYSTEM_PROMPT
+        from .mode import ASK_MODE_SYSTEM_PROMPT, PLAN_MODE_SYSTEM_PROMPT
 
         if self.config.role == "plan":
             base = PLAN_MODE_SYSTEM_PROMPT
@@ -276,36 +270,28 @@ class Agent:
         else:
             base = self.config.system_prompt
 
-        persona = (
-            f"\n\n{self.config.custom_persona}"
-            if self.config.custom_persona
-            else ""
-        )
+        persona = f"\n\n{self.config.custom_persona}" if self.config.custom_persona else ""
 
         # ── Context files injection ────────────────────────────────────────
         context_section = ""
         if self.config.context_files:
             import glob as _glob
+
             injected: list[str] = []
             for pattern in self.config.context_files:
-                matched = _glob.glob(
-                    os.path.join(self.config.working_directory, pattern)
-                )
+                matched = _glob.glob(os.path.join(self.config.working_directory, pattern))
                 for filepath in matched:
                     if not os.path.isfile(filepath):
                         continue
                     try:
-                        with open(filepath, "r", encoding="utf-8", errors="replace") as f:
+                        with open(filepath, encoding="utf-8", errors="replace") as f:
                             content = f.read(2000)
                         relpath = os.path.relpath(filepath, self.config.working_directory)
                         injected.append(f"### `{relpath}`\n```\n{content}\n```")
-                    except (OSError, IOError):
+                    except OSError:
                         continue
             if injected:
-                context_section = (
-                    "\n\n## Project Context Files\n"
-                    + "\n\n".join(injected)
-                )
+                context_section = "\n\n## Project Context Files\n" + "\n\n".join(injected)
 
         return (
             f"Current working directory: {self.config.working_directory}\n"
@@ -318,11 +304,7 @@ class Agent:
 
     def _collect_changed_files(self) -> list[str]:
         """Return list of file paths modified during this run."""
-        return [
-            str(entry.get("path", ""))
-            for entry in self._change_log
-            if entry.get("path")
-        ]
+        return [str(entry.get("path", "")) for entry in self._change_log if entry.get("path")]
 
 
 # ── No-op callbacks (prevent NoneType errors) ──────────────────────────────────

@@ -53,7 +53,7 @@ def _execute(args: dict[str, Any], ctx: ToolContext) -> str:
 
     path = args.get("path", "")
     if not path:
-        return 'Error: path is required for revert action.'
+        return "Error: path is required for revert action."
 
     # Validate path is within the working directory
     error = ctx.validate_write_path(path)

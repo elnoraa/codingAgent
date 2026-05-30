@@ -23,20 +23,24 @@ def _execute_with_read_only_check(
 def test_read_only_mode_blocks_write_tools() -> None:
     """When read_only=True, calling a write tool should return an error."""
     registry = ToolRegistry()
-    registry.register(Tool(
-        name="test_write",
-        description="A write tool",
-        input_schema={"type": "object", "properties": {}},
-        execute=lambda a, c: "executed!",
-        read_only=False,
-    ))
-    registry.register(Tool(
-        name="test_read",
-        description="A read tool",
-        input_schema={"type": "object", "properties": {}},
-        execute=lambda a, c: "data",
-        read_only=True,
-    ))
+    registry.register(
+        Tool(
+            name="test_write",
+            description="A write tool",
+            input_schema={"type": "object", "properties": {}},
+            execute=lambda a, c: "executed!",
+            read_only=False,
+        )
+    )
+    registry.register(
+        Tool(
+            name="test_read",
+            description="A read tool",
+            input_schema={"type": "object", "properties": {}},
+            execute=lambda a, c: "data",
+            read_only=True,
+        )
+    )
 
     ctx = ToolContext(working_directory="/tmp")
 
@@ -57,13 +61,15 @@ def test_read_only_mode_blocks_write_tools() -> None:
 def test_code_mode_allows_write_tools() -> None:
     """When read_only=False, write tools should execute normally."""
     registry = ToolRegistry()
-    registry.register(Tool(
-        name="test_write",
-        description="A write tool",
-        input_schema={},
-        execute=lambda a, c: "executed!",
-        read_only=False,
-    ))
+    registry.register(
+        Tool(
+            name="test_write",
+            description="A write tool",
+            input_schema={},
+            execute=lambda a, c: "executed!",
+            read_only=False,
+        )
+    )
 
     ctx = ToolContext(working_directory="/tmp")
     tool = registry.get("test_write")
@@ -75,13 +81,15 @@ def test_code_mode_allows_write_tools() -> None:
 def test_read_only_mode_allows_read_tools() -> None:
     """Read-only tools should work in both modes."""
     registry = ToolRegistry()
-    registry.register(Tool(
-        name="test_read",
-        description="A read tool",
-        input_schema={},
-        execute=lambda a, c: "data",
-        read_only=True,
-    ))
+    registry.register(
+        Tool(
+            name="test_read",
+            description="A read tool",
+            input_schema={},
+            execute=lambda a, c: "data",
+            read_only=True,
+        )
+    )
 
     ctx = ToolContext(working_directory="/tmp")
     tool = registry.get("test_read")

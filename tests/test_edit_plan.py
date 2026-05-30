@@ -2,12 +2,11 @@
 
 from __future__ import annotations
 
-import os
 import tempfile
 from pathlib import Path
 
-from src.tools.edit_plan import execute as edit_plan_execute
 from src.tools import ToolContext
+from src.tools.edit_plan import execute as edit_plan_execute
 
 
 def _create_test_plan(pending_dir: Path, name: str, content: str) -> Path:
@@ -40,10 +39,10 @@ def test_edit_plan_updates_content() -> None:
 
         updated = (plans_dir / "01-test-plan.md").read_text(encoding="utf-8")
         assert "name: 01-test-plan" in updated  # front-matter preserved
-        assert "status: pending" in updated       # front-matter preserved
-        assert "created_at:" in updated            # front-matter preserved
-        assert "Old content here" not in updated   # replaced
-        assert "New content here" in updated       # new content present
+        assert "status: pending" in updated  # front-matter preserved
+        assert "created_at:" in updated  # front-matter preserved
+        assert "Old content here" not in updated  # replaced
+        assert "New content here" in updated  # new content present
 
 
 def test_edit_plan_without_numeric_prefix() -> None:
@@ -162,7 +161,8 @@ def test_edit_plan_preserves_complex_front_matter() -> None:
         plans_dir.mkdir(parents=True, exist_ok=True)
 
         filepath = plans_dir / "01-complex.md"
-        filepath.write_text("""---
+        filepath.write_text(
+            """---
 name: 01-complex
 status: pending
 created_at: 2026-01-01T00:00:00
@@ -171,14 +171,16 @@ priority: high
 ---
 
 Original body
-""", encoding="utf-8")
+""",
+            encoding="utf-8",
+        )
 
         ctx = ToolContext(working_directory=tmpdir)
         result = edit_plan_execute({"name": "01-complex", "content": "Updated body"}, ctx)
 
         assert "Plan updated" in result
         updated = filepath.read_text(encoding="utf-8")
-        assert "author: test" in updated      # extra field preserved
-        assert "priority: high" in updated     # extra field preserved
+        assert "author: test" in updated  # extra field preserved
+        assert "priority: high" in updated  # extra field preserved
         assert "Original body" not in updated
         assert "Updated body" in updated

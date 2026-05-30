@@ -6,11 +6,8 @@ Supports Windows (powershell), macOS (osascript), and Linux (notify-send).
 
 from __future__ import annotations
 
-import logging
-import os
 import platform
 import subprocess
-import time
 
 from .logging_config import get_logger
 
@@ -26,15 +23,15 @@ def _notify_windows(title: str, message: str) -> bool:
         # Use a PowerShell popup as a simple notification
         ps_script = (
             f'[System.Reflection.Assembly]::LoadWithPartialName("System.Windows.Forms") | Out-Null; '
-            f'$popup = New-Object System.Windows.Forms.NotifyIcon; '
-            f'$popup.Icon = [System.Drawing.SystemIcons]::Information; '
+            f"$popup = New-Object System.Windows.Forms.NotifyIcon; "
+            f"$popup.Icon = [System.Drawing.SystemIcons]::Information; "
             f'$popup.BalloonTipIcon = "Info"; '
             f'$popup.BalloonTipTitle = "{title}"; '
             f'$popup.BalloonTipText = "{message}"; '
-            f'$popup.Visible = $true; '
-            f'$popup.ShowBalloonTip(5000); '
-            f'Start-Sleep -Seconds 5; '
-            f'$popup.Dispose()'
+            f"$popup.Visible = $true; "
+            f"$popup.ShowBalloonTip(5000); "
+            f"Start-Sleep -Seconds 5; "
+            f"$popup.Dispose()"
         )
         result = subprocess.run(
             ["powershell", "-Command", ps_script],
@@ -111,13 +108,15 @@ def play_sound() -> bool:
     try:
         if system == "Windows":
             import winsound  # type: ignore[import-untyped]
+
             winsound.MessageBeep(winsound.MB_OK)
             return True
         elif system == "Darwin":
             # macOS: use afplay with bundled system sound
             subprocess.run(
                 ["afplay", "/System/Library/Sounds/Tink.aiff"],
-                capture_output=True, timeout=2,
+                capture_output=True,
+                timeout=2,
             )
             return True
         else:

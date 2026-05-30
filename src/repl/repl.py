@@ -8,13 +8,12 @@ management. Command handlers and tool runners are in sibling modules.
 from __future__ import annotations
 
 import json
-import logging
 import os
 import time
 from typing import TYPE_CHECKING, Any, cast
 
 from src.client import LlmClient
-from src.formatting import bold, dim, green, yellow, cyan, red, blue, magenta, color_json, Spinner
+from src.formatting import Spinner, bold, cyan, dim, green, magenta, red, yellow
 from src.logging_config import get_logger
 from src.tool_base import ToolContext, ToolRegistry, record_session_start
 from src.utils import estimate_tokens, trim_messages
@@ -25,7 +24,7 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 
-def turn_separator_color(repl: "Repl") -> Any:
+def turn_separator_color(repl: Repl) -> Any:
     """Return the color function for the current mode's separator."""
     if repl.mode == "plan":
         return yellow
@@ -34,7 +33,7 @@ def turn_separator_color(repl: "Repl") -> Any:
     return dim
 
 
-def print_separator(repl: "Repl") -> None:
+def print_separator(repl: Repl) -> None:
     """Print a mode-aware separator line."""
     color_fn = turn_separator_color(repl)
     print(f"  {color_fn('─' * 60)}")
@@ -70,7 +69,7 @@ class Repl:
         self._change_log: list[dict[str, object]] = []
         self._context_files = context_files or []
         self._custom_tools_config = custom_tools_config
-        self._python_repl: "PythonRepl | None" = None
+        self._python_repl: PythonRepl | None = None
         self._import_graph = None
         self._notifications_enabled = notifications_enabled
         self._notifications_min_duration = notifications_min_duration
@@ -138,11 +137,13 @@ class Repl:
 
         # Initialize the import graph
         from src.dep_analyzer import ImportGraph
+
         self._import_graph = ImportGraph()
 
         # Initialize the agent orchestrator for multi-agent support
         from src.orchestrator import Orchestrator
         from src.repl.system_prompt import build_orchestrator_system_prompt
+
         self._orchestrator = Orchestrator(
             default_llm=self.llm,
             default_system_prompt=build_orchestrator_system_prompt(self),
@@ -151,55 +152,57 @@ class Repl:
 
         logger.info(
             "REPL initialized: mode=%s, model=%s, max_tokens=%d, persona=%s",
-            self.mode, self.llm.model, self.max_tokens,
+            self.mode,
+            self.llm.model,
+            self.max_tokens,
             bool(self._custom_persona),
         )
 
     def _register_all_tools(self) -> None:
         """Register all available tools into the registry."""
-        from src.tools.read_file import read_file_tool
-        from src.tools.write_file import write_file_tool
+        from src.tools.api_tool import api_tool
+        from src.tools.ask_user import ask_user_tool
+        from src.tools.bash_tool import bash_tool
+        from src.tools.ci_tool import ci_tool
+        from src.tools.complete_plan import complete_plan_tool
+        from src.tools.config_tool import config_tool
+        from src.tools.db_tool import db_tool
+        from src.tools.diff_tool import diff_tool
+        from src.tools.directory_tree import directory_tree_tool
+        from src.tools.docker_tool import docker_tool
         from src.tools.edit_file import edit_file_tool
+        from src.tools.edit_plan import edit_plan_tool
+        from src.tools.environment import environment_tool
+        from src.tools.file_search import file_search_tool
+        from src.tools.git_branch import git_branch_tool
+        from src.tools.git_commit import git_commit_tool
+        from src.tools.git_log import git_log_tool
+        from src.tools.git_push import git_push_tool
+        from src.tools.git_revert import git_revert_tool
+        from src.tools.git_status import git_status_tool
         from src.tools.glob_tool import glob_tool
         from src.tools.grep_tool import grep_tool
-        from src.tools.bash_tool import bash_tool
-        from src.tools.directory_tree import directory_tree_tool
-        from src.tools.list_directory import list_directory_tool
-        from src.tools.file_search import file_search_tool
-        from src.tools.diff_tool import diff_tool
-        from src.tools.replace_in_files import replace_in_files_tool
-        from src.tools.run_tests import run_tests_tool
-        from src.tools.git_commit import git_commit_tool
-        from src.tools.git_push import git_push_tool
-        from src.tools.git_status import git_status_tool
-        from src.tools.url_fetch import url_fetch_tool
-        from src.tools.think_tool import think_tool
-        from src.tools.restart_session import restart_session_tool
-        from src.tools.web_search import web_search_tool
-        from src.tools.undo_tool import undo_tool
-        from src.tools.python_tool import python_tool
-        from src.tools.write_plan import write_plan_tool
-        from src.tools.complete_plan import complete_plan_tool
-        from src.tools.edit_plan import edit_plan_tool
-        from src.tools.ask_user import ask_user_tool
-        from src.tools.syntax_check import syntax_check_tool
-        from src.tools.verify_content import verify_content_tool
-        from src.tools.config_tool import config_tool
-        from src.tools.git_log import git_log_tool
-        from src.tools.environment import environment_tool
-        from src.tools.spawn_agent import spawn_agent_tool
         from src.tools.list_agents import list_agents_tool
-        from src.tools.send_to_agent import send_to_agent_tool
-        from src.tools.terminate_agent import terminate_agent_tool
-        from src.tools.run_swarm import run_swarm_tool
-        from src.tools.git_revert import git_revert_tool
-        from src.tools.rename_file import rename_file_tool
-        from src.tools.git_branch import git_branch_tool
-        from src.tools.api_tool import api_tool
+        from src.tools.list_directory import list_directory_tool
         from src.tools.precommit_tool import precommit_tool
-        from src.tools.ci_tool import ci_tool
-        from src.tools.db_tool import db_tool
-        from src.tools.docker_tool import docker_tool
+        from src.tools.python_tool import python_tool
+        from src.tools.read_file import read_file_tool
+        from src.tools.rename_file import rename_file_tool
+        from src.tools.replace_in_files import replace_in_files_tool
+        from src.tools.restart_session import restart_session_tool
+        from src.tools.run_swarm import run_swarm_tool
+        from src.tools.run_tests import run_tests_tool
+        from src.tools.send_to_agent import send_to_agent_tool
+        from src.tools.spawn_agent import spawn_agent_tool
+        from src.tools.syntax_check import syntax_check_tool
+        from src.tools.terminate_agent import terminate_agent_tool
+        from src.tools.think_tool import think_tool
+        from src.tools.undo_tool import undo_tool
+        from src.tools.url_fetch import url_fetch_tool
+        from src.tools.verify_content import verify_content_tool
+        from src.tools.web_search import web_search_tool
+        from src.tools.write_file import write_file_tool
+        from src.tools.write_plan import write_plan_tool
 
         self.tools.register(read_file_tool)
         self.tools.register(write_file_tool)
@@ -248,6 +251,7 @@ class Repl:
         # Load custom tools from config
         if self._custom_tools_config:
             from src.custom_tools import load_custom_tools
+
             custom_tools = load_custom_tools(self._custom_tools_config, self.working_directory)
             for ct in custom_tools:
                 self.tools.register(ct)
@@ -257,6 +261,7 @@ class Repl:
         # Load MCP tools from configured servers
         if self._mcp_servers_config:
             from src.mcp_bridge import MCPBridge
+
             try:
                 self._mcp_bridge = MCPBridge(self._mcp_servers_config)
                 mcp_tools = self._mcp_bridge.start()
@@ -265,7 +270,8 @@ class Repl:
                 if mcp_tools:
                     logger.info(
                         "Registered %d MCP tool(s) from %d server(s)",
-                        len(mcp_tools), len(self._mcp_bridge.get_server_info()),
+                        len(mcp_tools),
+                        len(self._mcp_bridge.get_server_info()),
                     )
             except Exception as exc:
                 logger.error("Failed to initialize MCP bridge: %s", exc)
@@ -273,7 +279,7 @@ class Repl:
 
     def start(self) -> None:
         """Start the REPL loop."""
-        from src.repl.ui import setup_tab_completion, _readline_available
+        from src.repl.ui import _readline_available, setup_tab_completion
 
         print()
         print(f"  {bold('Coding Agent')} {dim('v0.6')}")
@@ -305,6 +311,7 @@ class Repl:
             if self._auto_save_interval > 0 and self._last_auto_save_path is not None:
                 try:
                     from src.session import save_session
+
                     path = save_session(
                         name=f"autosave-exit-{int(time.time())}",
                         messages=self.messages,
@@ -373,13 +380,19 @@ class Repl:
 
             try:
                 mode_tag = (
-                    f"{magenta(self.mode.upper())}" if self.mode == "ask"
-                    else f"{yellow(self.mode.upper())}" if self.mode == "plan"
+                    f"{magenta(self.mode.upper())}"
+                    if self.mode == "ask"
+                    else f"{yellow(self.mode.upper())}"
+                    if self.mode == "plan"
                     else f"{cyan(self.mode.upper())}"
                 )
-                wd = self.working_directory.replace(os.environ.get("HOME", "~"), "~") if "HOME" in os.environ else self.working_directory
+                wd = (
+                    self.working_directory.replace(os.environ.get("HOME", "~"), "~")
+                    if "HOME" in os.environ
+                    else self.working_directory
+                )
                 line = read_multiline(self, mode_tag, wd)
-            except (EOFError, KeyboardInterrupt):
+            except EOFError, KeyboardInterrupt:
                 break
 
             if not line:
@@ -390,6 +403,7 @@ class Repl:
             if stripped.startswith("/"):
                 self._turn_number -= 1
                 from src.repl.commands import dispatch
+
                 dispatch(self, stripped)
                 continue
             if stripped.lower() == "exit":
@@ -397,7 +411,9 @@ class Repl:
                 break
 
             # ── Turn header with number ──────────────────────────────────────
-            turn_label = f"  {color_fn('─ ')}Turn {self._turn_number}{color_fn(' ' + '─' * (56 - len(str(self._turn_number))))}"
+            turn_label = (
+                f"  {color_fn('─ ')}Turn {self._turn_number}{color_fn(' ' + '─' * (56 - len(str(self._turn_number))))}"
+            )
             print(turn_label)
 
             # ── Process the turn ─────────────────────────────────────────────
@@ -415,11 +431,13 @@ class Repl:
     def _get_system_prompt(self) -> str:
         """Build the system prompt for the current mode."""
         from src.repl.system_prompt import build_system_prompt
+
         return build_system_prompt(self)
 
     def _get_orchestrator_system_prompt(self) -> str:
         """Return a base system prompt for the orchestrator."""
         from src.repl.system_prompt import build_orchestrator_system_prompt
+
         return build_orchestrator_system_prompt(self)
 
     def _get_last_assistant_text(self) -> str:
@@ -463,28 +481,33 @@ class Repl:
     def _handle_command(self, cmd: str) -> None:
         """Handle a /command by dispatching to the commands module."""
         from src.repl.commands import dispatch
+
         dispatch(self, cmd)
 
     def _estimated_cost(self) -> float:
         """Return estimated total API cost in USD."""
         from src.repl.help_text import MODEL_PRICING
+
         pricing = MODEL_PRICING.get(self.llm.model, {"input": 0.50, "output": 0.50})
         in_cost = (self._input_tokens_total / 1_000_000) * pricing["input"]
         out_cost = (self._output_tokens_total / 1_000_000) * pricing["output"]
         return in_cost + out_cost
 
-    def _get_or_create_python_repl(self) -> "PythonRepl":
+    def _get_or_create_python_repl(self) -> PythonRepl:
         """Get or create the shared Python REPL instance."""
         if self._python_repl is None:
             from src.python_repl import PythonRepl
+
             self._python_repl = PythonRepl()
         return self._python_repl
 
     def _process_turn(self, user_input: str, color_fn: object) -> None:
         """Send a user message to the LLM, stream the response, and show token usage."""
-        from src.repl.help_text import MODEL_PRICING, contains_markdown
+        from src.repl.help_text import contains_markdown
         from src.repl.tool_runner import (
-            on_tool_call, on_tool_result, handle_interactive_tool, check_token_budget,
+            handle_interactive_tool,
+            on_tool_call,
+            on_tool_result,
         )
 
         # Record turn start for latency timeline
@@ -498,8 +521,12 @@ class Repl:
         self._turns_by_mode[self.mode] = self._turns_by_mode.get(self.mode, 0) + 1
         system_prompt = self._get_system_prompt()
         current_system_tokens = estimate_tokens(system_prompt)
-        trimmed = trim_messages(self.messages, self.max_tokens, current_system_tokens,
-                                client=self.llm if self._enable_summarization else None)
+        trimmed = trim_messages(
+            self.messages,
+            self.max_tokens,
+            current_system_tokens,
+            client=self.llm if self._enable_summarization else None,
+        )
         dropped = messages_before - len(trimmed) + 1  # +1 for the just-added message
         if dropped > 0:
             self._show_trim_warning(dropped)
@@ -520,10 +547,7 @@ class Repl:
             # Accumulate full assistant response text for Markdown rendering
             _accumulated_text: list[str] = []
             # Track token usage for this turn
-            tokens_before = sum(
-                estimate_tokens(str(m.get("content", "")))
-                for m in self.messages
-            )
+            tokens_before = sum(estimate_tokens(str(m.get("content", ""))) for m in self.messages)
 
             def _on_text(text: str) -> None:
                 nonlocal text_started
@@ -584,7 +608,8 @@ class Repl:
                     self._spinner = None
 
                 # ── Auto-complete any pending plans (safety net) ─────────────
-                from src.plan import list_pending_plans, complete_plan
+                from src.plan import complete_plan, list_pending_plans
+
                 pending = list_pending_plans(self.working_directory)
                 if len(pending) == 1:
                     plan_name = pending[0].name
@@ -611,10 +636,12 @@ class Repl:
                 full_text = "".join(_accumulated_text)
                 # Process mermaid code blocks
                 from src.diagrams import process_mermaid_blocks
+
                 full_text = process_mermaid_blocks(full_text)
                 # Render with Rich if Markdown formatting detected, else plain text
                 if contains_markdown(full_text):
                     from src.markdown import render_markdown
+
                     color_fn_rendered = turn_separator_color(self)
                     print(f"  {color_fn_rendered('┃')}", end=" ")
                     render_markdown(full_text)
@@ -624,18 +651,17 @@ class Repl:
 
             # ── Finalize turn latency timeline ────────────────────────────
             llm_duration = time.time() - self._turn_start_time
-            self._turn_timeline.append({
-                "turn": len(self._turn_timeline) + 1,
-                "llm_duration": llm_duration,
-                "tools": list(self._current_turn_tools),
-                "total_duration": time.time() - self._turn_start_time,
-            })
+            self._turn_timeline.append(
+                {
+                    "turn": len(self._turn_timeline) + 1,
+                    "llm_duration": llm_duration,
+                    "tools": list(self._current_turn_tools),
+                    "total_duration": time.time() - self._turn_start_time,
+                }
+            )
 
             # ── Show token usage for this turn ──────────────────────────────
-            tokens_after = sum(
-                estimate_tokens(str(m.get("content", "")))
-                for m in self.messages
-            )
+            tokens_after = sum(estimate_tokens(str(m.get("content", ""))) for m in self.messages)
             turn_tokens = tokens_after - tokens_before
             # Track cumulative costs (estimated: split 50/50 in/out for simplicity)
             estimated_input = turn_tokens // 2
@@ -668,7 +694,10 @@ class Repl:
 
         except Exception as exc:
             from anthropic import (
-                APIConnectionError, APIError, RateLimitError, InternalServerError,
+                APIConnectionError,
+                APIError,
+                InternalServerError,
+                RateLimitError,
             )
 
             if self._spinner is not None:

@@ -1,12 +1,10 @@
 from __future__ import annotations
 
-import logging
 import os
 from typing import Any, cast
 
-from src.tools import Tool, ToolContext
-
 from src.logging_config import get_logger
+from src.tools import Tool, ToolContext
 
 logger = get_logger(__name__)
 
@@ -43,9 +41,7 @@ def execute(args: dict[str, Any], _ctx: ToolContext) -> str:
     offset = int(args.get("offset", 0))
     limit = int(args.get("limit", min(MAX_LINES, len(lines) - offset)))
     selected = lines[offset : offset + limit]
-    numbered = "".join(
-        f"{offset + i + 1}\t{line}" for i, line in enumerate(selected)
-    )
+    numbered = "".join(f"{offset + i + 1}\t{line}" for i, line in enumerate(selected))
 
     result = f"File: {path} ({len(lines)} lines)"
     if offset > 0 or limit < len(lines):

@@ -2,12 +2,11 @@
 
 from __future__ import annotations
 
-import logging
 import subprocess
 from typing import Any
 
-from src.tools import Tool, ToolContext
 from src.logging_config import get_logger
+from src.tools import Tool, ToolContext
 
 logger = get_logger(__name__)
 
@@ -17,7 +16,9 @@ def _run_git(cmd: list[str], ctx: ToolContext) -> tuple[int, str, str]:
     try:
         result = subprocess.run(
             ["git"] + cmd,
-            capture_output=True, text=True, cwd=ctx.working_directory,
+            capture_output=True,
+            text=True,
+            cwd=ctx.working_directory,
             timeout=30,
         )
         return result.returncode, result.stdout.strip(), result.stderr.strip()
@@ -98,10 +99,7 @@ def execute(args: dict[str, Any], ctx: ToolContext) -> str:
         return f"Discarded changes in: {files}\n{stdout}"
 
     else:
-        return (
-            f"Unknown action: {action}\n"
-            f"Available actions: unstage, undo_commit, reset_soft, reset_hard, discard"
-        )
+        return f"Unknown action: {action}\nAvailable actions: unstage, undo_commit, reset_soft, reset_hard, discard"
 
 
 git_revert_tool = Tool(

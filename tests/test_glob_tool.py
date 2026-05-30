@@ -6,7 +6,7 @@ import tempfile
 from pathlib import Path
 
 from src.tools import ToolContext
-from src.tools.glob_tool import glob_tool, execute
+from src.tools.glob_tool import execute, glob_tool
 
 
 def test_tool_definition() -> None:

@@ -10,14 +10,16 @@ from pathlib import Path
 import pytest
 
 from src.plan import (
+    _ensure_dirs,
+    _extract_numeric_prefix,
+    _get_all_plan_numbers,
+    _get_next_plan_number,
+    _strip_leading_number,
     complete_plan,
     generate_plan_template,
     list_completed_plans,
     list_pending_plans,
     save_pending_plan,
-    _ensure_dirs,
-    _get_next_plan_number,
-    _strip_leading_number,
 )
 
 
@@ -53,24 +55,23 @@ def test_save_pending_plan_sanitizes_name(temp_wd: str) -> None:
 
 
 def test_save_pending_plan_with_prefixed_name(temp_wd: str) -> None:
-    """A name that already starts with a numeric prefix should NOT double-number.
+    """A name that already starts with a numeric prefix should PRESERVE that number.
 
     e.g. save_pending_plan("05-feat-foo", ...) should produce
-    "01-feat-foo.md" (or whatever the next auto-number is), NOT "01-05-feat-foo.md".
+    "05-feat-foo.md" (preserving the explicit prefix), NOT "01-05-feat-foo.md".
     """
     filepath = save_pending_plan("05-feat-foo", "Content", temp_wd)
     assert os.path.isfile(filepath)
     filename = Path(filepath).name
-    # First number is the auto-number (e.g. "01-"), the second "05-" must not appear
-    assert filename.startswith("01-"), f"Expected auto-number prefix, got: {filename}"
-    assert "05-" not in filename.split("-", 1)[1], f"Old prefix '05-' leaked through: {filename}"
+    # The explicit "05-" should be preserved as the plan number
+    assert filename.startswith("05-"), f"Expected explicit '05-' prefix, got: {filename}"
     assert "feat-foo" in filename
 
 
 def test_write_plan_execute_with_prefixed_name(temp_wd: str) -> None:
-    """write_plan tool with a name like '05-feat-x' should not double-number."""
-    from src.tools.write_plan import execute
+    """write_plan tool with a name like '42-feat-x' should preserve the explicit prefix."""
     from src.tools import ToolContext
+    from src.tools.write_plan import execute
 
     ctx = ToolContext(working_directory=temp_wd)
     args = {"name": "42-feat-my-feature", "content": "# My Feature\n\nDescription."}
@@ -79,13 +80,11 @@ def test_write_plan_execute_with_prefixed_name(temp_wd: str) -> None:
     assert "Plan saved to" in result, f"Unexpected result: {result}"
     filepath = result.replace("Plan saved to ", "")
 
-    # Verify file exists and name isn't doubled
+    # Verify file exists and name uses the explicit prefix, not doubled
     assert os.path.isfile(filepath), f"File not found at: {filepath}"
     filename = Path(filepath).name
-    # Should start with "01-" (the auto-number), not "01-42-"
-    parts = filename.split("-")
-    assert parts[0].isdigit(), f"Expected numeric prefix: {filename}"
-    assert parts[1] != "42", f"Double-numbering detected: {filename}"
+    # Should start with "42-" (the explicit prefix), not "01-42-"
+    assert filename.startswith("42-"), f"Expected explicit '42-' prefix, got: {filename}"
     assert "feat-my-feature" in filename
 
 
@@ -109,6 +108,88 @@ def test_strip_leading_number_edge_cases() -> None:
     assert _strip_leading_number("5") == "5"  # just a digit, no hyphen
     assert _strip_leading_number("5-") == ""  # number + hyphen only
     assert _strip_leading_number("0-foo") == "foo"
+
+
+def test_extract_numeric_prefix_returns_number() -> None:
+    """_extract_numeric_prefix should return the number and stripped name."""
+    num, stripped = _extract_numeric_prefix("111-feat-foo")
+    assert num == 111
+    assert stripped == "feat-foo"
+
+    num, stripped = _extract_numeric_prefix("05-feat-foo")
+    assert num == 5
+    assert stripped == "feat-foo"
+
+    num, stripped = _extract_numeric_prefix("12345-test")
+    assert num == 12345
+    assert stripped == "test"
+
+
+def test_extract_numeric_prefix_no_prefix() -> None:
+    """_extract_numeric_prefix should return (None, name) when no prefix."""
+    num, stripped = _extract_numeric_prefix("feat-foo")
+    assert num is None
+    assert stripped == "feat-foo"
+
+    num, stripped = _extract_numeric_prefix("")
+    assert num is None
+    assert stripped == ""
+
+
+def test_extract_numeric_prefix_edge_cases() -> None:
+    """Edge cases for _extract_numeric_prefix."""
+    # Just a digit with no hyphen — no prefix
+    num, stripped = _extract_numeric_prefix("5")
+    assert num is None
+    assert stripped == "5"
+
+    # Number + hyphen only
+    num, stripped = _extract_numeric_prefix("5-")
+    assert num == 5
+    assert stripped == ""
+
+
+def test_get_all_plan_numbers_returns_numbers(temp_wd: str) -> None:
+    """_get_all_plan_numbers should return all numeric prefixes in use."""
+    # Save some plans with explicit numbers
+    save_pending_plan("50-plan-a", "Content A", temp_wd)
+    save_pending_plan("100-plan-b", "Content B", temp_wd)
+
+    numbers = _get_all_plan_numbers(temp_wd)
+    assert 50 in numbers
+    assert 100 in numbers
+
+
+def test_get_all_plan_numbers_empty(temp_wd: str) -> None:
+    """_get_all_plan_numbers should return empty set when no plans exist."""
+    numbers = _get_all_plan_numbers(temp_wd)
+    assert numbers == set()
+
+
+def test_save_pending_plan_preserves_explicit_prefix(temp_wd: str) -> None:
+    """A name with an explicit numeric prefix like '111-' should preserve that number.
+
+    The saved file should be named '111-<name>.md', not auto-numbered to '01-<name>.md'.
+    """
+    filepath = save_pending_plan("111-feat-add-ruff-to-precommit", "Content", temp_wd)
+    assert os.path.isfile(filepath)
+    filename = Path(filepath).name
+    # Must start with "111-", not "01-" or "001-"
+    assert filename.startswith("111-"), f"Expected '111-' prefix, got: {filename}"
+    assert "feat-add-ruff-to-precommit" in filename
+
+
+def test_save_pending_plan_explicit_prefix_with_conflict(temp_wd: str) -> None:
+    """When an explicit prefix conflicts with an existing plan, auto-assign a new number."""
+    # Create a plan with number 1
+    save_pending_plan("1-first-plan", "Content", temp_wd)
+    # Try to create another with number 1 — should auto-assign instead
+    filepath = save_pending_plan("1-conflicting-plan", "Content", temp_wd)
+    assert os.path.isfile(filepath)
+    filename = Path(filepath).name
+    # Should NOT start with "01-" (since 1 is taken)
+    assert not filename.startswith("01-"), f"Should not reuse '01-' prefix, got: {filename}"
+    assert "conflicting-plan" in filename
 
 
 def test_complete_plan_moves_file(temp_wd: str) -> None:
@@ -224,8 +305,8 @@ def test_ensure_dirs_creates_directories(temp_wd: str) -> None:
 
 def test_write_plan_execute_saves_file(temp_wd: str) -> None:
     """write_plan.execute() should create a valid plan file on disk."""
-    from src.tools.write_plan import execute
     from src.tools import ToolContext
+    from src.tools.write_plan import execute
 
     ctx = ToolContext(working_directory=temp_wd)
     args = {"name": "test-write-plan", "content": "# Test Plan\n\nThis is a test."}
@@ -250,8 +331,8 @@ def test_write_plan_execute_saves_file(temp_wd: str) -> None:
 
 def test_write_plan_execute_relative_path(temp_wd: str) -> None:
     """write_plan.execute() should work with a relative working directory."""
-    from src.tools.write_plan import execute
     from src.tools import ToolContext
+    from src.tools.write_plan import execute
 
     old_cwd = os.getcwd()
     try:
@@ -268,8 +349,8 @@ def test_write_plan_execute_relative_path(temp_wd: str) -> None:
 
 def test_write_plan_execute_empty_string_wd(temp_wd: str) -> None:
     """write_plan.execute() should handle an empty string working directory."""
-    from src.tools.write_plan import execute
     from src.tools import ToolContext
+    from src.tools.write_plan import execute
 
     old_cwd = os.getcwd()
     try:
@@ -286,8 +367,8 @@ def test_write_plan_execute_empty_string_wd(temp_wd: str) -> None:
 
 def test_write_plan_execute_missing_name(temp_wd: str) -> None:
     """execute() should return an error when name is missing."""
-    from src.tools.write_plan import execute
     from src.tools import ToolContext
+    from src.tools.write_plan import execute
 
     ctx = ToolContext(working_directory=temp_wd)
     result = execute({"content": "some content"}, ctx)
@@ -296,8 +377,8 @@ def test_write_plan_execute_missing_name(temp_wd: str) -> None:
 
 def test_write_plan_execute_missing_content(temp_wd: str) -> None:
     """execute() should return an error when content is missing."""
-    from src.tools.write_plan import execute
     from src.tools import ToolContext
+    from src.tools.write_plan import execute
 
     ctx = ToolContext(working_directory=temp_wd)
     result = execute({"name": "some-name"}, ctx)
@@ -306,8 +387,8 @@ def test_write_plan_execute_missing_content(temp_wd: str) -> None:
 
 def test_write_plan_execute_empty_name_after_strip(temp_wd: str) -> None:
     """execute() should return an error for whitespace-only name."""
-    from src.tools.write_plan import execute
     from src.tools import ToolContext
+    from src.tools.write_plan import execute
 
     ctx = ToolContext(working_directory=temp_wd)
     result = execute({"name": "   ", "content": "content"}, ctx)
@@ -316,8 +397,8 @@ def test_write_plan_execute_empty_name_after_strip(temp_wd: str) -> None:
 
 def test_write_plan_execute_empty_content_after_strip(temp_wd: str) -> None:
     """execute() should return an error for whitespace-only content."""
-    from src.tools.write_plan import execute
     from src.tools import ToolContext
+    from src.tools.write_plan import execute
 
     ctx = ToolContext(working_directory=temp_wd)
     result = execute({"name": "test-name", "content": "   "}, ctx)

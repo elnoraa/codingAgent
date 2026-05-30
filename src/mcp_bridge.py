@@ -22,16 +22,14 @@ Usage
 from __future__ import annotations
 
 import asyncio
-import json
 import logging
 import threading
-import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any
 
 from mcp import ClientSession, StdioServerParameters, types
-from mcp.client.stdio import stdio_client
 from mcp.client.sse import sse_client
+from mcp.client.stdio import stdio_client
 
 from src.tools import Tool, ToolContext
 
@@ -124,6 +122,7 @@ def parse_server_configs(raw: list[dict[str, object]]) -> list[MCPServerConfig]:
                 # SSRF protection: block SSE URLs pointing to private/internal IPs
                 try:
                     from src.utils import validate_url_target
+
                     ssrf_error = validate_url_target(str(url))
                     if ssrf_error:
                         logger.warning("Skipping MCP server %r: %s", name, ssrf_error)
@@ -263,7 +262,9 @@ class MCPSession:
 
         logger.info(
             "MCP server %r connected (transport=%s, tools=%d)",
-            cfg.name, cfg.transport, len(self._tools),
+            cfg.name,
+            cfg.transport,
+            len(self._tools),
         )
         return self._tools
 
@@ -384,7 +385,8 @@ class MCPBridge:
         self._native_tools = native_tools
         logger.info(
             "MCP bridge started: %d tool(s) from %d server(s)",
-            len(native_tools), len(self._sessions),
+            len(native_tools),
+            len(self._sessions),
         )
         return native_tools
 
@@ -502,7 +504,7 @@ class MCPBridge:
         )
         try:
             return future.result(timeout=MCP_TOOL_CALL_TIMEOUT)
-        except asyncio.TimeoutError:
+        except TimeoutError:
             return f"Error: MCP tool {server_name}/{tool_name} timed out after {MCP_TOOL_CALL_TIMEOUT}s"
         except Exception as exc:
             return f"Error calling MCP tool {server_name}/{tool_name}: {exc}"
@@ -534,7 +536,8 @@ class MCPBridge:
         except Exception as exc:
             logger.warning(
                 "Failed to connect to MCP server %r: %s",
-                session.config.name, exc,
+                session.config.name,
+                exc,
             )
             # Mark error on session
             session._error = str(exc)  # type: ignore[attr-defined]
@@ -550,6 +553,7 @@ class MCPBridge:
             return None  # No restrictions configured — allow
 
         from urllib.parse import urlparse
+
         try:
             hostname = urlparse(config.url).hostname
         except Exception:
@@ -564,11 +568,7 @@ class MCPBridge:
 
     async def _disconnect_all_async(self) -> None:
         """Disconnect all sessions concurrently."""
-        tasks = [
-            asyncio.create_task(s.disconnect())
-            for s in self._sessions.values()
-            if s.is_connected
-        ]
+        tasks = [asyncio.create_task(s.disconnect()) for s in self._sessions.values() if s.is_connected]
         if tasks:
             await asyncio.gather(*tasks, return_exceptions=True)
 

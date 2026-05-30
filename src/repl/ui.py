@@ -8,7 +8,7 @@ import subprocess
 import tempfile
 from typing import TYPE_CHECKING
 
-from src.formatting import bold, dim, green, yellow, cyan, red, magenta
+from src.formatting import bold, cyan, dim, green, red, yellow
 
 if TYPE_CHECKING:
     from src.repl.repl import Repl
@@ -18,10 +18,12 @@ if TYPE_CHECKING:
 _readline_available = False
 try:
     import readline  # noqa: F401
+
     _readline_available = True
 except ImportError:
     try:
         import pyreadline3  # type: ignore[import-untyped]  # noqa: F401
+
         _readline_available = True
     except ImportError:
         pass
@@ -36,14 +38,49 @@ def setup_tab_completion(repl: Repl) -> None:
 
     # List of all available commands
     commands = [
-        "/help", "/h", "/clear", "/c", "/tools", "/history", "/status", "/s",
-        "/mode", "/plan", "/p", "/ask", "/a", "/code",
-        "/plan", "/edit", "/retry", "/r", "/retry-auto", "/ra",
-        "/save", "/load", "/sessions", "/persona", "/reload", "/restart",
-        "/cost", "/export", "/search", "/model", "/cd", "/rollback",
-        "/config", "/prompt", "/profile", "/changes", "/open",
-        "/python", "/reset-python", "/deps", "/impact",
-        "/q", "/exit",
+        "/help",
+        "/h",
+        "/clear",
+        "/c",
+        "/tools",
+        "/history",
+        "/status",
+        "/s",
+        "/mode",
+        "/plan",
+        "/p",
+        "/ask",
+        "/a",
+        "/code",
+        "/plan",
+        "/edit",
+        "/retry",
+        "/r",
+        "/retry-auto",
+        "/ra",
+        "/save",
+        "/load",
+        "/sessions",
+        "/persona",
+        "/reload",
+        "/restart",
+        "/cost",
+        "/export",
+        "/search",
+        "/model",
+        "/cd",
+        "/rollback",
+        "/config",
+        "/prompt",
+        "/profile",
+        "/changes",
+        "/open",
+        "/python",
+        "/reset-python",
+        "/deps",
+        "/impact",
+        "/q",
+        "/exit",
     ]
 
     def _completer(text: str, state: int) -> str | None:
@@ -74,7 +111,7 @@ def read_multiline(repl: Repl, mode_tag: str, wd_display: str) -> str:
             prompt = f"  {bold(mode_tag)} {cyan(wd_display)} {dim('│')} "
         try:
             raw = input(prompt)
-        except (EOFError, KeyboardInterrupt):
+        except EOFError, KeyboardInterrupt:
             return ""  # signal cancellation
 
         if not raw and not lines:
@@ -139,9 +176,9 @@ def open_external_editor() -> str:
 
         # Read the file back
         try:
-            with open(temp_path, "r", encoding="utf-8") as f:
+            with open(temp_path, encoding="utf-8") as f:
                 content = f.read()
-        except (OSError, IOError) as exc:
+        except OSError as exc:
             print(f"  {yellow('⚠')} {dim(f'Could not read editor output: {exc}')}")
             return ""
 
@@ -174,10 +211,21 @@ def get_file_icon(filepath: str) -> str:
     """Get an emoji icon for a file based on its extension."""
     _, ext = os.path.splitext(filepath)
     icons = {
-        ".py": "🐍", ".js": "📜", ".ts": "📘", ".tsx": "⚛️",
-        ".jsx": "⚛️", ".json": "📋", ".md": "📝", ".yaml": "⚙️",
-        ".yml": "⚙️", ".html": "🌐", ".css": "🎨", ".sh": "💻",
-        ".sql": "🗃️", ".toml": "⚙️", ".ini": "⚙️",
+        ".py": "🐍",
+        ".js": "📜",
+        ".ts": "📘",
+        ".tsx": "⚛️",
+        ".jsx": "⚛️",
+        ".json": "📋",
+        ".md": "📝",
+        ".yaml": "⚙️",
+        ".yml": "⚙️",
+        ".html": "🌐",
+        ".css": "🎨",
+        ".sh": "💻",
+        ".sql": "🗃️",
+        ".toml": "⚙️",
+        ".ini": "⚙️",
     }
     return icons.get(ext.lower(), "📄")
 
@@ -198,7 +246,7 @@ def preview_file(filepath: str) -> None:
     print(f"  {'─' * 60}")
 
     try:
-        with open(filepath, "r", encoding="utf-8") as f:
+        with open(filepath, encoding="utf-8") as f:
             lines = f.readlines()
 
         max_preview = 30

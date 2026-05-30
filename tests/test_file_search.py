@@ -6,7 +6,7 @@ import tempfile
 from pathlib import Path
 
 from src.tools import ToolContext
-from src.tools.file_search import file_search_tool, execute
+from src.tools.file_search import execute, file_search_tool
 
 
 def test_tool_definition() -> None:

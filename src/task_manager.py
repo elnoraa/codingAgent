@@ -3,10 +3,8 @@
 from __future__ import annotations
 
 import json
-import logging
-import os
 import time
-from dataclasses import dataclass, field, asdict
+from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -29,6 +27,7 @@ STATUS_BLOCKED = "blocked"
 @dataclass
 class TaskStep:
     """A single step in a multi-step task."""
+
     id: str
     name: str
     description: str = ""
@@ -47,6 +46,7 @@ class TaskStep:
 @dataclass
 class Task:
     """A multi-step task with progress tracking."""
+
     name: str
     description: str = ""
     steps: list[TaskStep] = field(default_factory=list)
@@ -86,8 +86,7 @@ def _task_path(name: str) -> Path:
     return _ensure_tasks_dir() / f"{safe_name}.json"
 
 
-def create_task(name: str, description: str = "",
-                steps: list[dict[str, str]] | None = None) -> str:
+def create_task(name: str, description: str = "", steps: list[dict[str, str]] | None = None) -> str:
     """Create a new task.
 
     Args:
@@ -105,11 +104,13 @@ def create_task(name: str, description: str = "",
     task_steps: list[TaskStep] = []
     if steps:
         for i, step in enumerate(steps):
-            task_steps.append(TaskStep(
-                id=f"step-{i + 1}",
-                name=step.get("name", f"Step {i + 1}"),
-                description=step.get("description", ""),
-            ))
+            task_steps.append(
+                TaskStep(
+                    id=f"step-{i + 1}",
+                    name=step.get("name", f"Step {i + 1}"),
+                    description=step.get("description", ""),
+                )
+            )
 
     task = Task(
         name=name,
@@ -198,20 +199,17 @@ def list_tasks(status_filter: str | None = None) -> list[dict[str, Any]]:
                     continue
 
                 steps_total = len(data.get("steps", []))
-                steps_done = sum(
-                    1 for s in data.get("steps", [])
-                    if s.get("status") == STATUS_COMPLETED
-                )
+                steps_done = sum(1 for s in data.get("steps", []) if s.get("status") == STATUS_COMPLETED)
 
-                tasks.append({
-                    "name": data["name"],
-                    "description": data.get("description", ""),
-                    "status": data.get("status", STATUS_PENDING),
-                    "progress": f"{steps_done}/{steps_total}",
-                    "updated": datetime.fromtimestamp(
-                        data.get("updated_at", 0)
-                    ).strftime("%Y-%m-%d %H:%M"),
-                })
+                tasks.append(
+                    {
+                        "name": data["name"],
+                        "description": data.get("description", ""),
+                        "status": data.get("status", STATUS_PENDING),
+                        "progress": f"{steps_done}/{steps_total}",
+                        "updated": datetime.fromtimestamp(data.get("updated_at", 0)).strftime("%Y-%m-%d %H:%M"),
+                    }
+                )
             except Exception:
                 continue
 

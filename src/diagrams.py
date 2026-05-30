@@ -6,7 +6,6 @@ rendering via mermaid.ink URL (for browser viewing) or ASCII art fallback.
 
 from __future__ import annotations
 
-import logging
 import re
 import webbrowser
 from typing import Any
@@ -33,11 +32,13 @@ def extract_mermaid_blocks(text: str) -> list[dict[str, Any]]:
     """
     blocks: list[dict[str, Any]] = []
     for match in MERMAID_BLOCK_RE.finditer(text):
-        blocks.append({
-            "code": match.group(1).strip(),
-            "start": match.start(),
-            "end": match.end(),
-        })
+        blocks.append(
+            {
+                "code": match.group(1).strip(),
+                "start": match.start(),
+                "end": match.end(),
+            }
+        )
     return blocks
 
 
@@ -117,7 +118,7 @@ def process_mermaid_blocks(text: str, open_browser: bool = False) -> str:
     Returns:
         Text with mermaid blocks replaced by rendered versions
     """
-    from .utils import dim, cyan
+    from .utils import cyan, dim
 
     blocks = extract_mermaid_blocks(text)
     if not blocks:
@@ -145,6 +146,6 @@ def process_mermaid_blocks(text: str, open_browser: bool = False) -> str:
             open_diagram_in_browser(code)
 
         # Replace the original mermaid block
-        text = text[:block["start"]] + replacement + text[block["end"]:]
+        text = text[: block["start"]] + replacement + text[block["end"] :]
 
     return text

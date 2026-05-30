@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import logging
-import os
 from pathlib import Path
 from typing import Any
 
@@ -33,12 +31,14 @@ def list_snippets() -> list[dict[str, Any]]:
                 # First line is the description if it starts with #
                 lines = content.split("\n")
                 description = lines[0].lstrip("# ").strip() if lines and lines[0].startswith("#") else ""
-                snippets.append({
-                    "name": f.stem,
-                    "description": description,
-                    "size": len(content),
-                    "language": f.suffix.lstrip("."),
-                })
+                snippets.append(
+                    {
+                        "name": f.stem,
+                        "description": description,
+                        "size": len(content),
+                        "language": f.suffix.lstrip("."),
+                    }
+                )
             except Exception as e:
                 logger.debug("Error reading snippet %s: %s", f.name, e)
     return sorted(snippets, key=lambda s: s["name"])

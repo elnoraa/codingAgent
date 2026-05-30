@@ -1,4 +1,5 @@
 """Tests for theme support."""
+
 from __future__ import annotations
 
 from src.theme import Theme, from_dict
@@ -33,12 +34,14 @@ def test_primary_method() -> None:
 
 def test_from_dict_with_named_colors() -> None:
     """Create theme from dict with named colors."""
-    theme = from_dict({
-        "primary": "cyan",
-        "success": "green",
-        "error": "red",
-        "warning": "yellow",
-    })
+    theme = from_dict(
+        {
+            "primary": "cyan",
+            "success": "green",
+            "error": "red",
+            "warning": "yellow",
+        }
+    )
     assert "\033[36m" in theme.primary("x")  # cyan
     assert "\033[32m" in theme.success_text("x")  # green
     assert "\033[31m" in theme.error_text("x")  # red

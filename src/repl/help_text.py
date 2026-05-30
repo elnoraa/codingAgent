@@ -1,9 +1,6 @@
 """Help text and constants for the REPL."""
 
-from typing import cast
-
-from src.formatting import bold, dim, green, yellow, cyan, red, blue, magenta
-
+from src.formatting import bold, green, magenta, yellow
 
 # ── Cost estimates per 1M tokens (in USD) ─────────────────────────────
 MODEL_PRICING: dict[str, dict[str, float]] = {
@@ -15,7 +12,7 @@ MODEL_PRICING: dict[str, dict[str, float]] = {
 
 
 HELP_TEXT = f"""\
-{bold('Commands')}
+{bold("Commands")}
   exit, /q                Exit the agent
   /help, /h               Show this help
   /help <command>         Show detailed help for a specific command
@@ -98,11 +95,11 @@ HELP_TEXT = f"""\
   /deps <file>            Show what a Python file imports (dependencies)
   /impact <file>          Show what imports a Python file (impact analysis)
 
-{bold('Multi-line input')}
+{bold("Multi-line input")}
   End a line with \\  to continue typing on the next line.
   This lets you paste code blocks or long instructions.
 
-{bold('Tools')}
+{bold("Tools")}
   read_file       Read a file's contents
   write_file      Create or overwrite a file
   edit_file       Make targeted search-and-replace edits
@@ -146,10 +143,10 @@ HELP_TEXT = f"""\
   db              Explore databases (SQLite, PostgreSQL, MySQL)
   docker          Manage Docker (containers, images, Compose)
 
-{bold('Modes')}
-  CODE mode  {green('●')}  All tools available (read + write + execute)
-  PLAN mode  {yellow('●')}  Read-only exploration & planning (read-only tools only)
-  ASK mode   {magenta('●')}  Read-only Q&A & explanation (read-only tools only)"""
+{bold("Modes")}
+  CODE mode  {green("●")}  All tools available (read + write + execute)
+  PLAN mode  {yellow("●")}  Read-only exploration & planning (read-only tools only)
+  ASK mode   {magenta("●")}  Read-only Q&A & explanation (read-only tools only)"""
 
 
 COMMAND_HELP: dict[str, str] = {
@@ -454,19 +451,20 @@ See the project documentation for configuration examples.""",
 def contains_markdown(text: str) -> bool:
     """Check if text contains Markdown formatting that would benefit from rich rendering."""
     import re as _re
+
     # Check for common Markdown patterns
     patterns = [
-        r"```",           # Code blocks
-        r"^#{1,6}\s",     # Headings (at start of line)
-        r"\*\*[^*]+\*\*", # Bold
-        r"\*[^*]+\*",     # Italic
-        r"^[-*+]\s",      # Unordered lists
-        r"^\d+\.\s",      # Ordered lists
+        r"```",  # Code blocks
+        r"^#{1,6}\s",  # Headings (at start of line)
+        r"\*\*[^*]+\*\*",  # Bold
+        r"\*[^*]+\*",  # Italic
+        r"^[-*+]\s",  # Unordered lists
+        r"^\d+\.\s",  # Ordered lists
         r"\[.+\]\(.+\)",  # Links
-        r"\|.+\|.+\|",    # Tables
-        r"^>\s",          # Blockquotes
-        r"---",           # Horizontal rules
-        r"`[^`]+`",       # Inline code
+        r"\|.+\|.+\|",  # Tables
+        r"^>\s",  # Blockquotes
+        r"---",  # Horizontal rules
+        r"`[^`]+`",  # Inline code
     ]
     return any(bool(_re.search(p, text, _re.MULTILINE)) for p in patterns)
 
@@ -474,6 +472,7 @@ def contains_markdown(text: str) -> bool:
 def plan_name_from_text(text: str) -> str:
     """Extract a safe plan name from the first meaningful line of text."""
     import time
+
     text = text.strip()
     if not text:
         return f"plan-{int(time.time())}"

@@ -7,7 +7,7 @@ import logging
 import time
 from typing import TYPE_CHECKING
 
-from src.formatting import bold, dim, green, yellow, cyan, red, color_json, Spinner
+from src.formatting import bold, color_json, cyan, dim, green, red, yellow
 
 if TYPE_CHECKING:
     from src.repl.repl import Repl
@@ -17,10 +17,10 @@ logger = logging.getLogger(__name__)
 
 
 def execute_tool_with_timeout(
-    repl: "Repl",
-    tool: "Tool",
+    repl: Repl,
+    tool: Tool,
     args: dict[str, object],
-    context: "ToolContext",
+    context: ToolContext,
     timeout: int | None = None,
 ) -> str:
     """Execute a tool with a timeout. Returns the result or an error message.
@@ -29,7 +29,6 @@ def execute_tool_with_timeout(
     single hung tool (e.g. a bash command that hangs indefinitely) from
     blocking the entire agent.
     """
-    from src.tool_base import Tool, ToolContext
 
     effective_timeout = timeout if timeout is not None else repl._tool_execution_timeout
     try:
@@ -45,7 +44,7 @@ def execute_tool_with_timeout(
         return f"Error executing {tool.name}: {exc}"
 
 
-def handle_interactive_tool(repl: "Repl", tool: "Tool", args: dict[str, object]) -> str:
+def handle_interactive_tool(repl: Repl, tool: Tool, args: dict[str, object]) -> str:
     """Handle an interactive tool that needs user input.
 
     Pauses the tool loop, displays the question, reads user response,
@@ -67,14 +66,14 @@ def handle_interactive_tool(repl: "Repl", tool: "Tool", args: dict[str, object])
     print(f"  {bold('Your response:')} ", end="")
     try:
         response = input()
-    except (EOFError, KeyboardInterrupt):
+    except EOFError, KeyboardInterrupt:
         response = "[User cancelled]"
     print(f"  {'─' * 60}")
     print()
     return response
 
 
-def on_tool_call(repl: "Repl", name: str, args: dict[str, object]) -> None:
+def on_tool_call(repl: Repl, name: str, args: dict[str, object]) -> None:
     """Handle a tool call from the LLM — display, track usage, log changes."""
     # Stop spinner if still running (LLM called a tool before generating text)
     if repl._spinner is not None:
@@ -96,6 +95,7 @@ def on_tool_call(repl: "Repl", name: str, args: dict[str, object]) -> None:
     # ── Log file modifications for audit trail ─────────────────────────
     if name in ("write_file", "edit_file", "replace_in_files"):
         from datetime import datetime as _dt
+
         ts = _dt.now().isoformat()
         path_arg = str(args.get("path", ""))
         summary = ""
@@ -106,26 +106,30 @@ def on_tool_call(repl: "Repl", name: str, args: dict[str, object]) -> None:
         elif name == "replace_in_files":
             old = str(args.get("oldText", ""))[:40]
             summary = f"Bulk replace '{old}...' in {path_arg}"
-        repl._change_log.append({
-            "timestamp": ts,
-            "tool": name,
-            "path": path_arg,
-            "summary": summary,
-        })
+        repl._change_log.append(
+            {
+                "timestamp": ts,
+                "tool": name,
+                "path": path_arg,
+                "summary": summary,
+            }
+        )
 
 
-def on_tool_result(repl: "Repl", result: str, tool_name: str = "") -> None:
+def on_tool_result(repl: Repl, result: str, tool_name: str = "") -> None:
     """Handle a tool result — display outcome, track timing, notify."""
     is_error = result.startswith("Error:")
 
     # Record tool execution in the current turn timeline
     if tool_name and repl._tool_start_time > 0:
         duration = time.time() - repl._tool_start_time
-        repl._current_turn_tools.append({
-            "name": tool_name,
-            "duration": duration,
-            "error": is_error,
-        })
+        repl._current_turn_tools.append(
+            {
+                "name": tool_name,
+                "duration": duration,
+                "error": is_error,
+            }
+        )
 
     # Track consecutive tool failures
     if is_error:
@@ -161,7 +165,7 @@ def on_tool_result(repl: "Repl", result: str, tool_name: str = "") -> None:
 
     # ── Desktop notification for long-running tools ───────────────────
     if repl._notifications_enabled and repl._tool_start_time > 0:
-        from src.notifications import notify, should_notify, play_sound
+        from src.notifications import notify, play_sound, should_notify
 
         elapsed = time.time() - repl._tool_start_time
         if should_notify(elapsed, repl._notifications_min_duration):
@@ -173,7 +177,7 @@ def on_tool_result(repl: "Repl", result: str, tool_name: str = "") -> None:
             play_sound()
 
 
-def check_token_budget(repl: "Repl") -> None:
+def check_token_budget(repl: Repl) -> None:
     """Check current token usage against budget and warn/block as needed."""
     if repl._token_budget is None:
         return
@@ -188,4 +192,6 @@ def check_token_budget(repl: "Repl") -> None:
 
     elif ratio >= repl._token_budget_warning:
         warning_level = "WARNING" if ratio >= 0.9 else "CAUTION"
-        print(f"\n  {yellow('⚠')} Token budget {warning_level}: {repl._total_tokens_used:,} / {repl._token_budget:,} tokens ({ratio:.0%})")
+        print(
+            f"\n  {yellow('⚠')} Token budget {warning_level}: {repl._total_tokens_used:,} / {repl._token_budget:,} tokens ({ratio:.0%})"
+        )

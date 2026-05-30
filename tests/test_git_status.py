@@ -7,7 +7,7 @@ import tempfile
 from pathlib import Path
 
 from src.tools import ToolContext
-from src.tools.git_status import git_status_tool, execute
+from src.tools.git_status import execute, git_status_tool
 
 
 def _init_repo(path: str) -> None:

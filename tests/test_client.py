@@ -5,13 +5,12 @@ from __future__ import annotations
 from unittest.mock import MagicMock, patch
 
 from src.client import (
+    SENSITIVE_PARAMS,
     LlmClient,
     ModelConfig,
     MultiModelClient,
-    SENSITIVE_PARAMS,
     _summarize_args,
 )
-
 
 # ── _summarize_args tests ─────────────────────────────────────────────────
 

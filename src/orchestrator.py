@@ -7,15 +7,15 @@ between agents, and runs pre-defined swarm patterns.
 
 from __future__ import annotations
 
-import logging
 import time
 import uuid
 from dataclasses import dataclass, field
 from typing import Any
 
+from src.tools import ToolContext
+
 from .agent import Agent, AgentConfig, AgentResult
 from .client import LlmClient
-from src.tools import ToolContext
 from .logging_config import get_logger
 
 logger = get_logger(__name__)
@@ -68,9 +68,7 @@ class Orchestrator:
         self._handles: dict[str, AgentHandle] = {}
         self._parent_map: dict[str, str] = {}  # child_id -> parent_id
         self._max_nesting_depth = 3
-        logger.info(
-            "Orchestrator initialized (default_llm=%s)", default_llm.model
-        )
+        logger.info("Orchestrator initialized (default_llm=%s)", default_llm.model)
 
     # ── Agent lifecycle ───────────────────────────────────────────────────
 
@@ -161,7 +159,9 @@ class Orchestrator:
 
         logger.info(
             "Spawed sub-agent: id=%s, role=%s, parent=%s",
-            agent_id, role, parent_id,
+            agent_id,
+            role,
+            parent_id,
         )
         return self._handles[agent_id]
 
@@ -173,9 +173,7 @@ class Orchestrator:
         """Return the public handle for an agent, or ``None``."""
         return self._handles.get(agent_id)
 
-    def list_agents(
-        self, parent_id: str | None = None, *, include_children: bool = True
-    ) -> list[AgentHandle]:
+    def list_agents(self, parent_id: str | None = None, *, include_children: bool = True) -> list[AgentHandle]:
         """List all agent handles, optionally filtered by parent.
 
         Parameters
@@ -211,9 +209,7 @@ class Orchestrator:
             return False
 
         # Recursively terminate children first
-        children = [
-            cid for cid, pid in self._parent_map.items() if pid == agent_id
-        ]
+        children = [cid for cid, pid in self._parent_map.items() if pid == agent_id]
         for child_id in children:
             self.terminate_agent(child_id)
 
@@ -314,7 +310,9 @@ class Orchestrator:
 
         logger.debug(
             "Message sent: from=%s, to=%s, type=%s",
-            from_id, to_id, message_type,
+            from_id,
+            to_id,
+            message_type,
         )
         return f"Message sent to agent '{to_id}'."
 

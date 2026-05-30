@@ -1,10 +1,11 @@
 """Tests for the prompt library."""
+
 from __future__ import annotations
 
 import os
 import tempfile
 
-from src.prompts import BUILTIN_PROMPTS, PromptTemplate, list_prompts, load_prompt, save_prompt
+from src.prompts import BUILTIN_PROMPTS, list_prompts, load_prompt, save_prompt
 
 
 def test_list_prompts_includes_builtins() -> None:

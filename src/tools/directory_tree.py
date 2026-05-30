@@ -1,20 +1,30 @@
 from __future__ import annotations
 
-import logging
 import os
 import subprocess
 from typing import Any
 
-from src.tools import Tool, ToolContext
-
 from src.logging_config import get_logger
+from src.tools import Tool, ToolContext
 
 logger = get_logger(__name__)
 
-IGNORE_DIRS = frozenset({
-    "node_modules", ".git", ".svn", ".hg", "dist", "build", ".next",
-    "__pycache__", ".venv", ".claude", ".mypy_cache", ".pytest_cache",
-})
+IGNORE_DIRS = frozenset(
+    {
+        "node_modules",
+        ".git",
+        ".svn",
+        ".hg",
+        "dist",
+        "build",
+        ".next",
+        "__pycache__",
+        ".venv",
+        ".claude",
+        ".mypy_cache",
+        ".pytest_cache",
+    }
+)
 
 # File type to icon mapping
 FILE_TYPE_MAP: dict[str, str] = {
@@ -70,13 +80,19 @@ def _get_git_status(path: str, working_dir: str) -> str:
         rel_path = os.path.relpath(path, working_dir)
         result = subprocess.run(
             ["git", "status", "--porcelain", rel_path],
-            capture_output=True, text=True, cwd=working_dir,
+            capture_output=True,
+            text=True,
+            cwd=working_dir,
             timeout=5,
         )
         if result.returncode == 0 and result.stdout.strip():
             status_char = result.stdout[0]  # First char: M, A, D, ?, etc.
             indicators = {
-                "M": "M", "A": "A", "D": "D", "?": "?", "R": "R",
+                "M": "M",
+                "A": "A",
+                "D": "D",
+                "?": "?",
+                "R": "R",
             }
             return indicators.get(status_char, " ")
         return " "
@@ -108,6 +124,7 @@ def execute(args: dict[str, Any], ctx: ToolContext) -> str:
                     continue
 
                 from src.utils import validate_walk_path
+
                 walk_error = validate_walk_path(entry.path, ctx.working_directory)
                 if walk_error:
                     continue
@@ -139,6 +156,7 @@ def execute(args: dict[str, Any], ctx: ToolContext) -> str:
                 continue
 
             from src.utils import validate_walk_path
+
             walk_error = validate_walk_path(entry.path, ctx.working_directory)
             if walk_error:
                 continue

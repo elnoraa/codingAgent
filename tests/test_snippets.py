@@ -2,18 +2,15 @@
 
 from __future__ import annotations
 
-import os
-import tempfile
 from pathlib import Path
 
 import pytest
 
 from src.snippets import (
-    SNIPPETS_DIR,
+    delete_snippet,
     list_snippets,
     load_snippet,
     save_snippet,
-    delete_snippet,
 )
 
 
@@ -23,6 +20,7 @@ def _patch_snippets_dir(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None
     snippets_dir = tmp_path / "snippets"
     snippets_dir.mkdir()
     import src.snippets as snip_mod
+
     monkeypatch.setattr(snip_mod, "SNIPPETS_DIR", snippets_dir)
 
 

@@ -1,0 +1,37 @@
+[tool.ruff]
+# Enable pycodestyle (E), Pyflakes (F), isort (I), and import sorting (TID252)
+# Use `ruff check --select ALL --ignore <rule>` to find which rules to enable
+line-length = 120
+
+target-version = "py314"
+
+[tool.ruff.lint]
+# Select rules that align with the project's style
+select = [
+    "E",   # pycodestyle
+    "F",   # Pyflakes
+    "I",   # isort
+    "N",   # pep8-naming
+    "W",   # pycodestyle warnings
+    "UP",  # pyupgrade
+    "S",   # bandit security
+    "SIM", # flake8-simplify
+]
+
+# Ignore some rules that are too strict or conflict
+ignore = [
+    "E501",   # line-too-long (handled by ruff-format)
+    "S101",   # assert used (allowed in tests)
+    "N802",   # function name should be lowercase (for test helpers)
+    "N803",   # argument name should be lowercase
+    "N806",   # variable in function should be lowercase
+    "N815",   # mixed-case variable in class scope
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["S101"]  # Allow assert in tests
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+line-ending = "auto"

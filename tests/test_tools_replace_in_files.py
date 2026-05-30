@@ -27,11 +27,14 @@ def test_accepts_oldText() -> None:
         ctx = ToolContext(working_directory=tmp)
         from src.tools.replace_in_files import execute
 
-        result = execute({
-            "path": tmp,
-            "oldText": "hello",
-            "newText": "hi",
-        }, ctx)
+        result = execute(
+            {
+                "path": tmp,
+                "oldText": "hello",
+                "newText": "hi",
+            },
+            ctx,
+        )
 
         assert "Replacements:" in result and "1 applied" in result
         assert Path(filepath).read_text(encoding="utf-8") == "hi world"
@@ -46,11 +49,14 @@ def test_accepts_old_string() -> None:
         ctx = ToolContext(working_directory=tmp)
         from src.tools.replace_in_files import execute
 
-        result = execute({
-            "path": tmp,
-            "old_string": "hello",
-            "new_string": "hi",
-        }, ctx)
+        result = execute(
+            {
+                "path": tmp,
+                "old_string": "hello",
+                "new_string": "hi",
+            },
+            ctx,
+        )
 
         assert "Replacements:" in result and "1 applied" in result
         assert Path(filepath).read_text(encoding="utf-8") == "hi world"
@@ -76,7 +82,6 @@ def test_missing_newText_returns_error() -> None:
 
 def test_replaces_rejects_symlink_escape(tmp_path: Path) -> None:
     """replace_in_files should skip symlinks pointing outside working dir."""
-    import os
 
     outside_file = tmp_path / ".." / "outside.txt"
     outside_file = outside_file.resolve()
@@ -85,7 +90,7 @@ def test_replaces_rejects_symlink_escape(tmp_path: Path) -> None:
 
     try:
         os.symlink(str(outside_file), str(tmp_path / "escape.txt"))
-    except (OSError, PermissionError):
+    except OSError, PermissionError:
         pytest.skip("Cannot create symlinks on this system")
 
     # Create a real file inside the working dir
@@ -95,12 +100,15 @@ def test_replaces_rejects_symlink_escape(tmp_path: Path) -> None:
     ctx = ToolContext(working_directory=str(tmp_path))
     from src.tools.replace_in_files import execute
 
-    result = execute({
-        "oldText": "test",
-        "newText": "replaced",
-        "path": str(tmp_path),
-        "maxReplacements": 10,
-    }, ctx)
+    result = execute(
+        {
+            "oldText": "test",
+            "newText": "replaced",
+            "path": str(tmp_path),
+            "maxReplacements": 10,
+        },
+        ctx,
+    )
 
     # The real file should have been modified
     assert "1 applied" in result or "2 applied" in result or "skipped" in result.lower()

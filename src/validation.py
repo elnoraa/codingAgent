@@ -9,16 +9,15 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-
 # ── Input size limits ─────────────────────────────────────────────────────────
 
-MAX_CODE_LENGTH = 50_000        # 50KB for Python code execution
-MAX_COMMAND_LENGTH = 10_000     # 10KB for shell commands
-MAX_QUERY_LENGTH = 50_000       # 50KB for SQL queries
-MAX_TEXT_LENGTH = 100_000       # 100KB for file content replacements
-MAX_PATH_LENGTH = 4_096         # 4096 chars for file paths
-MAX_FILE_CONTENT = 10_000_000   # 10MB for file write content
-MAX_URL_LENGTH = 8_192          # 8KB for URLs
+MAX_CODE_LENGTH = 50_000  # 50KB for Python code execution
+MAX_COMMAND_LENGTH = 10_000  # 10KB for shell commands
+MAX_QUERY_LENGTH = 50_000  # 50KB for SQL queries
+MAX_TEXT_LENGTH = 100_000  # 100KB for file content replacements
+MAX_PATH_LENGTH = 4_096  # 4096 chars for file paths
+MAX_FILE_CONTENT = 10_000_000  # 10MB for file write content
+MAX_URL_LENGTH = 8_192  # 8KB for URLs
 
 
 def validate_length(value: str | None, max_length: int, name: str) -> str | None:
@@ -29,10 +28,7 @@ def validate_length(value: str | None, max_length: int, name: str) -> str | None
     if value is None:
         return None
     if len(value) > max_length:
-        return (
-            f"Error: {name} is too long ({len(value)} chars, max {max_length}). "
-            f"Please reduce the input size."
-        )
+        return f"Error: {name} is too long ({len(value)} chars, max {max_length}). Please reduce the input size."
     return None
 
 
@@ -94,7 +90,7 @@ def validate_write_path(path: str, working_directory: str) -> str | None:
                             f"which points to '{resolved_link}' outside the working "
                             f"directory. Symlinks to outside paths are not allowed."
                         )
-            except (OSError, RuntimeError):
+            except OSError, RuntimeError:
                 pass  # Can't check — path may not exist yet, skip
 
         # Also check the leaf if it exists
@@ -109,9 +105,9 @@ def validate_write_path(path: str, working_directory: str) -> str | None:
                         f"'{resolved_link}' outside the working directory. "
                         f"Symlinks to outside paths are not allowed."
                     )
-        except (OSError, RuntimeError):
+        except OSError, RuntimeError:
             pass
-    except (OSError, ValueError, RuntimeError):
+    except OSError, ValueError, RuntimeError:
         pass  # If we can't fully check, don't block (path may not exist yet)
 
     return None
@@ -136,7 +132,7 @@ def validate_write_path_atomic(path: str, working_directory: str) -> str | None:
         resolved_path = Path(path).resolve()
         resolved_wd = Path(working_directory).resolve()
         resolved_path.relative_to(resolved_wd)
-    except (ValueError, RuntimeError, OSError):
+    except ValueError, RuntimeError, OSError:
         return (
             f"Error: Path '{path}' resolves to outside the working directory "
             f"'{working_directory}'. All file operations must be within the "
@@ -161,7 +157,7 @@ def validate_walk_path(path: str, working_directory: str) -> str | None:
         resolved = Path(path).resolve()
         resolved_wd = Path(working_directory).resolve()
         resolved.relative_to(resolved_wd)
-    except (ValueError, RuntimeError, OSError):
+    except ValueError, RuntimeError, OSError:
         return (
             f"Error: Path '{path}' resolves to outside the working directory "
             f"'{working_directory}' (possible symlink escape). Skipping."

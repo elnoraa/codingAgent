@@ -1,12 +1,10 @@
 from __future__ import annotations
 
-import logging
 import subprocess
 from typing import Any
 
-from src.tools import Tool, ToolContext
-
 from src.logging_config import get_logger
+from src.tools import Tool, ToolContext
 
 logger = get_logger(__name__)
 
@@ -20,7 +18,8 @@ def execute(args: dict[str, Any], _ctx: ToolContext) -> str:
         return 'Error: missing required argument "url".'
 
     # Validate URL length
-    from src.utils import validate_length, MAX_URL_LENGTH
+    from src.utils import MAX_URL_LENGTH, validate_length
+
     error = validate_length(url, MAX_URL_LENGTH, "URL")
     if error:
         return error
@@ -28,6 +27,7 @@ def execute(args: dict[str, Any], _ctx: ToolContext) -> str:
     # SSRF protection: block private/internal IPs
     try:
         from src.utils import validate_url_target
+
         ssrf_error = validate_url_target(url)
         if ssrf_error:
             return ssrf_error

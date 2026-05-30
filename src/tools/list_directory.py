@@ -1,19 +1,29 @@
 from __future__ import annotations
 
-import logging
 import os
 from typing import Any
 
-from src.tools import Tool, ToolContext
-
 from src.logging_config import get_logger
+from src.tools import Tool, ToolContext
 
 logger = get_logger(__name__)
 
-IGNORE_DIRS = frozenset({
-    "node_modules", ".git", ".svn", ".hg", "dist", "build", ".next",
-    "__pycache__", ".venv", ".claude", ".mypy_cache", ".pytest_cache",
-})
+IGNORE_DIRS = frozenset(
+    {
+        "node_modules",
+        ".git",
+        ".svn",
+        ".hg",
+        "dist",
+        "build",
+        ".next",
+        "__pycache__",
+        ".venv",
+        ".claude",
+        ".mypy_cache",
+        ".pytest_cache",
+    }
+)
 
 
 def execute(args: dict[str, Any], _ctx: ToolContext) -> str:

@@ -1,21 +1,31 @@
 from __future__ import annotations
 
-import logging
 import os
 import re
 from pathlib import Path
 from typing import Any
 
-from src.tools import Tool, ToolContext
-
 from src.logging_config import get_logger
+from src.tools import Tool, ToolContext
 
 logger = get_logger(__name__)
 
-IGNORE_DIRS = frozenset({
-    "node_modules", ".git", ".svn", ".hg", "dist", "build", ".next",
-    "__pycache__", ".venv", ".claude", ".mypy_cache", ".pytest_cache",
-})
+IGNORE_DIRS = frozenset(
+    {
+        "node_modules",
+        ".git",
+        ".svn",
+        ".hg",
+        "dist",
+        "build",
+        ".next",
+        "__pycache__",
+        ".venv",
+        ".claude",
+        ".mypy_cache",
+        ".pytest_cache",
+    }
+)
 
 
 def execute(args: dict[str, Any], ctx: ToolContext) -> str:
@@ -27,7 +37,12 @@ def execute(args: dict[str, Any], ctx: ToolContext) -> str:
     confirm_each = bool(args.get("confirm", False))
     logger.info(
         "execute: search_dir=%s, oldText_len=%d, newText_len=%d, filePattern=%s, maxReplacements=%d, confirm=%s",
-        search_dir, len(old_text or ""), len(new_text or ""), file_pattern, max_replacements, confirm_each,
+        search_dir,
+        len(old_text or ""),
+        len(new_text or ""),
+        file_pattern,
+        max_replacements,
+        confirm_each,
     )
     if not old_text:
         return 'Error: missing required argument "oldText" (or "old_string").'
@@ -35,7 +50,8 @@ def execute(args: dict[str, Any], ctx: ToolContext) -> str:
         return 'Error: missing required argument "newText" (or "new_string").'
 
     # Validate lengths
-    from src.utils import validate_length, MAX_TEXT_LENGTH
+    from src.utils import MAX_TEXT_LENGTH, validate_length
+
     error = validate_length(old_text, MAX_TEXT_LENGTH, "old text")
     if error:
         return error
@@ -55,6 +71,7 @@ def execute(args: dict[str, Any], ctx: ToolContext) -> str:
         dirs[:] = [d for d in dirs if d not in IGNORE_DIRS and not d.startswith(".")]
 
         from src.utils import validate_walk_path
+
         # Skip directories that are symlinks pointing outside working dir
         root_error = validate_walk_path(root, ctx.working_directory)
         if root_error:
@@ -103,9 +120,7 @@ def execute(args: dict[str, Any], ctx: ToolContext) -> str:
         if confirm_each:
             # Show preview and dry-run
             preview = _get_preview(content, old_text)
-            file_details.append(
-                f"{filepath}: {occurrences} occurrence(s) [use confirm=false to apply]\n{preview}"
-            )
+            file_details.append(f"{filepath}: {occurrences} occurrence(s) [use confirm=false to apply]\n{preview}")
             skipped_count += 1
             continue
 
@@ -113,6 +128,7 @@ def execute(args: dict[str, Any], ctx: ToolContext) -> str:
         ctx.snapshot_file(filepath)
         try:
             from src.utils import validate_write_path_atomic
+
             resolved_fp = str(Path(filepath).resolve())
             atomic_error = validate_write_path_atomic(resolved_fp, ctx.working_directory)
             if atomic_error:

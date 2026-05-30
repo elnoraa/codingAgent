@@ -9,7 +9,7 @@ from collections.abc import Iterator
 
 import pytest
 
-from src.exporter import export_as_markdown, export_as_json, _safe_filename
+from src.exporter import _safe_filename, export_as_json, export_as_markdown
 
 
 @pytest.fixture

@@ -5,8 +5,8 @@ Cleans up an agent and all its children from the orchestrator.
 
 from __future__ import annotations
 
-from src.tools import Tool, ToolContext
 from src.logging_config import get_logger
+from src.tools import Tool, ToolContext
 
 logger = get_logger(__name__)
 
@@ -33,10 +33,7 @@ def _execute_terminate_agent(args: dict[str, object], context: ToolContext) -> s
 
 terminate_agent_tool = Tool(
     name="terminate_agent",
-    description=(
-        "Stop and remove a sub-agent and all its children. "
-        "Use this to clean up completed or stuck agents."
-    ),
+    description=("Stop and remove a sub-agent and all its children. Use this to clean up completed or stuck agents."),
     input_schema={
         "type": "object",
         "properties": {

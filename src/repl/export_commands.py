@@ -6,7 +6,7 @@ import logging
 import os
 from typing import TYPE_CHECKING, Any
 
-from src.formatting import bold, dim, green, cyan, red
+from src.formatting import cyan, dim, green, red
 from src.repl.ui import format_size
 
 if TYPE_CHECKING:
@@ -15,11 +15,11 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-def handle_export(repl: "Repl", parts: list[str]) -> None:
+def handle_export(repl: Repl, parts: list[str]) -> None:
     """Handle /export command — export conversation as Markdown, JSON, or full .agent-session."""
-    from src.exporter import export_as_markdown, export_as_json
-    from src.exporter import export_full_session, load_session_file, export_summary
     from datetime import datetime as _dt
+
+    from src.exporter import export_as_json, export_as_markdown, export_full_session, export_summary, load_session_file
 
     fmt = "md"
     output_path: str | None = None

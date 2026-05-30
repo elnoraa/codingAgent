@@ -3,15 +3,14 @@
 from __future__ import annotations
 
 import json
-import logging
 import time
-import urllib.request
 import urllib.error
+import urllib.request
 from typing import Any
 from urllib.parse import urlparse
 
-from src.tools import Tool, ToolContext
 from src.logging_config import get_logger
+from src.tools import Tool, ToolContext
 
 logger = get_logger(__name__)
 
@@ -51,6 +50,7 @@ def execute(args: dict[str, Any], ctx: ToolContext) -> str:
     # SSRF protection: block requests to private/internal IPs
     try:
         from src.utils import validate_url_target
+
         ssrf_error = validate_url_target(url)
         if ssrf_error:
             return ssrf_error
@@ -88,17 +88,17 @@ def execute(args: dict[str, Any], ctx: ToolContext) -> str:
         result_parts.append(f"  Time: {elapsed:.2f}s")
 
         # Show response headers (summary)
-        result_parts.append(f"  Headers:")
+        result_parts.append("  Headers:")
         for key in ["content-type", "content-length", "server"]:
             if key in response_headers:
                 result_parts.append(f"    {key}: {response_headers[key]}")
 
         # Show response body (truncated)
-        result_parts.append(f"  Body:")
+        result_parts.append("  Body:")
         try:
             parsed_body = json.loads(response_body)
             body_str = json.dumps(parsed_body, indent=2)
-        except (json.JSONDecodeError, ValueError):
+        except json.JSONDecodeError, ValueError:
             body_str = response_body
 
         if len(body_str) > 2000:
@@ -120,12 +120,7 @@ def execute(args: dict[str, Any], ctx: ToolContext) -> str:
 
     except urllib.error.HTTPError as e:
         body_text = e.read().decode("utf-8", errors="replace")[:500]
-        return (
-            f"● {method} {url}\n"
-            f"  Status: {e.code}\n"
-            f"  Body: {body_text}\n"
-            f"(HTTP error)"
-        )
+        return f"● {method} {url}\n  Status: {e.code}\n  Body: {body_text}\n(HTTP error)"
 
     except urllib.error.URLError as e:
         return f"✗ Connection failed: {e.reason}"
@@ -152,7 +147,7 @@ api_tool = Tool(
             "url": {
                 "type": "string",
                 "description": "Request URL (e.g., http://localhost:8000/api/users). "
-                               "Auto-prefixes http:// if no scheme given.",
+                "Auto-prefixes http:// if no scheme given.",
             },
             "headers": {
                 "type": "object",

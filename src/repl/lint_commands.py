@@ -5,13 +5,11 @@ from __future__ import annotations
 import os
 from typing import TYPE_CHECKING
 
-from src.formatting import bold, dim, green
-
 if TYPE_CHECKING:
     from src.repl.repl import Repl
 
 
-def handle_lint(repl: "Repl", filepath: str) -> None:
+def handle_lint(repl: Repl, filepath: str) -> None:
     """Run linter on specified file or directory."""
     from src.tools.lint_tool import detect_linter, run_linter
 

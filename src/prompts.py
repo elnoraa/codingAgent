@@ -6,11 +6,8 @@ for custom prompt templates stored as Markdown files in the prompts/ directory.
 
 from __future__ import annotations
 
-import logging
-import os
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
 
 from .logging_config import get_logger
 
@@ -82,7 +79,7 @@ def list_prompts(working_directory: str) -> list[PromptTemplate]:
                         filepath=str(f),
                     )
                 )
-        except (OSError, UnicodeDecodeError):
+        except OSError, UnicodeDecodeError:
             continue
 
     return prompts
@@ -115,7 +112,7 @@ def load_prompt(name: str, working_directory: str) -> PromptTemplate | None:
                 is_builtin=False,
                 filepath=str(custom_path),
             )
-        except (OSError, UnicodeDecodeError):
+        except OSError, UnicodeDecodeError:
             pass
 
     # Check built-in

@@ -7,7 +7,7 @@ import tempfile
 from pathlib import Path
 
 from src.tools import ToolContext
-from src.tools.git_commit import git_commit_tool, execute
+from src.tools.git_commit import execute, git_commit_tool
 
 
 def _init_repo(path: str) -> None:

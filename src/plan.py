@@ -9,14 +9,11 @@ Each plan is a Markdown file with YAML front-matter containing metadata.
 
 from __future__ import annotations
 
-import logging
-import os
 import re
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
 
 from .logging_config import get_logger
 
@@ -69,6 +66,44 @@ def _strip_leading_number(name: str) -> str:
     return re.sub(r"^\d+-", "", name, count=1)
 
 
+def _extract_numeric_prefix(name: str) -> tuple[int | None, str]:
+    """Extract a leading numeric prefix from a plan name, returning both the number and stripped name.
+
+    Returns (number, stripped_name) if a prefix exists, or (None, original_name) if not.
+
+    Examples:
+        "111-feat-foo" -> (111, "feat-foo")
+        "05-feat-foo"  -> (5, "feat-foo")
+        "feat-foo"     -> (None, "feat-foo")
+        ""             -> (None, "")
+    """
+    match = re.match(r"^(\d+)-", name)
+    if match:
+        return int(match.group(1)), name[match.end() :]
+    return None, name
+
+
+def _get_all_plan_numbers(working_directory: str) -> set[int]:
+    """Return the set of all numeric prefixes currently used in plan filenames.
+
+    Scans both plans/pending/ and plans/completed/ for .md files with
+    a leading numeric prefix (e.g. "01-", "123-") and returns them as integers.
+    """
+    _, pending_dir, completed_dir = _ensure_dirs(working_directory)
+    numbers: set[int] = set()
+
+    for directory in (pending_dir, completed_dir):
+        if not directory.is_dir():
+            continue
+        for f in directory.iterdir():
+            if f.suffix != ".md":
+                continue
+            match = re.match(r"^(\d+)", f.stem)
+            if match:
+                numbers.add(int(match.group(1)))
+    return numbers
+
+
 def _get_next_plan_number(working_directory: str) -> int:
     """Return the next available plan number (highest existing + 1, default 1).
 
@@ -95,15 +130,32 @@ def _get_next_plan_number(working_directory: str) -> int:
 def save_pending_plan(name: str, content: str, working_directory: str) -> str:
     """Save a plan to plans/pending/. Returns the file path.
 
-    Automatically prepends a sequential numeric prefix (e.g., "01-", "02-")
-    based on the highest existing plan number in both pending/ and completed/.
-
-    If *name* already starts with a numeric prefix (e.g. ``"05-feat-foo"``),
-    that prefix is stripped first to avoid double-numbering.
+    If *name* already starts with a numeric prefix (e.g. ``"111-feat-foo"``),
+    that number is used as the plan number, preserving the caller's intent.
+    If no prefix is present, a sequential number is auto-assigned based on
+    the highest existing plan number in both pending/ and completed/.
     """
     _, pending_dir, _ = _ensure_dirs(working_directory)
-    next_num = _get_next_plan_number(working_directory)
-    clean_name = _strip_leading_number(name)
+
+    # Check if the caller provided an explicit numeric prefix
+    explicit_num, clean_name = _extract_numeric_prefix(name)
+
+    if explicit_num is not None:
+        # Preserve the caller-provided number
+        next_num = explicit_num
+        existing = _get_all_plan_numbers(working_directory)
+        if next_num in existing:
+            # Conflict: the number is already taken — fall back to auto-assign
+            next_num = _get_next_plan_number(working_directory)
+            logger.warning(
+                "Plan number %d already exists; auto-assigning %d instead",
+                explicit_num,
+                next_num,
+            )
+    else:
+        # No explicit prefix — auto-number as before
+        next_num = _get_next_plan_number(working_directory)
+
     prefixed_name = f"{next_num:02d}-{clean_name}"
     safe_name = _sanitize_name(prefixed_name)
     timestamp = datetime.now().isoformat()
@@ -148,10 +200,7 @@ def update_pending_plan(name: str, content: str, working_directory: str) -> str:
         stripped = _strip_leading_number(safe_name)
         matches = sorted(pending_dir.glob(f"*{stripped}*"))
         if not matches:
-            raise FileNotFoundError(
-                f"Plan '{name}' not found in {pending_dir}. "
-                f"Use write_plan to create a new plan."
-            )
+            raise FileNotFoundError(f"Plan '{name}' not found in {pending_dir}. Use write_plan to create a new plan.")
         filepath = matches[0]
 
     existing = filepath.read_text(encoding="utf-8")
@@ -250,7 +299,7 @@ def _list_plans_from_dir(directory: Path, status: str) -> list[Plan]:
                     filepath=str(f),
                 )
             )
-        except (OSError, UnicodeDecodeError):
+        except OSError, UnicodeDecodeError:
             continue
 
     return plans

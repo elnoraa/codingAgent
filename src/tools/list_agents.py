@@ -7,8 +7,8 @@ preview of their result.
 
 from __future__ import annotations
 
-from src.tools import Tool, ToolContext
 from src.logging_config import get_logger
+from src.tools import Tool, ToolContext
 
 logger = get_logger(__name__)
 
@@ -38,16 +38,11 @@ def _execute_list_agents(args: dict[str, object], context: ToolContext) -> str:
         }.get(h.status, "?")
 
         lines.append(
-            f"  {status_icon} **{h.agent_id}** "
-            f"(role: {h.role}, status: {h.status}, "
-            f"messages: {h.message_count})"
+            f"  {status_icon} **{h.agent_id}** (role: {h.role}, status: {h.status}, messages: {h.message_count})"
         )
 
         if h.result:
-            preview = (
-                h.result.summary[:120] if h.result.summary
-                else h.result.output[:120]
-            )
+            preview = h.result.summary[:120] if h.result.summary else h.result.output[:120]
             if preview:
                 lines.append(f"       ↳ {preview}")
             if h.result.error:
@@ -60,10 +55,7 @@ def _execute_list_agents(args: dict[str, object], context: ToolContext) -> str:
 
 list_agents_tool = Tool(
     name="list_agents",
-    description=(
-        "List all active sub-agents with their ID, role, status, "
-        "message count, and result preview."
-    ),
+    description=("List all active sub-agents with their ID, role, status, message count, and result preview."),
     input_schema={
         "type": "object",
         "properties": {},

@@ -21,7 +21,6 @@ When restricted mode is active, the following are blocked:
 from __future__ import annotations
 
 import io
-import logging
 import sys
 from typing import Any
 
@@ -31,48 +30,124 @@ logger = get_logger(__name__)
 
 # Modules that are blocked from import in restricted mode.
 # These provide filesystem, process, or code execution capabilities.
-_FORBIDDEN_MODULES = frozenset({
-    "os", "os.path",
-    "subprocess",
-    "shutil",
-    "sys",
-    "pathlib",
-    "ctypes", "ctypes.wintypes", "ctypes._endian",
-    "inspect",
-    "importlib", "importlib.util", "importlib.metadata",
-    "code", "codeop",
-    "compileall", "py_compile",
-    "pickle", "pickletools",
-    "shelve",
-    "tempfile",
-    "glob",
-    "fnmatch",
-    "fileinput",
-    "io",
-    "builtins",
-    "antigravity",  # Easter egg that opens a web browser
-})
+_FORBIDDEN_MODULES = frozenset(
+    {
+        "os",
+        "os.path",
+        "subprocess",
+        "shutil",
+        "sys",
+        "pathlib",
+        "ctypes",
+        "ctypes.wintypes",
+        "ctypes._endian",
+        "inspect",
+        "importlib",
+        "importlib.util",
+        "importlib.metadata",
+        "code",
+        "codeop",
+        "compileall",
+        "py_compile",
+        "pickle",
+        "pickletools",
+        "shelve",
+        "tempfile",
+        "glob",
+        "fnmatch",
+        "fileinput",
+        "io",
+        "builtins",
+        "antigravity",  # Easter egg that opens a web browser
+    }
+)
 
 # Builtins that are safe to keep in restricted mode
-_SAFE_BUILTIN_NAMES = frozenset({
-    "abs", "all", "any", "ascii", "bin", "bool", "bytearray", "bytes",
-    "callable", "chr", "complex", "dict", "dir", "divmod", "enumerate",
-    "filter", "float", "format", "frozenset", "getattr", "hasattr",
-    "hash", "hex", "id", "int", "isinstance", "issubclass", "iter",
-    "len", "list", "map", "max", "min", "next", "object", "oct",
-    "ord", "pow", "print", "range", "repr", "reversed", "round",
-    "set", "slice", "sorted", "str", "sum", "tuple", "type", "zip",
-    "True", "False", "None", "Ellipsis", "NotImplemented",
-    "property", "staticmethod", "classmethod", "super",
-    "Exception", "BaseException", "StopIteration", "KeyboardInterrupt",
-})
+_SAFE_BUILTIN_NAMES = frozenset(
+    {
+        "abs",
+        "all",
+        "any",
+        "ascii",
+        "bin",
+        "bool",
+        "bytearray",
+        "bytes",
+        "callable",
+        "chr",
+        "complex",
+        "dict",
+        "dir",
+        "divmod",
+        "enumerate",
+        "filter",
+        "float",
+        "format",
+        "frozenset",
+        "getattr",
+        "hasattr",
+        "hash",
+        "hex",
+        "id",
+        "int",
+        "isinstance",
+        "issubclass",
+        "iter",
+        "len",
+        "list",
+        "map",
+        "max",
+        "min",
+        "next",
+        "object",
+        "oct",
+        "ord",
+        "pow",
+        "print",
+        "range",
+        "repr",
+        "reversed",
+        "round",
+        "set",
+        "slice",
+        "sorted",
+        "str",
+        "sum",
+        "tuple",
+        "type",
+        "zip",
+        "True",
+        "False",
+        "None",
+        "Ellipsis",
+        "NotImplemented",
+        "property",
+        "staticmethod",
+        "classmethod",
+        "super",
+        "Exception",
+        "BaseException",
+        "StopIteration",
+        "KeyboardInterrupt",
+    }
+)
 
 # Names that are always forbidden (protect against sandbox escape patterns)
-_FORBIDDEN_ATTR_NAMES = frozenset({
-    "__class__", "__base__", "__subclasses__", "__bases__",
-    "__globals__", "__code__", "__closure__", "__builtins__",
-    "__import__", "__loader__", "__spec__",
-})
+_FORBIDDEN_ATTR_NAMES = frozenset(
+    {
+        "__class__",
+        "__base__",
+        "__subclasses__",
+        "__bases__",
+        "__globals__",
+        "__code__",
+        "__closure__",
+        "__builtins__",
+        "__import__",
+        "__loader__",
+        "__spec__",
+    }
+)
 
 
 class PythonRepl:
@@ -109,12 +184,19 @@ class PythonRepl:
 
         # ── Restricted open() ──────────────────────────────────────────────
         def _restricted_open(
-            file, mode='r', buffering=-1, encoding=None,
-            errors=None, newline=None, closefd=True, opener=None,
+            file,
+            mode="r",
+            buffering=-1,
+            encoding=None,
+            errors=None,
+            newline=None,
+            closefd=True,
+            opener=None,
         ):
             """Restricted open() — only allows write modes within the working directory."""
-            if any(c in mode for c in ('w', 'a', 'x', '+')):
+            if any(c in mode for c in ("w", "a", "x", "+")):
                 from src.utils import validate_write_path
+
                 path_str = str(file) if not isinstance(file, str) else file
                 error = validate_write_path(path_str, working_dir)
                 if error:
@@ -137,9 +219,7 @@ class PythonRepl:
             # Check if the name itself is forbidden (e.g. "os.path")
             if name in _FORBIDDEN_MODULES:
                 logger.warning("REPL: blocked import of '%s' (forbidden module)", name)
-                raise ImportError(
-                    f"Module '{name}' is not allowed in the restricted REPL."
-                )
+                raise ImportError(f"Module '{name}' is not allowed in the restricted REPL.")
 
             return original_import(name, *args, **kwargs)
 
@@ -151,11 +231,11 @@ class PythonRepl:
                 restricted_builtins[name] = all_builtins[name]
 
         # Wrap the unsafe builtins
-        restricted_builtins['open'] = _restricted_open
+        restricted_builtins["open"] = _restricted_open
         # Remove __import__ from the safe set — we override it separately
-        restricted_builtins['__import__'] = _restricted_import
+        restricted_builtins["__import__"] = _restricted_import
 
-        return {'__builtins__': restricted_builtins}
+        return {"__builtins__": restricted_builtins}
 
     def _check_for_sandbox_escape(self, code_str: str) -> str | None:
         """Pre-check code for known sandbox escape patterns.
@@ -171,7 +251,8 @@ class PythonRepl:
             return None
 
         forbidden_imports = [
-            m for m in _FORBIDDEN_MODULES
+            m
+            for m in _FORBIDDEN_MODULES
             if m != "builtins"  # builtins is handled via __import__
         ]
 
@@ -181,10 +262,7 @@ class PythonRepl:
                 # Block direct __import__ calls
                 if isinstance(node, ast.Call):
                     if isinstance(node.func, ast.Name) and node.func.id == "__import__":
-                        return (
-                            "Error: Calling __import__ directly is not allowed "
-                            "in the restricted REPL."
-                        )
+                        return "Error: Calling __import__ directly is not allowed in the restricted REPL."
                     # Block type.__subclasses__() escape
                     if isinstance(node.func, ast.Attribute):
                         if node.func.attr in ("__subclasses__", "__base__", "__bases__", "__mro__"):
@@ -197,18 +275,12 @@ class PythonRepl:
                     for alias in node.names:
                         base = alias.name.split(".")[0]
                         if base in forbidden_imports:
-                            return (
-                                f"Error: Module '{alias.name}' is not allowed "
-                                f"in the restricted REPL."
-                            )
+                            return f"Error: Module '{alias.name}' is not allowed in the restricted REPL."
                 if isinstance(node, ast.ImportFrom):
                     if node.module:
                         base = node.module.split(".")[0]
                         if base in forbidden_imports:
-                            return (
-                                f"Error: Module '{node.module}' is not allowed "
-                                f"in the restricted REPL."
-                            )
+                            return f"Error: Module '{node.module}' is not allowed in the restricted REPL."
         except SyntaxError:
             pass  # Will be caught by compile() later
 
@@ -259,13 +331,14 @@ class PythonRepl:
                     exec(compiled, restricted_globals)
                     # Merge back any new variables into self._locals
                     for k, v in restricted_globals.items():
-                        if k != '__builtins__':
+                        if k != "__builtins__":
                             self._locals[k] = v
                 else:
                     exec(compiled, self._locals)
-            except Exception as e:
+            except Exception:
                 self._error_count += 1
                 import traceback
+
                 traceback.print_exc(file=captured_stderr)
 
             output = captured_stdout.getvalue()
@@ -282,11 +355,7 @@ class PythonRepl:
 
     def get_variables(self) -> dict[str, Any]:
         """Return current variable state (excluding builtins and internals)."""
-        return {
-            k: v
-            for k, v in self._locals.items()
-            if not k.startswith("_")
-        }
+        return {k: v for k, v in self._locals.items() if not k.startswith("_")}
 
     def reset(self) -> None:
         """Reset the REPL state, clearing all variables."""

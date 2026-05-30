@@ -26,11 +26,15 @@ These are MANDATORY rules. The coding agent MUST follow all instructions in this
 5. **No manual test running**: The pre-commit hook automatically runs tests on commit.
    Do NOT call `run_tests` manually — the hook handles this.
 
-6. **Documentation and tests**: When making code changes, you MUST:
-   a. Update the `README.md` if the change affects user-facing features, commands, or project structure
-   b. Add or update docstrings on all new or modified functions, classes, and methods
-   c. Create new test files (or add to existing ones) for all new functionality
-   d. All tests MUST use isolated temp directories (via `tempfile.TemporaryDirectory`
+6. **Documentation and tests**: Plans and code changes MUST both account for documentation and testing:
+   a. Every plan saved to `plans/pending/` MUST include dedicated sections for:
+      - **Documentation**: What docs will be updated (README.md, docstrings, etc.)
+      - **Testing**: What tests will be added or modified
+   b. When making code changes during implementation, you MUST:
+      - Update the `README.md` if the change affects user-facing features, commands, or project structure
+      - Add or update docstrings on all new or modified functions, classes, and methods
+      - Create new test files (or add to existing ones) for all new functionality
+   c. All tests MUST use isolated temp directories (via `tempfile.TemporaryDirectory`
       or pytest `tmp_path` fixture) — never write to the real project directories
 
 7. After successfully implementing a plan from `plans/pending/`, you MUST:

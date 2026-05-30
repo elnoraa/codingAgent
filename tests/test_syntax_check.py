@@ -6,7 +6,7 @@ import tempfile
 from pathlib import Path
 
 from src.tools import ToolContext
-from src.tools.syntax_check import syntax_check_tool, execute
+from src.tools.syntax_check import execute, syntax_check_tool
 
 
 def test_tool_definition() -> None:

@@ -7,7 +7,7 @@ import os
 import time
 from typing import TYPE_CHECKING, Any, cast
 
-from src.formatting import bold, dim, green, yellow, cyan, red, magenta, Spinner
+from src.formatting import Spinner, bold, cyan, dim, green, magenta, red, yellow
 from src.utils import estimate_tokens
 
 if TYPE_CHECKING:
@@ -16,7 +16,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-def handle_cost(repl: "Repl") -> None:
+def handle_cost(repl: Repl) -> None:
     """Show detailed cost breakdown."""
     from src.repl.help_text import MODEL_PRICING
 
@@ -37,19 +37,20 @@ def handle_cost(repl: "Repl") -> None:
     print()
     print(f"  {dim('Input cost:')}   ${in_cost:.6f}")
     print(f"  {dim('Output cost:')}  ${out_cost:.6f}")
-    print(f"  {bold(f'Total cost:')}  {bold(f'${total_cost:.4f}')}")
+    print(f"  {bold('Total cost:')}  {bold(f'${total_cost:.4f}')}")
 
 
-def estimated_cost(repl: "Repl") -> float:
+def estimated_cost(repl: Repl) -> float:
     """Return estimated total API cost in USD."""
     from src.repl.help_text import MODEL_PRICING
+
     pricing = MODEL_PRICING.get(repl.llm.model, {"input": 0.50, "output": 0.50})
     in_cost = (repl._input_tokens_total / 1_000_000) * pricing["input"]
     out_cost = (repl._output_tokens_total / 1_000_000) * pricing["output"]
     return in_cost + out_cost
 
 
-def handle_stats(repl: "Repl") -> None:
+def handle_stats(repl: Repl) -> None:
     """Handle /stats command — show session statistics."""
     elapsed = time.time() - repl._start_time
     hours, remainder = divmod(int(elapsed), 3600)
@@ -57,10 +58,7 @@ def handle_stats(repl: "Repl") -> None:
     uptime_str = f"{hours}h {minutes}m {seconds}s" if hours else f"{minutes}m {seconds}s"
 
     total_turns = sum(repl._turns_by_mode.values())
-    total_tokens = sum(
-        estimate_tokens(str(m.get("content", "")))
-        for m in repl.messages
-    )
+    total_tokens = sum(estimate_tokens(str(m.get("content", ""))) for m in repl.messages)
     system_prompt = repl._get_system_prompt()
     system_tokens = estimate_tokens(system_prompt)
     avg_tokens_per_turn = total_tokens // max(total_turns, 1)
@@ -70,7 +68,9 @@ def handle_stats(repl: "Repl") -> None:
     print(f"  {dim('Session duration:')}  {cyan(uptime_str)}")
     print(f"  {dim('Total turns:')}      {cyan(str(total_turns))}")
     print(f"  {dim('Total messages:')}   {cyan(str(len(repl.messages)))}")
-    print(f"  {dim('Total tokens:')}     {cyan(str(total_tokens + system_tokens))} ({dim('~' + str(avg_tokens_per_turn) + ' avg/turn')})")
+    print(
+        f"  {dim('Total tokens:')}     {cyan(str(total_tokens + system_tokens))} ({dim('~' + str(avg_tokens_per_turn) + ' avg/turn')})"
+    )
     print(f"  {dim('Mode switches:')}    {cyan(str(repl._mode_switches))}")
     print()
 
@@ -95,16 +95,19 @@ def handle_stats(repl: "Repl") -> None:
             avg_dur = sum(durations) / len(durations) if durations else 0
             errors = repl._tool_errors.get(tool_name, 0)
             error_str = f"  errors: {errors}" if errors else ""
-            print(f"  {cyan(tool_name.ljust(20))} {dim(bar)} {cyan(str(count).ljust(4))} {dim(f'avg {avg_dur:.2f}s')} {red(error_str) if errors else dim(error_str)}")
+            print(
+                f"  {cyan(tool_name.ljust(20))} {dim(bar)} {cyan(str(count).ljust(4))} {dim(f'avg {avg_dur:.2f}s')} {red(error_str) if errors else dim(error_str)}"
+            )
     else:
         print(f"  {dim('No tools have been called yet.')}")
     print()
     print(f"  {dim('Estimated cost:')}  {dim(f'${estimated_cost(repl):.4f}')}")
 
 
-def handle_search(repl: "Repl", parts: list[str]) -> None:
+def handle_search(repl: Repl, parts: list[str]) -> None:
     """Handle /search command — search messages for a pattern."""
     import re as regex_module
+
     from src.repl.ui import search_preview
 
     args = " ".join(parts[1:]) if len(parts) > 1 else ""
@@ -128,6 +131,7 @@ def handle_search(repl: "Repl", parts: list[str]) -> None:
             text_to_search = content
         elif isinstance(content, list):
             from typing import cast as _cast
+
             blocks = _cast("list[dict[str, object]]", content)
             for block in blocks:
                 t = block.get("text")
@@ -162,10 +166,14 @@ def handle_search(repl: "Repl", parts: list[str]) -> None:
         print(f"  {dim(f'#{idx + 1}')} {role_color(role.title())} {preview}")
 
 
-def handle_cd(repl: "Repl", parts: list[str]) -> None:
+def handle_cd(repl: Repl, parts: list[str]) -> None:
     """Handle /cd command — change working directory."""
     if len(parts) < 2:
-        wd = repl.working_directory.replace(os.environ.get("HOME", "~"), "~") if "HOME" in os.environ else repl.working_directory
+        wd = (
+            repl.working_directory.replace(os.environ.get("HOME", "~"), "~")
+            if "HOME" in os.environ
+            else repl.working_directory
+        )
         print(f"  {dim('Current directory:')} {cyan(wd)}")
         return
 
@@ -185,7 +193,7 @@ def handle_cd(repl: "Repl", parts: list[str]) -> None:
     print(f"  {green('✓')} {dim('Changed directory:')} {cyan(display_new)}")
 
 
-def handle_model(repl: "Repl", parts: list[str]) -> None:
+def handle_model(repl: Repl, parts: list[str]) -> None:
     """Handle /model command — show or switch the active model."""
     if len(parts) < 2:
         print(f"  {bold('Current Model:')} {cyan(repl.llm.model)}")
@@ -208,9 +216,9 @@ def handle_model(repl: "Repl", parts: list[str]) -> None:
     print(f"  {green('✓')} {dim('Model switched:')} {cyan(old_model)} {dim('→')} {cyan(new_model)}")
 
 
-def handle_models(repl: "Repl", args: str) -> None:
+def handle_models(repl: Repl, args: str) -> None:
     """Show available model configurations."""
-    model_mgr = getattr(repl, '_model_manager', None)
+    model_mgr = getattr(repl, "_model_manager", None)
     if model_mgr is None:
         print(f"  Single model mode: {repl.llm.model}")
         print("  Configure multiple models in config.json under 'models' key.")
@@ -235,9 +243,9 @@ def handle_models(repl: "Repl", args: str) -> None:
         print(f"  {row[0]:<20} {cyan(row[1]):<35} {dim(row[2])}")
 
 
-def handle_open(repl: "Repl", parts: list[str]) -> None:
+def handle_open(repl: Repl, parts: list[str]) -> None:
     """Handle /open command — interactive file finder with inline preview."""
-    from src.repl.ui import get_file_icon, format_size, preview_file
+    from src.repl.ui import format_size, get_file_icon, preview_file
 
     if len(parts) < 2:
         print(f"  {dim('Usage: /open <partial-filename>')}")
@@ -291,7 +299,7 @@ def handle_open(repl: "Repl", parts: list[str]) -> None:
         return
 
     # Show numbered results with file icons and sizes
-    print(f"\n  {bold(f'Files matching \"{query}\"')}  ({dim(str(len(matches)) + ' found')})")
+    print(f"\n  {bold(f'Files matching "{query}"')}  ({dim(str(len(matches)) + ' found')})")
     print(f"  {'─' * 60}")
 
     for i, (rel_path, full_path) in enumerate(matches[:20], 1):
@@ -319,11 +327,11 @@ def handle_open(repl: "Repl", parts: list[str]) -> None:
             print(f"  {red('✗')} Invalid selection: {choice}")
     except ValueError:
         print(f"  {red('✗')} Invalid input")
-    except (EOFError, KeyboardInterrupt):
+    except EOFError, KeyboardInterrupt:
         print()
 
 
-def handle_deps(repl: "Repl", parts: list[str]) -> None:
+def handle_deps(repl: Repl, parts: list[str]) -> None:
     """Handle /deps command — show what a file imports."""
     _ensure_import_graph_built(repl)
 
@@ -351,7 +359,7 @@ def handle_deps(repl: "Repl", parts: list[str]) -> None:
         print(f"  {cyan('◈')} {dim(dep)}")
 
 
-def handle_impact(repl: "Repl", parts: list[str]) -> None:
+def handle_impact(repl: Repl, parts: list[str]) -> None:
     """Handle /impact command — show what imports a file (impact analysis)."""
     _ensure_import_graph_built(repl)
 
@@ -378,7 +386,7 @@ def handle_impact(repl: "Repl", parts: list[str]) -> None:
         print(f"  {yellow('◈')} {dim(dep)}")
 
 
-def _resolve_relative_path(repl: "Repl", raw_path: str) -> str | None:
+def _resolve_relative_path(repl: Repl, raw_path: str) -> str | None:
     """Resolve a user-provided path relative to working_directory."""
     candidate = os.path.join(repl.working_directory, raw_path)
     if os.path.isfile(candidate):
@@ -390,7 +398,7 @@ def _resolve_relative_path(repl: "Repl", raw_path: str) -> str | None:
     return None
 
 
-def _ensure_import_graph_built(repl: "Repl") -> None:
+def _ensure_import_graph_built(repl: Repl) -> None:
     """Build the import graph if it hasn't been built yet."""
     if repl._import_graph is None or not repl._import_graph._built:
         spinner = Spinner("Building import graph...")
@@ -403,7 +411,7 @@ def _ensure_import_graph_built(repl: "Repl") -> None:
             spinner.stop(f"  {red('✗ Error building import graph:')} {exc}")
 
 
-def handle_python(repl: "Repl") -> None:
+def handle_python(repl: Repl) -> None:
     """Handle /python command — show Python REPL state."""
     repl_python = repl._get_or_create_python_repl()
     print(f"  {bold('Python REPL')}")
@@ -412,24 +420,25 @@ def handle_python(repl: "Repl") -> None:
     print(f"  {dim('Variables:')}  {cyan(str(len(repl_python.get_variables())))}")
     print()
     print(f"  {dim('The python tool is available to the agent.')}")
-    print(f"  {dim('Use the tool with: {\"code\": \"print(1+1)\"}')}")
+    print(f"  {dim('Use the tool with: {"code": "print(1+1)"}')}")
     print(f"  {dim('Type /reset-python to clear REPL state.')}")
 
 
-def handle_reset_python(repl: "Repl") -> None:
+def handle_reset_python(repl: Repl) -> None:
     """Handle /reset-python command — reset the Python REPL."""
     repl_python = repl._get_or_create_python_repl()
     repl_python.reset()
     print(f"  {green('✓')} {dim('Python REPL reset. All variables cleared.')}")
 
 
-def handle_plugins(repl: "Repl", args: str) -> None:
+def handle_plugins(repl: Repl, args: str) -> None:
     """Show loaded plugins and their status."""
     from pathlib import Path as _Path
+
     plugins_dir = _Path("plugins").resolve()
     if not plugins_dir.exists():
         print(f"  Plugins directory not found: {plugins_dir}")
-        print(f"  Create a 'plugins/' directory and add plugins there.")
+        print("  Create a 'plugins/' directory and add plugins there.")
         return
 
     discovered: list[str] = []
@@ -460,7 +469,7 @@ def handle_plugins(repl: "Repl", args: str) -> None:
                 pass
 
 
-def handle_changes(repl: "Repl") -> None:
+def handle_changes(repl: Repl) -> None:
     """Handle /changes command — show session change log."""
     if not repl._change_log:
         print(f"  {dim('No changes recorded yet.')}")
@@ -481,14 +490,14 @@ def handle_changes(repl: "Repl") -> None:
         if repl.working_directory and path:
             try:
                 rel_path = os.path.relpath(str(path), repl.working_directory)
-            except (ValueError, OSError):
+            except ValueError, OSError:
                 pass
         print(f"  {dim(ts)} {cyan(tool_name):<18} {dim(rel_path)}")
         if summary:
             print(f"  {' ' * 20} {yellow(summary[:100])}")
 
 
-def handle_timeline(repl: "Repl") -> None:
+def handle_timeline(repl: Repl) -> None:
     """Display the per-turn latency timeline (LLM vs tool execution times)."""
     if not repl._turn_timeline:
         print(f"  {dim('No timeline data yet.')}")
@@ -524,7 +533,7 @@ def handle_timeline(repl: "Repl") -> None:
             print(f"    {green(t_name)}: {t_dur:.1f}s ({t_pct:.0f}%){t_err}")
 
 
-def handle_reload(repl: "Repl") -> None:
+def handle_reload(repl: Repl) -> None:
     """Re-discover and re-register all tools from disk."""
     from src.formatting import Spinner
 
@@ -541,7 +550,7 @@ def handle_reload(repl: "Repl") -> None:
         spinner.stop(f"  {red('✗ Error reloading tools:')} {exc}")
 
 
-def handle_config(repl: "Repl") -> None:
+def handle_config(repl: Repl) -> None:
     """Show current configuration."""
     print(f"  {bold('Configuration')}")
     print(f"  {dim('Model:')}       {cyan(repl.llm.model)}")
@@ -564,7 +573,7 @@ def handle_config(repl: "Repl") -> None:
             print(f"    {dim('·')} {cyan(mcp_cfg_name)} {dim(f'({transport})')} {dim(status_label)}")
 
 
-def handle_mcp(repl: "Repl") -> None:
+def handle_mcp(repl: Repl) -> None:
     """Show MCP server connection status and tools."""
     if not repl._mcp_bridge:
         print(f"  {dim('No MCP servers configured.')}")
@@ -576,27 +585,27 @@ def handle_mcp(repl: "Repl") -> None:
         print(f"  {dim('No MCP servers configured.')}")
         return
 
-    total = int(sum(i['tool_count'] for i in infos))  # type: ignore[arg-type]
-    connected = int(sum(1 for i in infos if i['connected']))
+    total = int(sum(i["tool_count"] for i in infos))  # type: ignore[arg-type]
+    connected = int(sum(1 for i in infos if i["connected"]))
     print(f"  {bold('MCP Servers')}  {dim(f'({connected}/{len(infos)} connected, {total} tools)')}")
     print()
     for info in infos:
-        status_symbol = green('●') if info['connected'] else red('○')
-        status_label = green('Connected') if info['connected'] else red('Disconnected')
-        name: str = str(info['name'])
+        status_symbol = green("●") if info["connected"] else red("○")
+        status_label = green("Connected") if info["connected"] else red("Disconnected")
+        name: str = str(info["name"])
         print(f"  {status_symbol} {cyan(name)}  {dim(status_label)}")
-        if info['connected'] and info['tools']:
-            tools_list: list[dict[str, Any]] = info['tools']  # type: ignore[assignment]
+        if info["connected"] and info["tools"]:
+            tools_list: list[dict[str, Any]] = info["tools"]  # type: ignore[assignment]
             for t in tools_list:
-                t_name: str = str(t.get('name', ''))
-                t_desc: str = str(t.get('description', ''))
+                t_name: str = str(t.get("name", ""))
+                t_desc: str = str(t.get("description", ""))
                 print(f"     {dim('·')} {t_name}  {dim(t_desc[:60])}")
-        if info.get('error'):
-            err: str = str(info['error'])
+        if info.get("error"):
+            err: str = str(info["error"])
             print(f"     {red('✗')} {dim(err)}")
 
 
-def handle_budget(repl: "Repl", args: str) -> None:
+def handle_budget(repl: Repl, args: str) -> None:
     """Handle /budget commands."""
     parts = args.strip().split()
     subcmd = parts[0].lower() if parts else ""
@@ -635,10 +644,10 @@ def handle_budget(repl: "Repl", args: str) -> None:
             print(f"  Token budget: {repl._total_tokens_used:,} / {repl._token_budget:,} tokens ({ratio:.1%})")
             if repl._token_budget_exceeded:
                 print(f"  {red('●')} Budget exceeded — in read-only mode")
-        print(f"  Usage: /budget [set <limit>|reset|clear]")
+        print("  Usage: /budget [set <limit>|reset|clear]")
 
 
-def handle_summarize(repl: "Repl", args: str) -> None:
+def handle_summarize(repl: Repl, args: str) -> None:
     """Handle /summarize command."""
     if args.strip() == "on":
         repl._enable_summarization = True
@@ -652,7 +661,7 @@ def handle_summarize(repl: "Repl", args: str) -> None:
         print("  Usage: /summarize on|off")
 
 
-def handle_diff_review(repl: "Repl", args: str = "") -> None:
+def handle_diff_review(repl: Repl, args: str = "") -> None:
     """Toggle interactive diff review mode."""
     parts = args.strip().split()
     if parts and parts[0].lower() == "on":
@@ -665,9 +674,9 @@ def handle_diff_review(repl: "Repl", args: str = "") -> None:
     print(f"  Diff review mode: {status}")
 
 
-def handle_edit(repl: "Repl") -> None:
+def handle_edit(repl: Repl) -> None:
     """Edit the last user message and re-send it."""
-    from src.formatting import cyan, dim, green, bold, magenta
+    from src.formatting import bold, cyan, dim, green, magenta
 
     idx = repl._get_last_user_index()
     if idx is None:
@@ -683,14 +692,20 @@ def handle_edit(repl: "Repl") -> None:
 
     try:
         mode_tag = (
-            f"{magenta(repl.mode.upper())}" if repl.mode == "ask"
-            else f"{yellow(repl.mode.upper())}" if repl.mode == "plan"
+            f"{magenta(repl.mode.upper())}"
+            if repl.mode == "ask"
+            else f"{yellow(repl.mode.upper())}"
+            if repl.mode == "plan"
             else f"{cyan(repl.mode.upper())}"
         )
-        wd = repl.working_directory.replace(os.environ.get("HOME", "~"), "~") if "HOME" in os.environ else repl.working_directory
+        wd = (
+            repl.working_directory.replace(os.environ.get("HOME", "~"), "~")
+            if "HOME" in os.environ
+            else repl.working_directory
+        )
         prompt = f"  {bold(mode_tag)} {cyan(wd)} {green('❯')} "
         new_line = input(prompt)
-    except (EOFError, KeyboardInterrupt):
+    except EOFError, KeyboardInterrupt:
         print()
         print(f"  {dim('Edit cancelled.')}")
         return
@@ -713,9 +728,9 @@ def handle_edit(repl: "Repl") -> None:
     repl._process_turn(new_line, color_fn)
 
 
-def handle_retry(repl: "Repl") -> None:
+def handle_retry(repl: Repl) -> None:
     """Re-send the last user message (same content)."""
-    from src.formatting import cyan, dim, green
+    from src.formatting import dim
 
     idx = repl._get_last_user_index()
     if idx is None:
@@ -734,9 +749,9 @@ def handle_retry(repl: "Repl") -> None:
     repl._process_turn(content, color_fn)
 
 
-def handle_retry_auto(repl: "Repl") -> None:
+def handle_retry_auto(repl: Repl) -> None:
     """Re-send the last user message with an escalation prompt."""
-    from src.formatting import cyan, dim, green, yellow
+    from src.formatting import dim, yellow
 
     idx = repl._get_last_user_index()
     if idx is None:

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import tempfile
-from pathlib import Path
 
 from src.tools import ToolContext
 from src.tools.ci_tool import ci_tool, execute

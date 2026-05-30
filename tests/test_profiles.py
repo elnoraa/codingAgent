@@ -1,11 +1,12 @@
 """Tests for configuration profiles."""
+
 from __future__ import annotations
 
 import json
 import os
 import tempfile
 
-from src.profiles import Profile, delete_profile, list_profiles, load_profile, save_profile
+from src.profiles import delete_profile, list_profiles, load_profile, save_profile
 
 
 def test_save_and_load_profile() -> None:

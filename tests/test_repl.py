@@ -7,16 +7,14 @@ and error handling WITHOUT requiring a real LLM connection.
 from __future__ import annotations
 
 import os
-import logging
-from unittest.mock import MagicMock, patch
 from pathlib import Path
 from typing import Any
+from unittest.mock import MagicMock
 
 import pytest
 
-from src.repl import Repl
 from src.client import LlmClient
-
+from src.repl import Repl
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -42,12 +40,13 @@ def _capture_prints(repl: Repl, cmd: str) -> list[str]:
     """Run a REPL command and capture printed output."""
     import io
     import sys
+
     captured = io.StringIO()
     old_stdout = sys.stdout
     sys.stdout = captured
     try:
         repl._handle_command(cmd)
-    except (EOFError, SystemExit):
+    except EOFError, SystemExit:
         pass
     finally:
         sys.stdout = old_stdout
@@ -233,7 +232,9 @@ class TestCommandHandling:
         """The /q command should raise EOFError to trigger clean exit."""
         repl = _make_repl()
         # Call _handle_command directly (bypass _capture_prints which catches it)
-        import io, sys
+        import io
+        import sys
+
         old_stdout = sys.stdout
         sys.stdout = io.StringIO()
         try:
@@ -379,13 +380,13 @@ class TestSearch:
             {"role": "user", "content": "foo 123 bar"},
             {"role": "assistant", "content": "baz 456 qux"},
         ]
-        lines = _capture_prints(repl, '/search -r \\d{3}')
+        lines = _capture_prints(repl, "/search -r \\d{3}")
         assert any("No match" not in l for l in lines)
 
     def test_search_regex_invalid(self) -> None:
         repl = _make_repl()
         repl.messages = [{"role": "user", "content": "hello"}]
-        lines = _capture_prints(repl, '/search -r [invalid')
+        lines = _capture_prints(repl, "/search -r [invalid")
         assert any("Invalid regex" in l for l in lines)
 
     def test_search_in_tool_result_blocks(self) -> None:
@@ -654,10 +655,7 @@ class TestToolRegistration:
             for node in ast.walk(tree):
                 if isinstance(node, ast.Assign):
                     for target in node.targets:
-                        if (
-                            isinstance(target, ast.Name)
-                            and target.id.endswith("_tool")
-                        ):
+                        if isinstance(target, ast.Name) and target.id.endswith("_tool"):
                             # Verify it's assigned a Tool(...) call
                             if (
                                 isinstance(node.value, ast.Call)
@@ -721,8 +719,8 @@ class TestToolRegistration:
                 missing.append(f"  {var_name} (defined in src/tools/{mod_file})")
 
         assert not missing, (
-            f"The following tool variable(s) are defined in src/tools/ but NOT imported "
-            f"in src/repl/repl.py:\n" + "\n".join(missing)
+            "The following tool variable(s) are defined in src/tools/ but NOT imported "
+            "in src/repl/repl.py:\n" + "\n".join(missing)
         )
 
     def test_all_tool_modules_registered(self) -> None:
@@ -739,8 +737,8 @@ class TestToolRegistration:
                 missing.append(f"  {var_name} (defined in src/tools/{mod_file})")
 
         assert not missing, (
-            f"The following tool variable(s) are defined in src/tools/ but NOT registered "
-            f"via self.tools.register() in _register_all_tools():\n" + "\n".join(missing)
+            "The following tool variable(s) are defined in src/tools/ but NOT registered "
+            "via self.tools.register() in _register_all_tools():\n" + "\n".join(missing)
         )
 
     def test_all_tool_imports_match_registrations(self) -> None:
@@ -754,18 +752,12 @@ class TestToolRegistration:
         messages: list[str] = []
         if only_imported:
             names = ", ".join(sorted(only_imported))
-            messages.append(
-                f"Imported but not registered via self.tools.register(): {names}"
-            )
+            messages.append(f"Imported but not registered via self.tools.register(): {names}")
         if only_registered:
             names = ", ".join(sorted(only_registered))
-            messages.append(
-                f"Registered via self.tools.register() but not imported: {names}"
-            )
+            messages.append(f"Registered via self.tools.register() but not imported: {names}")
 
-        assert not messages, (
-            "Mismatch between imports and registrations:\n" + "\n".join(messages)
-        )
+        assert not messages, "Mismatch between imports and registrations:\n" + "\n".join(messages)
 
 
 class TestNoDuplicateOutput:
@@ -776,9 +768,7 @@ class TestNoDuplicateOutput:
     a single copy appears.
     """
 
-    def _run_turn_with_llm_text(
-        self, repl: Any, llm_text_chunks: list[str], mode: str = "code"
-    ) -> str:
+    def _run_turn_with_llm_text(self, repl: Any, llm_text_chunks: list[str], mode: str = "code") -> str:
         """Helper: mock chat_with_tools to call on_text with chunks, return captured stdout."""
         import io
         import sys

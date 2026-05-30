@@ -1,19 +1,27 @@
 from __future__ import annotations
 
-import logging
 import os
 import re
 from typing import Any
 
-from src.tools import Tool, ToolContext
-
 from src.logging_config import get_logger
+from src.tools import Tool, ToolContext
 
 logger = get_logger(__name__)
 
-IGNORE_DIRS = frozenset({
-    "node_modules", ".git", ".svn", ".hg", "dist", "build", ".next", "__pycache__", ".venv",
-})
+IGNORE_DIRS = frozenset(
+    {
+        "node_modules",
+        ".git",
+        ".svn",
+        ".hg",
+        "dist",
+        "build",
+        ".next",
+        "__pycache__",
+        ".venv",
+    }
+)
 
 
 def execute(args: dict[str, Any], _ctx: ToolContext) -> str:
@@ -35,6 +43,7 @@ def execute(args: dict[str, Any], _ctx: ToolContext) -> str:
         dirs[:] = [d for d in dirs if d not in IGNORE_DIRS and not d.startswith(".")]
 
         from src.utils import validate_walk_path
+
         # Skip directories that are symlinks pointing outside working dir
         root_error = validate_walk_path(root, _ctx.working_directory)
         if root_error:

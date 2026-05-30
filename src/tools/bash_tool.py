@@ -1,14 +1,12 @@
 from __future__ import annotations
 
-import logging
 import os
 import re as _re
 import subprocess
 from typing import Any
 
-from src.tools import Tool, ToolContext
-
 from src.logging_config import get_logger
+from src.tools import Tool, ToolContext
 
 logger = get_logger(__name__)
 
@@ -23,53 +21,64 @@ DEFAULT_TIMEOUT = 30
 
 _ESCAPE_PATTERNS: list[tuple[str, str]] = [
     # Shell redirects (> and >>) to absolute paths (Unix / or Windows C:\) or paths with ../../
-    (r'(?:(?:\d*>>?|&>>?)\s+)((?:[a-zA-Z]:)?[/\\]|\.\./)', "output redirect (> or >>) to a path outside the working directory"),
+    (
+        r"(?:(?:\d*>>?|&>>?)\s+)((?:[a-zA-Z]:)?[/\\]|\.\./)",
+        "output redirect (> or >>) to a path outside the working directory",
+    ),
     # tee to absolute path
-    (r'\btee\s+(-[aA]+\s+)?((?:[a-zA-Z]:)?[/\\]|\.\./)', "tee to a path outside the working directory"),
+    (r"\btee\s+(-[aA]+\s+)?((?:[a-zA-Z]:)?[/\\]|\.\./)", "tee to a path outside the working directory"),
     # mv with target outside
-    (r'\bmv\s+\S+\s+((?:[a-zA-Z]:)?[/\\]|\.\./)', "mv target resolves outside the working directory"),
+    (r"\bmv\s+\S+\s+((?:[a-zA-Z]:)?[/\\]|\.\./)", "mv target resolves outside the working directory"),
     # cp with target outside
-    (r'\bcp\s+\S+\s+((?:[a-zA-Z]:)?[/\\]|\.\./)', "cp target resolves outside the working directory"),
+    (r"\bcp\s+\S+\s+((?:[a-zA-Z]:)?[/\\]|\.\./)", "cp target resolves outside the working directory"),
     # rm on absolute paths or outside
-    (r'\brm\s+[-rf]*\s+((?:[a-zA-Z]:)?[/\\]|\.\./)', "rm target resolves outside the working directory"),
+    (r"\brm\s+[-rf]*\s+((?:[a-zA-Z]:)?[/\\]|\.\./)", "rm target resolves outside the working directory"),
     # ln with target outside
-    (r'\bln\s+-[sf]+\s+\S+\s+((?:[a-zA-Z]:)?[/\\]|\.\./)', "ln target resolves outside the working directory"),
+    (r"\bln\s+-[sf]+\s+\S+\s+((?:[a-zA-Z]:)?[/\\]|\.\./)", "ln target resolves outside the working directory"),
     # chmod/chown on files outside
-    (r'\b(?:chmod|chown)\s+\S+\s+((?:[a-zA-Z]:)?[/\\]|\.\./)', "chmod/chown target resolves outside the working directory"),
+    (
+        r"\b(?:chmod|chown)\s+\S+\s+((?:[a-zA-Z]:)?[/\\]|\.\./)",
+        "chmod/chown target resolves outside the working directory",
+    ),
     # dd with of= outside
-    (r'\bdd\b.*\bof=((?:[a-zA-Z]:)?[/\\]|\.\./)', "dd output file resolves outside the working directory"),
+    (r"\bdd\b.*\bof=((?:[a-zA-Z]:)?[/\\]|\.\./)", "dd output file resolves outside the working directory"),
     # curl -o / --output to a path outside
-    (r'\bcurl\s+.*\s+-[oO]\s+((?:[a-zA-Z]:)?[/\\]|\.\./)', "curl -o to a path outside the working directory"),
-    (r'\bcurl\s+.*\s+--output\s+((?:[a-zA-Z]:)?[/\\]|\.\./)', "curl --output to a path outside the working directory"),
+    (r"\bcurl\s+.*\s+-[oO]\s+((?:[a-zA-Z]:)?[/\\]|\.\./)", "curl -o to a path outside the working directory"),
+    (r"\bcurl\s+.*\s+--output\s+((?:[a-zA-Z]:)?[/\\]|\.\./)", "curl --output to a path outside the working directory"),
     # wget -O / --output-document to a path outside
-    (r'\bwget\s+.*\s+-[Oo]\s+((?:[a-zA-Z]:)?[/\\]|\.\./)', "wget -O to a path outside the working directory"),
-    (r'\bwget\s+.*\s+--output-document\s+((?:[a-zA-Z]:)?[/\\]|\.\./)', "wget --output-document to a path outside"),
+    (r"\bwget\s+.*\s+-[Oo]\s+((?:[a-zA-Z]:)?[/\\]|\.\./)", "wget -O to a path outside the working directory"),
+    (r"\bwget\s+.*\s+--output-document\s+((?:[a-zA-Z]:)?[/\\]|\.\./)", "wget --output-document to a path outside"),
     # rsync with destination outside
-    (r'\brsync\b.*\s((?:[a-zA-Z]:)?[/\\]|\.\./)(?!\s)', "rsync destination resolves outside the working directory"),
+    (r"\brsync\b.*\s((?:[a-zA-Z]:)?[/\\]|\.\./)(?!\s)", "rsync destination resolves outside the working directory"),
     # install command (copies files with permissions)
-    (r'\binstall\s+.*\s+((?:[a-zA-Z]:)?[/\\]|\.\./)', "install target resolves outside the working directory"),
+    (r"\binstall\s+.*\s+((?:[a-zA-Z]:)?[/\\]|\.\./)", "install target resolves outside the working directory"),
     # scp to local path outside
-    (r'\bscp\b.*\s((?:[a-zA-Z]:)?[/\\]|\.\./)\S*$', "scp target resolves outside the working directory"),
+    (r"\bscp\b.*\s((?:[a-zA-Z]:)?[/\\]|\.\./)\S*$", "scp target resolves outside the working directory"),
     # tar/gzip extraction to outside path
-    (r'\b(?:tar|unzip|7z)\b.*\s+-[a-zA-Z]*[Coc]\s+((?:[a-zA-Z]:)?[/\\]|\.\./)', "archive extraction target outside the working directory"),
+    (
+        r"\b(?:tar|unzip|7z)\b.*\s+-[a-zA-Z]*[Coc]\s+((?:[a-zA-Z]:)?[/\\]|\.\./)",
+        "archive extraction target outside the working directory",
+    ),
     # git clone to outside path
-    (r'\bgit\s+clone\b.*\s+((?:[a-zA-Z]:)?[/\\]|\.\./)', "git clone target outside the working directory"),
+    (r"\bgit\s+clone\b.*\s+((?:[a-zA-Z]:)?[/\\]|\.\./)", "git clone target outside the working directory"),
 ]
 
 # Sensitive environment variables that should be flagged when accessed via shell
-_SENSITIVE_ENV_VARS = frozenset({
-    "ANTHROPIC_API_KEY",
-    "OPENAI_API_KEY",
-    "ANTHROPIC_BASE_URL",
-    "CODING_AGENT_SESSION_KEY",
-    "CODING_AGENT_PLUGIN_KEY",
-    "MCP_SERVERS",
-    "AWS_ACCESS_KEY_ID",
-    "AWS_SECRET_ACCESS_KEY",
-    "AWS_SESSION_TOKEN",
-    "GITHUB_TOKEN",
-    "GIT_TOKEN",
-})
+_SENSITIVE_ENV_VARS = frozenset(
+    {
+        "ANTHROPIC_API_KEY",
+        "OPENAI_API_KEY",
+        "ANTHROPIC_BASE_URL",
+        "CODING_AGENT_SESSION_KEY",
+        "CODING_AGENT_PLUGIN_KEY",
+        "MCP_SERVERS",
+        "AWS_ACCESS_KEY_ID",
+        "AWS_SECRET_ACCESS_KEY",
+        "AWS_SESSION_TOKEN",
+        "GITHUB_TOKEN",
+        "GIT_TOKEN",
+    }
+)
 
 
 def _expand_shell_variables(cmd: str) -> str:
@@ -80,14 +89,16 @@ def _expand_shell_variables(cmd: str) -> str:
     """
     # Expand ~ only when it appears as a standalone token (at start or after space)
     # Do NOT replace ~ inside words like AARONL~1 (Windows short names)
-    cmd = _re.sub(r'(?:^|\s)~(?=\s|$|/|\\)', lambda m: m.group(0).replace('~', os.path.expanduser("~")), cmd)
+    cmd = _re.sub(r"(?:^|\s)~(?=\s|$|/|\\)", lambda m: m.group(0).replace("~", os.path.expanduser("~")), cmd)
+
     # Expand $VAR and ${VAR}
     def _replace_var(match: _re.Match[str]) -> str:
         var_name = match.group(1) or match.group(2)
         if var_name:
             return os.environ.get(var_name, match.group(0))
         return match.group(0)
-    cmd = _re.sub(r'\$(\w+)|\$\{(\w+)\}', _replace_var, cmd)
+
+    cmd = _re.sub(r"\$(\w+)|\$\{(\w+)\}", _replace_var, cmd)
     return cmd
 
 
@@ -96,7 +107,7 @@ def _has_command_substitution(cmd: str) -> bool:
 
     Command substitution in paths is a strong indicator of attempted bypass.
     """
-    return bool(_re.search(r'\$\([^)]+\)', cmd) or _re.search(r'`[^`]+`', cmd))
+    return bool(_re.search(r"\$\([^)]+\)", cmd) or _re.search(r"`[^`]+`", cmd))
 
 
 def _check_command_for_outside_writes(command: str, working_directory: str) -> str | None:
@@ -127,7 +138,7 @@ def _check_command_for_outside_writes(command: str, working_directory: str) -> s
             # Do a quick sanity check — if the target resolves inside, allow it
             try:
                 target = match.group(0).strip()
-                path_match = _re.search(r'((?:[a-zA-Z]:)?[/\\][\w/.\-\\ :]+)', target)
+                path_match = _re.search(r"((?:[a-zA-Z]:)?[/\\][\w/.\-\\ :]+)", target)
                 if path_match:
                     candidate = path_match.group(1)
                     resolved = Path(candidate).resolve()
@@ -135,7 +146,7 @@ def _check_command_for_outside_writes(command: str, working_directory: str) -> s
                     resolved.relative_to(resolved_wd)
                     # It resolved inside the working directory — allow it
                     continue
-            except (ValueError, IndexError):
+            except ValueError, IndexError:
                 pass
 
             return (
@@ -158,14 +169,15 @@ def _check_for_sensitive_env_access(command: str) -> str | None:
 
     for var_name in _SENSITIVE_ENV_VARS:
         pattern = _re_env.compile(
-            r'(?:^|\s)(?:echo|cat|print|printf|env|export|declare)\s.*'
-            r'(?:\$' + _re_env.escape(var_name) + r'|\$\{' + _re_env.escape(var_name) + r'\})',
+            r"(?:^|\s)(?:echo|cat|print|printf|env|export|declare)\s.*"
+            r"(?:\$" + _re_env.escape(var_name) + r"|\$\{" + _re_env.escape(var_name) + r"\})",
             _re_env.IGNORECASE,
         )
         if pattern.search(command):
             logger.warning(
                 "Command may be accessing sensitive environment variable '%s': %s",
-                var_name, command[:200],
+                var_name,
+                command[:200],
             )
             return (
                 f"Warning: Command appears to access sensitive environment variable "
@@ -185,15 +197,16 @@ def _check_for_data_exfiltration(command: str, working_directory: str) -> str | 
     Returns an error message if exfiltration is detected, None otherwise.
     """
     import re as _re_exfil
-    from src.utils import _EXFIL_SENSITIVE_FILES, _EXFIL_NETWORK_COMMANDS
+
+    from src.utils import _EXFIL_NETWORK_COMMANDS, _EXFIL_SENSITIVE_FILES
 
     # Normalize path separators on Windows to forward slash for matching
     normalized = command.replace("\\", "/")
     # Expand ~ (tilde) to the user's home directory so that patterns like
     # `.ssh/id_rsa` can match paths like `~/.ssh/id_rsa`
     normalized_tilde_expanded = _re_exfil.sub(
-        r'(?:^|\s)~(?=\s|$|/|\\)',
-        lambda m: m.group(0).replace('~', os.path.expanduser("~")),
+        r"(?:^|\s)~(?=\s|$|/|\\)",
+        lambda m: m.group(0).replace("~", os.path.expanduser("~")),
         normalized,
     )
 
@@ -201,7 +214,7 @@ def _check_for_data_exfiltration(command: str, working_directory: str) -> str | 
     # Check BOTH the tilde-expanded copy AND the original (for literal `~` matching)
     for sf in _EXFIL_SENSITIVE_FILES:
         sf_escaped = _re_exfil.escape(sf)
-        sf_basename = _re_exfil.escape(sf.split('/')[-1] if '/' in sf else sf)
+        sf_basename = _re_exfil.escape(sf.split("/")[-1] if "/" in sf else sf)
 
         # Pattern builders — all match either the basename or full sensitive path
         def _full_and_basename(prefix: str, suffix: str = "") -> list[str]:
@@ -216,35 +229,63 @@ def _check_for_data_exfiltration(command: str, working_directory: str) -> str | 
 
         def _cat_full_path(prefix: str, suffix: str) -> str:
             """Build a pattern for cat commands with full path matching."""
-            return prefix + r'.*?' + suffix
+            return prefix + r".*?" + suffix
 
         # curl -d @C:\Users\...\.env, curl --data-binary @...id_rsa
-        patterns_expanded.extend(_full_and_basename(
-            r'\bcurl\s+.*(?:-d|--data(?:-binary)?|--data)\s+@', r'\b',
-        ))
+        patterns_expanded.extend(
+            _full_and_basename(
+                r"\bcurl\s+.*(?:-d|--data(?:-binary)?|--data)\s+@",
+                r"\b",
+            )
+        )
         # curl -F file=@...id_rsa
-        patterns_expanded.extend(_full_and_basename(
-            r'\bcurl\s+.*-F\s+(?:\S+=)?@', r'\b',
-        ))
+        patterns_expanded.extend(
+            _full_and_basename(
+                r"\bcurl\s+.*-F\s+(?:\S+=)?@",
+                r"\b",
+            )
+        )
         # wget --post-file=...id_rsa
-        patterns_expanded.extend(_full_and_basename(
-            r'\bwget\s+.*--post-file(?:=|\s+)', r'\b',
-        ))
+        patterns_expanded.extend(
+            _full_and_basename(
+                r"\bwget\s+.*--post-file(?:=|\s+)",
+                r"\b",
+            )
+        )
         # cat ...id_rsa | curl/wget (pipe to network)
         # Use .*? to match full paths like "C:\Users\...\.ssh\id_rsa"
-        patterns_expanded.extend([
-            _cat_full_path(r'\bcat\s+', sf_escaped + r'\s*\|\s*.*\b(?:' + '|'.join(_re_exfil.escape(c) for c in _EXFIL_NETWORK_COMMANDS) + r')\b'),
-            _cat_full_path(r'\bcat\s+', sf_basename + r'\s*\|\s*.*\b(?:' + '|'.join(_re_exfil.escape(c) for c in _EXFIL_NETWORK_COMMANDS) + r')\b'),
-        ])
+        patterns_expanded.extend(
+            [
+                _cat_full_path(
+                    r"\bcat\s+",
+                    sf_escaped
+                    + r"\s*\|\s*.*\b(?:"
+                    + "|".join(_re_exfil.escape(c) for c in _EXFIL_NETWORK_COMMANDS)
+                    + r")\b",
+                ),
+                _cat_full_path(
+                    r"\bcat\s+",
+                    sf_basename
+                    + r"\s*\|\s*.*\b(?:"
+                    + "|".join(_re_exfil.escape(c) for c in _EXFIL_NETWORK_COMMANDS)
+                    + r")\b",
+                ),
+            ]
+        )
         # curl -d @- < ...id_rsa (redirect stdin)
-        patterns_expanded.extend(_full_and_basename(
-            r'\bcurl\s+.*(?:-d|--data)\s+@-\s*.*<\s*', r'\b',
-        ))
+        patterns_expanded.extend(
+            _full_and_basename(
+                r"\bcurl\s+.*(?:-d|--data)\s+@-\s*.*<\s*",
+                r"\b",
+            )
+        )
         # cat ...id_rsa | nc
-        patterns_expanded.extend([
-            _cat_full_path(r'\bcat\s+', sf_escaped + r'\s*\|\s*nc\b'),
-            _cat_full_path(r'\bcat\s+', sf_basename + r'\s*\|\s*nc\b'),
-        ])
+        patterns_expanded.extend(
+            [
+                _cat_full_path(r"\bcat\s+", sf_escaped + r"\s*\|\s*nc\b"),
+                _cat_full_path(r"\bcat\s+", sf_basename + r"\s*\|\s*nc\b"),
+            ]
+        )
 
         for raw_pat in patterns_expanded:
             pat = _re_exfil.compile(raw_pat)
@@ -254,7 +295,7 @@ def _check_for_data_exfiltration(command: str, working_directory: str) -> str | 
 
         # Also check the original (non-tilde-expanded) command for ~ patterns
         # e.g., cat ~/.ssh/id_rsa where ~ wasn't expanded to a full path
-        if '~/' in normalized or '~\\' in normalized:
+        if "~/" in normalized or "~\\" in normalized:
             for raw_pat in patterns_expanded:
                 pat = _re_exfil.compile(raw_pat)
                 if pat.search(normalized):
@@ -282,18 +323,19 @@ def _get_rest_of_command(command: str, start_pos: int) -> str:
 def _has_pipe_to_network(after_code: str) -> bool:
     """Check if the remainder of a command pipes/sends data to the network."""
     import re as _re_pipe
+
     from src.utils import _EXFIL_NETWORK_COMMANDS
 
     # Check for pipe (|) followed by a network command
     for net_cmd in _EXFIL_NETWORK_COMMANDS:
         # e.g., | curl, | wget, | nc
-        pattern = _re_pipe.compile(r'\|\s*' + _re_pipe.escape(net_cmd) + r'\b')
+        pattern = _re_pipe.compile(r"\|\s*" + _re_pipe.escape(net_cmd) + r"\b")
         if pattern.search(after_code):
             return True
 
     # Also check for redirect to /dev/tcp (bash-specific)
     # e.g., > /dev/tcp/evil.com/8080
-    if _re_pipe.search(r'>\s*/dev/tcp/', after_code):
+    if _re_pipe.search(r">\s*/dev/tcp/", after_code):
         return True
 
     return False
@@ -316,16 +358,19 @@ def _check_for_indirect_exfiltration(command: str) -> str | None:
     Returns an error message if detected, None otherwise.
     """
     import re as _re_indirect
+
     from src.utils import (
-        _SCRIPT_INTERPRETERS, _SCRIPT_FILE_READ_INDICATORS,
-        _SCRIPT_NETWORK_INDICATORS, _EXFIL_SENSITIVE_FILES,
+        _EXFIL_SENSITIVE_FILES,
+        _SCRIPT_FILE_READ_INDICATORS,
+        _SCRIPT_INTERPRETERS,
+        _SCRIPT_NETWORK_INDICATORS,
     )
 
     for interpreter, flag, desc in _SCRIPT_INTERPRETERS:
         # Check if this interpreter+flag combo appears in the command
         # We don't try to fully extract the code block due to nested quotes
         combo_pattern = _re_indirect.compile(
-            r'\b' + _re_indirect.escape(interpreter) + r'\s+' + _re_indirect.escape(flag) + r'\s+',
+            r"\b" + _re_indirect.escape(interpreter) + r"\s+" + _re_indirect.escape(flag) + r"\s+",
         )
         combo_match = combo_pattern.search(command)
         if not combo_match:
@@ -333,7 +378,7 @@ def _check_for_indirect_exfiltration(command: str) -> str | None:
 
         # Extract the text AFTER the interpreter+flag — this is the "code argument"
         # We strip the opening quote character and take the rest of the command
-        after_flag = command[combo_match.end():].strip()
+        after_flag = command[combo_match.end() :].strip()
 
         # Strip the leading quote character (either ' or ")
         if after_flag.startswith("'") or after_flag.startswith('"'):
@@ -355,7 +400,7 @@ def _check_for_indirect_exfiltration(command: str) -> str | None:
         has_sensitive_ref = any(
             sf_name in after_flag.replace(" ", "").replace("'", "").replace('"', "")
             for sf in _EXFIL_SENSITIVE_FILES
-            for sf_name in [sf.split('/')[-1] if '/' in sf else sf, sf]
+            for sf_name in [sf.split("/")[-1] if "/" in sf else sf, sf]
         )
 
         # Check for pipe/redirect of script output into a network command
@@ -379,7 +424,8 @@ def execute(args: dict[str, Any], ctx: ToolContext) -> str:
         return 'Error: missing required argument "command".'
 
     # Validate command length
-    from src.utils import validate_length, MAX_COMMAND_LENGTH
+    from src.utils import MAX_COMMAND_LENGTH, validate_length
+
     error = validate_length(command, MAX_COMMAND_LENGTH, "command")
     if error:
         return error
@@ -427,7 +473,9 @@ def execute(args: dict[str, Any], ctx: ToolContext) -> str:
         try:
             _diff_check = subprocess.run(
                 ["git", "diff", "--stat"],
-                capture_output=True, text=True, cwd=workdir,
+                capture_output=True,
+                text=True,
+                cwd=workdir,
                 timeout=5,
             )
             if _diff_check.returncode == 0 and _diff_check.stdout:
@@ -441,7 +489,8 @@ def execute(args: dict[str, Any], ctx: ToolContext) -> str:
                             # Revert the changes with git checkout
                             subprocess.run(
                                 ["git", "checkout", "--", _file_path],
-                                capture_output=True, cwd=workdir,
+                                capture_output=True,
+                                cwd=workdir,
                                 timeout=5,
                             )
                             return (
@@ -459,7 +508,12 @@ def execute(args: dict[str, Any], ctx: ToolContext) -> str:
     if result.returncode != 0:
         parts.append(f"\n[Exit code: {result.returncode}]")
 
-    logger.info("Command completed (exit_code=%d, stdout_len=%d, stderr_len=%d)", result.returncode, len(result.stdout or ""), len(result.stderr or ""))
+    logger.info(
+        "Command completed (exit_code=%d, stdout_len=%d, stderr_len=%d)",
+        result.returncode,
+        len(result.stdout or ""),
+        len(result.stderr or ""),
+    )
     return "\n".join(parts) if parts else "Command completed with no output."
 
 

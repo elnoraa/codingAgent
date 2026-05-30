@@ -56,6 +56,7 @@ def test_simple_format() -> None:
 def test_nonexistent_path_crashes_with_error() -> None:
     """The directory_tree tool raises FileNotFoundError for non-existent paths."""
     import pytest
+
     ctx = ToolContext(working_directory="/tmp")
     with pytest.raises((FileNotFoundError, OSError)):
         execute({"path": "/nonexistent-path-xyz"}, ctx)

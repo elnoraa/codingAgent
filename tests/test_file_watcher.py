@@ -36,6 +36,7 @@ class TestFileWatcherInit:
     def test_callback_stored(self) -> None:
         def cb(changed: list[str]) -> None:
             pass
+
         fw = FileWatcher(on_change=cb)
         assert fw._on_change is cb
 

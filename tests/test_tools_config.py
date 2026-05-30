@@ -2,11 +2,10 @@
 
 from __future__ import annotations
 
-import os
-
 import pytest
+
 from src.tools import ToolContext
-from src.tools.config_tool import execute, config_tool
+from src.tools.config_tool import config_tool, execute
 
 
 def test_tool_definition() -> None:

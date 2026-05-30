@@ -11,7 +11,6 @@ import logging
 import time
 from collections import defaultdict
 from threading import Lock
-from typing import Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -33,15 +32,15 @@ class RateLimiter:
             return error
     """
 
-    DEFAULT_LIMITS: dict[str, Tuple[int, float]] = {
-        "read":    (60,  60.0),    # 60 read calls per minute
-        "write":   (20,  60.0),    # 20 write calls per minute
-        "exec":    (30,  60.0),    # 30 subprocess calls per minute
-        "network": (15,  60.0),    # 15 network calls per minute
-        "default": (50,  60.0),    # 50 calls per minute (fallback)
+    DEFAULT_LIMITS: dict[str, tuple[int, float]] = {
+        "read": (60, 60.0),  # 60 read calls per minute
+        "write": (20, 60.0),  # 20 write calls per minute
+        "exec": (30, 60.0),  # 30 subprocess calls per minute
+        "network": (15, 60.0),  # 15 network calls per minute
+        "default": (50, 60.0),  # 50 calls per minute (fallback)
     }
 
-    def __init__(self, limits: dict[str, Tuple[int, float]] | None = None) -> None:
+    def __init__(self, limits: dict[str, tuple[int, float]] | None = None) -> None:
         self._limits = {**self.DEFAULT_LIMITS, **(limits or {})}
         self._history: dict[str, list[float]] = defaultdict(list)
         self._lock = Lock()
@@ -72,9 +71,12 @@ class RateLimiter:
                 oldest = history[0] if history else now
                 retry_after = max(0, window_seconds - (now - oldest))
                 logger.warning(
-                    "Rate limit exceeded for '%s' (tool: %s): "
-                    "%d calls in %ds window. Retry after %.1fs.",
-                    category, tool_name, len(history), window_seconds, retry_after,
+                    "Rate limit exceeded for '%s' (tool: %s): %d calls in %ds window. Retry after %.1fs.",
+                    category,
+                    tool_name,
+                    len(history),
+                    window_seconds,
+                    retry_after,
                 )
                 return (
                     f"Error: Rate limit exceeded for {category} operations "

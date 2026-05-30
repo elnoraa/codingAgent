@@ -10,7 +10,7 @@ from unittest.mock import patch
 
 import pytest
 
-from src.main import load_config, DEFAULT_SYSTEM_PROMPT
+from src.main import DEFAULT_SYSTEM_PROMPT, load_config
 
 
 @pytest.fixture
@@ -22,9 +22,8 @@ def temp_config() -> Iterator[str]:
 
 def test_load_config_requires_api_key() -> None:
     """Should exit when ANTHROPIC_API_KEY is missing."""
-    with patch.dict(os.environ, {}, clear=True):
-        with pytest.raises(SystemExit):
-            load_config()
+    with patch.dict(os.environ, {}, clear=True), pytest.raises(SystemExit):
+        load_config()
 
 
 def test_load_config_defaults() -> None:
@@ -42,11 +41,15 @@ def test_load_config_defaults() -> None:
 
 def test_load_config_from_env() -> None:
     """Should read model and max_tokens from environment."""
-    with patch.dict(os.environ, {
-        "ANTHROPIC_API_KEY": "sk-test",
-        "ANTHROPIC_MODEL": "claude-3-5-sonnet-20241022",
-        "MAX_TOKENS": "8192",
-    }, clear=True):
+    with patch.dict(
+        os.environ,
+        {
+            "ANTHROPIC_API_KEY": "sk-test",
+            "ANTHROPIC_MODEL": "claude-3-5-sonnet-20241022",
+            "MAX_TOKENS": "8192",
+        },
+        clear=True,
+    ):
         config = load_config()
         assert config["model"] == "claude-3-5-sonnet-20241022"
         assert config["max_tokens"] == 8192

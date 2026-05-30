@@ -5,7 +5,7 @@ from __future__ import annotations
 from unittest.mock import MagicMock
 
 from src.tools import ToolContext
-from src.tools.spawn_agent import spawn_agent_tool, _execute_spawn_agent
+from src.tools.spawn_agent import _execute_spawn_agent, spawn_agent_tool
 
 
 def _make_context(orchestrator: object | None = None) -> ToolContext:

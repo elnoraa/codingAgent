@@ -1,4 +1,5 @@
 """Tests for desktop notifications."""
+
 from __future__ import annotations
 
 from src.notifications import should_notify

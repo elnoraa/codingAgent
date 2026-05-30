@@ -8,8 +8,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from src.tools import Tool, ToolContext
 from src.logging_config import get_logger
+from src.tools import Tool, ToolContext
 
 logger = get_logger(__name__)
 
@@ -38,14 +38,14 @@ def _can_communicate(
     try:
         from_agent = orchestrator.get_agent(from_id)
         to_agent = orchestrator.get_agent(to_id)
-    except (KeyError, AttributeError):
+    except KeyError, AttributeError:
         return f"Error: Unknown agent '{from_id}' or '{to_id}'."
 
     if from_agent is None or to_agent is None:
         return f"Error: Unknown agent '{from_id}' or '{to_id}'."
 
-    from_parent = getattr(from_agent, 'parent_id', None) if from_agent else None
-    to_parent = getattr(to_agent, 'parent_id', None) if to_agent else None
+    from_parent = getattr(from_agent, "parent_id", None) if from_agent else None
+    to_parent = getattr(to_agent, "parent_id", None) if to_agent else None
 
     # Agents can talk to their own parent, children, or siblings
     if to_parent == from_id or from_parent == to_id:
@@ -69,7 +69,7 @@ def _can_communicate(
         )
 
     # Check if the sending agent is read-only
-    from_role = getattr(from_agent, 'role', None) if from_agent else None
+    from_role = getattr(from_agent, "role", None) if from_agent else None
     if from_role in ("plan", "ask", "observer") and message_type == "instruction":
         return (
             f"Error: Agent '{from_id}' has role '{from_role}' which is "
@@ -95,16 +95,16 @@ def _execute_send_to_agent(args: dict[str, object], context: ToolContext) -> str
 
     message_type = str(args.get("message_type", "text"))
     if message_type not in ("text", "instruction", "result", "cancel"):
-        return (
-            f"Error: Unknown message_type '{message_type}'. "
-            f"Use: text, instruction, result, or cancel."
-        )
+        return f"Error: Unknown message_type '{message_type}'. Use: text, instruction, result, or cancel."
 
     sender_id = getattr(context, "agent_id", "main")
 
     # ── Access control ──────────────────────────────────────────────────
     access_error = _can_communicate(
-        orchestrator, sender_id, agent_id, message_type,
+        orchestrator,
+        sender_id,
+        agent_id,
+        message_type,
     )
     if access_error:
         return access_error

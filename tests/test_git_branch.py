@@ -7,7 +7,7 @@ import tempfile
 from pathlib import Path
 
 from src.tools import ToolContext
-from src.tools.git_branch import git_branch_tool, execute
+from src.tools.git_branch import execute, git_branch_tool
 
 
 def _init_repo(path: str) -> None:

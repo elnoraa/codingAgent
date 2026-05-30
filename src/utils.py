@@ -11,13 +11,8 @@ This module provides core utilities used across the codebase:
 from __future__ import annotations
 
 import json
-import logging
-import os
 import random as _random
-import sys
-import threading
-import time
-from typing import Any, TextIO, cast
+from typing import Any, cast
 
 from .logging_config import get_logger
 from .security import redact_sensitive_content
@@ -27,29 +22,56 @@ logger = get_logger(__name__)
 # Re-export common symbols from sub-modules for backward compatibility.
 # New code should import directly from the appropriate module.
 from .formatting import (  # noqa: F401
-    R, _code, bold, dim, green, yellow, cyan, red, blue, magenta,
-    color_json, Spinner,
-    print_info, print_success, print_warning, print_error,
-    print_panel, print_table, print_separator, show_diff_and_confirm,
+    R,
+    Spinner,
+    _code,
+    blue,
+    bold,
+    color_json,
+    cyan,
+    dim,
+    green,
+    magenta,
+    print_error,
+    print_info,
+    print_panel,
+    print_separator,
+    print_success,
+    print_table,
+    print_warning,
+    red,
+    show_diff_and_confirm,
+    yellow,
 )
-from .validation import (  # noqa: F401
-    MAX_CODE_LENGTH, MAX_COMMAND_LENGTH, MAX_QUERY_LENGTH,
-    MAX_TEXT_LENGTH, MAX_PATH_LENGTH, MAX_FILE_CONTENT, MAX_URL_LENGTH,
-    validate_length, validate_write_path, validate_write_path_atomic,
-    validate_walk_path,
+from .markdown import (  # noqa: F401
+    EXTENSION_LANG_MAP,
+    detect_language,
+    highlight_code,
+    render_markdown,
 )
 from .rate_limiter import RateLimiter  # noqa: F401
 from .security import (  # noqa: F401
-    strip_dangerous_ansi, redact_sensitive_content,
-    validate_url_target,
-    _EXFIL_SENSITIVE_FILES, _EXFIL_NETWORK_COMMANDS,
-    _SCRIPT_INTERPRETERS, _SCRIPT_FILE_READ_INDICATORS,
+    _EXFIL_NETWORK_COMMANDS,
+    _EXFIL_SENSITIVE_FILES,
+    _SCRIPT_FILE_READ_INDICATORS,
+    _SCRIPT_INTERPRETERS,
     _SCRIPT_NETWORK_INDICATORS,
+    strip_dangerous_ansi,
+    validate_url_target,
 )
-from .markdown import (  # noqa: F401
-    render_markdown, detect_language, highlight_code, EXTENSION_LANG_MAP,
+from .validation import (  # noqa: F401
+    MAX_CODE_LENGTH,
+    MAX_COMMAND_LENGTH,
+    MAX_FILE_CONTENT,
+    MAX_PATH_LENGTH,
+    MAX_QUERY_LENGTH,
+    MAX_TEXT_LENGTH,
+    MAX_URL_LENGTH,
+    validate_length,
+    validate_walk_path,
+    validate_write_path,
+    validate_write_path_atomic,
 )
-
 
 # ── Context management ─────────────────────────────────────────────────────
 
@@ -152,10 +174,7 @@ def _strip_orphaned_tool_results(
         content = msg.get("content", "")
         if isinstance(content, list):
             blocks = cast("list[dict[str, object]]", content)
-            is_tool_result = any(
-                b.get("type") == "tool_result"
-                for b in blocks
-            )
+            is_tool_result = any(b.get("type") == "tool_result" for b in blocks)
             if is_tool_result and (not cleaned or cleaned[-1].get("role") != "assistant"):
                 continue
         cleaned.append(msg)
@@ -184,7 +203,7 @@ def compute_backoff(
 
     This spreads retries more evenly than additive jitter.
     """
-    cap = min(base_delay * (2 ** attempt), max_delay)
+    cap = min(base_delay * (2**attempt), max_delay)
     if jitter:
         return _random.uniform(0, cap)
     return cap
@@ -198,6 +217,7 @@ def is_transient_error(error: Exception) -> bool:
         InternalServerError,
         RateLimitError,
     )
+
     if isinstance(error, (APIConnectionError, RateLimitError, InternalServerError)):
         return True
     if isinstance(error, APIStatusError) and error.status_code in (429, 502, 503, 504):

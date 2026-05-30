@@ -6,7 +6,7 @@ import tempfile
 from pathlib import Path
 
 from src.tools import ToolContext
-from src.tools.grep_tool import grep_tool, execute
+from src.tools.grep_tool import execute, grep_tool
 
 
 def test_tool_definition() -> None:

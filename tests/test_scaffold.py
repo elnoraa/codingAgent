@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import os
 import tempfile
 from pathlib import Path
 from unittest.mock import patch
@@ -10,11 +9,10 @@ from unittest.mock import patch
 from src.scaffold import (
     _find_template,
     _substitute_variables,
-    scaffold_project,
     list_templates,
+    scaffold_project,
     show_template,
 )
-
 
 # ── _substitute_variables tests ───────────────────────────────────────────
 
@@ -102,9 +100,7 @@ class TestScaffoldProject:
             # Create a template dir with a file
             templates_dir = Path(tmp) / "templates" / "myapp"
             templates_dir.mkdir(parents=True)
-            (templates_dir / "README.md").write_text(
-                "# {{project_name}}\n\nWelcome!", encoding="utf-8"
-            )
+            (templates_dir / "README.md").write_text("# {{project_name}}\n\nWelcome!", encoding="utf-8")
 
             with patch("src.scaffold.BUILTIN_TEMPLATES_DIR", Path(tmp) / "templates"):
                 result = scaffold_project("myapp", "test-project", target_dir=tmp)
@@ -124,9 +120,7 @@ class TestScaffoldProject:
             # Template dir with a file that has placeholder in name
             templates_dir = Path(tmp) / "templates" / "lib"
             templates_dir.mkdir(parents=True)
-            (templates_dir / "{{package_name}}.py").write_text(
-                "version = '1.0'", encoding="utf-8"
-            )
+            (templates_dir / "{{package_name}}.py").write_text("version = '1.0'", encoding="utf-8")
 
             with patch("src.scaffold.BUILTIN_TEMPLATES_DIR", Path(tmp) / "templates"):
                 result = scaffold_project("lib", "my-lib", target_dir=tmp)
@@ -142,13 +136,13 @@ class TestScaffoldProject:
         with tempfile.TemporaryDirectory() as tmp:
             templates_dir = Path(tmp) / "templates" / "app"
             templates_dir.mkdir(parents=True)
-            (templates_dir / "main.py").write_text(
-                "# {{project_name}} by {{author}}", encoding="utf-8"
-            )
+            (templates_dir / "main.py").write_text("# {{project_name}} by {{author}}", encoding="utf-8")
 
             with patch("src.scaffold.BUILTIN_TEMPLATES_DIR", Path(tmp) / "templates"):
                 result = scaffold_project(
-                    "app", "my-app", target_dir=tmp,
+                    "app",
+                    "my-app",
+                    target_dir=tmp,
                     variables={"author": "Test User"},
                 )
                 assert "Created project" in result

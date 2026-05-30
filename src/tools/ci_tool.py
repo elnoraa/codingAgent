@@ -2,13 +2,12 @@
 
 from __future__ import annotations
 
-import logging
 import os
 import subprocess
 from typing import Any
 
-from src.tools import Tool, ToolContext
 from src.logging_config import get_logger
+from src.tools import Tool, ToolContext
 
 logger = get_logger(__name__)
 
@@ -67,6 +66,7 @@ def validate_ci_config(working_dir: str, provider: str | None = None) -> str:
             if os.path.exists(path):
                 try:
                     import yaml
+
                     with open(path) as f:
                         yaml.safe_load(f)
                     return f"{provider}: config is valid YAML"
@@ -77,7 +77,9 @@ def validate_ci_config(working_dir: str, provider: str | None = None) -> str:
     try:
         result = subprocess.run(
             validate_cmd,
-            capture_output=True, text=True, cwd=working_dir,
+            capture_output=True,
+            text=True,
+            cwd=working_dir,
             timeout=30,
         )
         if result.returncode == 0:
@@ -95,7 +97,9 @@ def check_pipeline_status(working_dir: str) -> str:
         # Check if gh is installed and authenticated
         result = subprocess.run(
             ["gh", "auth", "status"],
-            capture_output=True, text=True, timeout=10,
+            capture_output=True,
+            text=True,
+            timeout=10,
         )
         if result.returncode != 0:
             return "GitHub CLI (gh) not authenticated. Run 'gh auth login' first."
@@ -103,7 +107,9 @@ def check_pipeline_status(working_dir: str) -> str:
         # Get latest workflow runs
         result = subprocess.run(
             ["gh", "run", "list", "--limit", "10"],
-            capture_output=True, text=True, cwd=working_dir,
+            capture_output=True,
+            text=True,
+            cwd=working_dir,
             timeout=30,
         )
         if result.returncode == 0:
@@ -148,10 +154,7 @@ def execute(args: dict[str, Any], ctx: ToolContext) -> str:
 
     else:
         logger.warning("Unknown CI action: %s", action)
-        return (
-            f"Unknown action: {action}\n"
-            f"Available actions: detect, validate, status, providers"
-        )
+        return f"Unknown action: {action}\nAvailable actions: detect, validate, status, providers"
 
 
 ci_tool = Tool(

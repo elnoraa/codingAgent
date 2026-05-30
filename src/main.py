@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import logging
 import os
 import signal
 import sys
@@ -80,7 +79,9 @@ def load_config() -> dict[str, Any]:
         "temperature": cfg.get("temperature", 0.7),
         "top_p": cfg.get("topP", 1.0),
         "custom_persona": cfg.get("customPersona", ""),
-        "context_files": cfg.get("contextFiles", ["README*", "CONTRIBUTING*", "Makefile", "setup.py", "pyproject.toml"]),
+        "context_files": cfg.get(
+            "contextFiles", ["README*", "CONTRIBUTING*", "Makefile", "setup.py", "pyproject.toml"]
+        ),
         "custom_tools_config": cfg.get("customToolsConfig", ""),
         "notifications_enabled": cfg.get("notifications", {}).get("enabled", False),
         "notifications_min_duration": cfg.get("notifications", {}).get("minDuration", 10),
@@ -101,7 +102,7 @@ def _get_mcp_servers(cfg: dict[str, Any]) -> list[dict[str, Any]]:
             parsed = json.loads(env_val)
             if isinstance(parsed, list):
                 return parsed
-        except (json.JSONDecodeError, ValueError):
+        except json.JSONDecodeError, ValueError:
             logger.warning("Invalid MCP_SERVERS env var, ignoring")
     return []
 

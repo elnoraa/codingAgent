@@ -7,27 +7,23 @@ Cleaning up after each test is critical.
 
 from __future__ import annotations
 
-import os
-import shutil
 from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
 
 from src.task_manager import (
-    Task,
-    TaskStep,
-    create_task,
-    _save_task,
-    load_task,
-    list_tasks,
-    delete_task,
-    STATUS_PENDING,
     STATUS_COMPLETED,
     STATUS_IN_PROGRESS,
-    STATUS_FAILED,
+    STATUS_PENDING,
+    Task,
+    TaskStep,
+    _save_task,
+    create_task,
+    delete_task,
+    list_tasks,
+    load_task,
 )
-
 
 # ── Fixtures ──────────────────────────────────────────────────────────────────
 
@@ -137,7 +133,8 @@ class TestTaskPersistence:
 
     def test_save_and_load(self) -> None:
         task = Task(
-            name="test-task", description="testing",
+            name="test-task",
+            description="testing",
             steps=[TaskStep(id="1", name="Step 1", status=STATUS_COMPLETED)],
         )
         _save_task(task)

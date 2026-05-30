@@ -11,9 +11,9 @@ import logging
 import time
 from typing import TYPE_CHECKING, cast
 
-from src.formatting import bold, dim, green, yellow, cyan, red, blue, magenta, color_json
+from src.formatting import bold, cyan, dim, green, magenta, yellow
+from src.repl.help_text import COMMAND_HELP, HELP_TEXT
 from src.utils import estimate_tokens
-from src.repl.help_text import HELP_TEXT, COMMAND_HELP, contains_markdown
 
 if TYPE_CHECKING:
     from src.repl.repl import Repl
@@ -21,7 +21,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-def _get_last_assistant_text(repl: "Repl") -> str:
+def _get_last_assistant_text(repl: Repl) -> str:
     """Get the last assistant text response."""
     for msg in reversed(repl.messages):
         if msg.get("role") == "assistant":
@@ -40,7 +40,7 @@ def _get_last_assistant_text(repl: "Repl") -> str:
     return ""
 
 
-def _get_last_user_index(repl: "Repl") -> int | None:
+def _get_last_user_index(repl: Repl) -> int | None:
     """Return the index of the last user message, or None."""
     for i in range(len(repl.messages) - 1, -1, -1):
         if repl.messages[i].get("role") == "user":
@@ -50,31 +50,50 @@ def _get_last_user_index(repl: "Repl") -> int | None:
     return None
 
 
-def dispatch(repl: "Repl", cmd: str) -> None:
+def dispatch(repl: Repl, cmd: str) -> None:
     """Route a /command to the appropriate handler function."""
     from src.repl.auxiliary import (
-        handle_cost, handle_stats, handle_search, handle_cd, handle_model,
-        handle_models, handle_open, handle_deps, handle_impact,
-        handle_python, handle_reset_python, handle_plugins,
-        handle_changes, handle_timeline, handle_reload, handle_config,
-        handle_mcp, handle_budget, handle_summarize, handle_diff_review,
-        handle_edit, handle_retry, handle_retry_auto,
+        handle_budget,
+        handle_cd,
+        handle_changes,
+        handle_config,
+        handle_cost,
+        handle_deps,
+        handle_diff_review,
+        handle_edit,
+        handle_impact,
+        handle_mcp,
+        handle_model,
+        handle_models,
+        handle_open,
+        handle_plugins,
+        handle_python,
+        handle_reload,
+        handle_reset_python,
+        handle_retry,
+        handle_retry_auto,
+        handle_search,
+        handle_stats,
+        handle_summarize,
+        handle_timeline,
     )
-    from src.repl.session_commands import (
-        handle_session_save, handle_session_load, handle_session_list,
-        handle_persona,
-    )
-    from src.repl.plan_commands import handle_plan_save, handle_plan_create, handle_plan_list
-    from src.repl.snippet_commands import handle_snippet
-    from src.repl.profile_commands import handle_profile
-    from src.repl.prompt_commands import handle_prompt
     from src.repl.backup_commands import handle_backup
-    from src.repl.task_commands import handle_task
-    from src.repl.branch_commands import handle_fork, handle_branch, handle_branches
+    from src.repl.branch_commands import handle_branch, handle_branches, handle_fork
     from src.repl.export_commands import handle_export
     from src.repl.lint_commands import handle_lint
-    from src.repl.watch_commands import handle_watch, handle_unwatch, handle_watchers
+    from src.repl.plan_commands import handle_plan_create, handle_plan_list, handle_plan_save
+    from src.repl.profile_commands import handle_profile
+    from src.repl.prompt_commands import handle_prompt
     from src.repl.scaffold_commands import handle_scaffold
+    from src.repl.session_commands import (
+        handle_persona,
+        handle_session_list,
+        handle_session_load,
+        handle_session_save,
+    )
+    from src.repl.snippet_commands import handle_snippet
+    from src.repl.task_commands import handle_task
+    from src.repl.watch_commands import handle_unwatch, handle_watch, handle_watchers
 
     parts = cmd.lower().split(maxsplit=1)
     match parts[0]:
@@ -114,10 +133,7 @@ def dispatch(repl: "Repl", cmd: str) -> None:
             count = len(repl.messages)
             user_msgs = sum(1 for m in repl.messages if m.get("role") == "user")
             asst_msgs = sum(1 for m in repl.messages if m.get("role") == "assistant")
-            tool_calls = sum(
-                1 for m in repl.messages
-                if isinstance(m.get("content"), list)
-            )
+            tool_calls = sum(1 for m in repl.messages if isinstance(m.get("content"), list))
             total_tokens = 0
             print(f"  {bold('History')}  {dim(f'({count} messages)')}")
             print()
@@ -160,21 +176,22 @@ def dispatch(repl: "Repl", cmd: str) -> None:
                     "assistant": cyan,
                 }.get(role, dim)
                 arrow = "→" if role == "user" else "←"
-                print(f"  {dim(str(i+1).rjust(3))} {role_color(arrow)} {bold(role_color(role.title()))}"
-                      f" {dim(f'~{tokens}tok')}  {dim(preview)}")
+                print(
+                    f"  {dim(str(i + 1).rjust(3))} {role_color(arrow)} {bold(role_color(role.title()))}"
+                    f" {dim(f'~{tokens}tok')}  {dim(preview)}"
+                )
 
             print()
-            print(f"  {dim('Summary:')}    {count} messages ({green(str(user_msgs))} user, {cyan(str(asst_msgs))} assistant, {yellow(str(tool_calls))} tool blocks)")
+            print(
+                f"  {dim('Summary:')}    {count} messages ({green(str(user_msgs))} user, {cyan(str(asst_msgs))} assistant, {yellow(str(tool_calls))} tool blocks)"
+            )
             print(f"  {dim('Tokens:')}     ~{total_tokens} estimated")
 
         case "/status" | "/s":
             system_prompt = repl._get_system_prompt()
             system_tokens = estimate_tokens(system_prompt)
             msg_count = len(repl.messages)
-            total_tokens = sum(
-                estimate_tokens(str(m.get("content", "")))
-                for m in repl.messages
-            )
+            total_tokens = sum(estimate_tokens(str(m.get("content", ""))) for m in repl.messages)
             elapsed = time.time() - repl._start_time
             hours, remainder = divmod(int(elapsed), 3600)
             minutes, seconds = divmod(remainder, 60)
@@ -196,7 +213,10 @@ def dispatch(repl: "Repl", cmd: str) -> None:
             if repl._rate_limit_events > 0:
                 print(f"  {dim('Rate limit events:')} {cyan(str(repl._rate_limit_events))}")
             from src.repl.auxiliary import estimated_cost
-            print(f"  {dim('Cost:')}    {dim(f'${estimated_cost(repl):.4f} estimated (in: {repl._input_tokens_total}, out: {repl._output_tokens_total})')}")
+
+            print(
+                f"  {dim('Cost:')}    {dim(f'${estimated_cost(repl):.4f} estimated (in: {repl._input_tokens_total}, out: {repl._output_tokens_total})')}"
+            )
 
         case "/plan" | "/p":
             full_cmd = cmd.lower().strip()
@@ -217,7 +237,9 @@ def dispatch(repl: "Repl", cmd: str) -> None:
                     repl._mode_switches += 1
                     repl._mode_changed_via_command = True
                     logger.info("Switched to PLAN mode")
-                    print(f"  {yellow('●')} {bold('PLAN mode')} {dim('— read-only exploration. Only read-only tools are available.')}")
+                    print(
+                        f"  {yellow('●')} {bold('PLAN mode')} {dim('— read-only exploration. Only read-only tools are available.')}"
+                    )
                     print(f"  {dim('Use /code to switch back to CODE mode.')}")
             else:
                 print(f"  {dim('Unknown plan command. Usage:')}")
@@ -236,7 +258,9 @@ def dispatch(repl: "Repl", cmd: str) -> None:
                 repl._mode_switches += 1
                 repl._mode_changed_via_command = True
                 logger.info("Switched to ASK mode")
-                print(f"  {magenta('●')} {bold('ASK mode')} {dim('— read-only Q&A. Only read-only tools are available.')}")
+                print(
+                    f"  {magenta('●')} {bold('ASK mode')} {dim('— read-only Q&A. Only read-only tools are available.')}"
+                )
                 print(f"  {dim('Use /code to switch back to CODE mode.')}")
 
         case "/code":

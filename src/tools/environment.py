@@ -6,15 +6,14 @@ runtime details that help the agent understand its execution context.
 
 from __future__ import annotations
 
-import logging
 import os
 import platform
 import subprocess
 import sys
 from typing import Any
 
-from src.tools import Tool, ToolContext
 from src.logging_config import get_logger
+from src.tools import Tool, ToolContext
 
 logger = get_logger(__name__)
 
@@ -35,7 +34,9 @@ def execute(args: dict[str, Any], _ctx: ToolContext) -> str:
     try:
         pip_result = subprocess.run(
             [sys.executable, "-m", "pip", "--version"],
-            capture_output=True, text=True, timeout=10,
+            capture_output=True,
+            text=True,
+            timeout=10,
         )
         if pip_result.returncode == 0:
             pip_version = pip_result.stdout.split()[1]
@@ -57,7 +58,9 @@ def execute(args: dict[str, Any], _ctx: ToolContext) -> str:
         try:
             pkg_result = subprocess.run(
                 [sys.executable, "-m", "pip", "list", "--format=columns"],
-                capture_output=True, text=True, timeout=30,
+                capture_output=True,
+                text=True,
+                timeout=30,
             )
             if pkg_result.returncode == 0:
                 pkg_lines = pkg_result.stdout.strip().split("\n")

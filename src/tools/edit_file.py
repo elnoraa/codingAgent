@@ -1,12 +1,10 @@
 from __future__ import annotations
 
-import logging
 from pathlib import Path
 from typing import Any
 
-from src.tools import Tool, ToolContext
-
 from src.logging_config import get_logger
+from src.tools import Tool, ToolContext
 
 logger = get_logger(__name__)
 
@@ -29,7 +27,8 @@ def execute(args: dict[str, Any], ctx: ToolContext) -> str:
         return error
 
     # Validate lengths
-    from src.utils import validate_length, MAX_TEXT_LENGTH, MAX_PATH_LENGTH
+    from src.utils import MAX_PATH_LENGTH, MAX_TEXT_LENGTH, validate_length
+
     error = validate_length(old_text, MAX_TEXT_LENGTH, "old text")
     if error:
         return error
@@ -58,10 +57,7 @@ def execute(args: dict[str, Any], ctx: ToolContext) -> str:
             preview += f"\n... (file has {len(lines)} lines)"
         else:
             preview = content
-        return (
-            f"Error: Could not find the exact text to replace.\n\n"
-            f"Current file content:\n{preview}"
-        )
+        return f"Error: Could not find the exact text to replace.\n\nCurrent file content:\n{preview}"
 
     if occurrences > 1:
         return (
@@ -72,14 +68,16 @@ def execute(args: dict[str, Any], ctx: ToolContext) -> str:
     new_content = content.replace(old_text, new_text)
 
     # Check confirm mode — show diff and ask user before applying
-    confirm = bool(args.get("confirm", False)) or getattr(ctx, 'confirm_edits', False)
+    confirm = bool(args.get("confirm", False)) or getattr(ctx, "confirm_edits", False)
     if confirm:
         from src.utils import show_diff_and_confirm
+
         if not show_diff_and_confirm(content, new_content, path):
             return f"Skipped: {path} (user declined)"
 
     try:
         from src.utils import validate_write_path_atomic
+
         resolved_path = str(Path(path).resolve())
         atomic_error = validate_write_path_atomic(resolved_path, ctx.working_directory)
         if atomic_error:
@@ -95,6 +93,7 @@ def execute(args: dict[str, Any], ctx: ToolContext) -> str:
 
     # Run post-edit hooks
     from src.tools import run_post_edit_hooks
+
     result = run_post_edit_hooks(path, result)
 
     return result
@@ -116,7 +115,10 @@ edit_file_tool = Tool(
                 "type": "string",
                 "description": "Exact text to search for (must match exactly, including whitespace). Also accepts 'old_string' as an alias.",
             },
-            "newText": {"type": "string", "description": "Text to replace it with. Also accepts 'new_string' as an alias."},
+            "newText": {
+                "type": "string",
+                "description": "Text to replace it with. Also accepts 'new_string' as an alias.",
+            },
         },
         "required": ["path", "oldText", "newText"],
     },

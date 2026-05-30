@@ -1,13 +1,12 @@
 from __future__ import annotations
 
-import logging
 import os
 import shutil
 import subprocess
 from typing import Any
 
-from src.tools import Tool, ToolContext
 from src.logging_config import get_logger
+from src.tools import Tool, ToolContext
 
 logger = get_logger(__name__)
 
@@ -51,7 +50,9 @@ def execute(args: dict[str, Any], ctx: ToolContext) -> str:
             # Try git mv first — works for tracked files, respects git history
             result = subprocess.run(
                 ["git", "mv", src_path, dst_path],
-                capture_output=True, text=True, cwd=ctx.working_directory,
+                capture_output=True,
+                text=True,
+                cwd=ctx.working_directory,
             )
             if result.returncode == 0:
                 logger.info("git mv: %s -> %s", source, destination)

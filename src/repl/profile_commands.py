@@ -4,15 +4,15 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from src.formatting import bold, dim, green, cyan, red
+from src.formatting import bold, cyan, dim, green, red
 
 if TYPE_CHECKING:
     from src.repl.repl import Repl
 
 
-def handle_profile(repl: "Repl", cmd: str) -> None:
+def handle_profile(repl: Repl, cmd: str) -> None:
     """Handle /profile command — save, load, list, delete configuration profiles."""
-    from src.profiles import save_profile, load_profile, list_profiles, delete_profile
+    from src.profiles import delete_profile, list_profiles, load_profile, save_profile
 
     parts = cmd.strip().split(maxsplit=2)
     subcommand = parts[1].lower() if len(parts) > 1 else "list"

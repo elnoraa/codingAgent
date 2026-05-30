@@ -11,10 +11,10 @@ from __future__ import annotations
 
 import ipaddress
 import logging
-import os
 import re as _re_module
 import socket as _socket
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 from urllib.parse import urlparse as _urlparse
 
 logger = logging.getLogger(__name__)
@@ -27,18 +27,18 @@ logger = logging.getLogger(__name__)
 # These can be used for terminal injection attacks (cursor positioning, screen
 # clearing, title setting, keyboard remapping, etc.).
 _DANGEROUS_ANSI_PATTERNS: list[Any] = [
-    _re_module.compile(r'\x1b\[2J'),        # Clear entire screen
-    _re_module.compile(r'\x1b\[3J'),        # Clear scrollback
-    _re_module.compile(r'\x1b\[0J'),        # Clear from cursor to end of screen
-    _re_module.compile(r'\x1b\[1J'),        # Clear from beginning to cursor
-    _re_module.compile(r'\x1b\[\d*(?:;\d*)?[Hf]'),  # Cursor positioning
-    _re_module.compile(r'\x1b\[\?25[lh]'),   # Hide/show cursor
-    _re_module.compile(r'\x1b\]0;.+?\x07'),  # Set terminal title
-    _re_module.compile(r'\x1b\]2;.+?\x07'),  # Set terminal title (alternative)
-    _re_module.compile(r'\x1b\[\d*[n]'),    # Device status reports
-    _re_module.compile(r'\x1b\[[0-9;]*[t]'),    # XTerm window ops
-    _re_module.compile(r'\x1bc', _re_module.ASCII),      # RIS (Reset to Initial State)
-    _re_module.compile(r'\x1b][\\_\[\]]'),  # String terminators
+    _re_module.compile(r"\x1b\[2J"),  # Clear entire screen
+    _re_module.compile(r"\x1b\[3J"),  # Clear scrollback
+    _re_module.compile(r"\x1b\[0J"),  # Clear from cursor to end of screen
+    _re_module.compile(r"\x1b\[1J"),  # Clear from beginning to cursor
+    _re_module.compile(r"\x1b\[\d*(?:;\d*)?[Hf]"),  # Cursor positioning
+    _re_module.compile(r"\x1b\[\?25[lh]"),  # Hide/show cursor
+    _re_module.compile(r"\x1b\]0;.+?\x07"),  # Set terminal title
+    _re_module.compile(r"\x1b\]2;.+?\x07"),  # Set terminal title (alternative)
+    _re_module.compile(r"\x1b\[\d*[n]"),  # Device status reports
+    _re_module.compile(r"\x1b\[[0-9;]*[t]"),  # XTerm window ops
+    _re_module.compile(r"\x1bc", _re_module.ASCII),  # RIS (Reset to Initial State)
+    _re_module.compile(r"\x1b][\\_\[\]]"),  # String terminators
 ]
 
 
@@ -58,7 +58,7 @@ def strip_dangerous_ansi(text: str) -> str:
         return text
     result = text
     for pattern in _DANGEROUS_ANSI_PATTERNS:
-        result = pattern.sub('', result)
+        result = pattern.sub("", result)
     return result
 
 
@@ -70,24 +70,24 @@ def strip_dangerous_ansi(text: str) -> str:
 # the LLM provider.
 _SUMMARIZATION_REDACT_PATTERNS: list[tuple[str, str]] = [
     # Anthropic / OpenAI / generic API keys
-    (r'(sk-[a-zA-Z0-9\-]{20,})', 'sk-***REDACTED***'),
+    (r"(sk-[a-zA-Z0-9\-]{20,})", "sk-***REDACTED***"),
     # AWS access keys
-    (r'(AKIA[0-9A-Z]{16})', 'AKIA***REDACTED***'),
+    (r"(AKIA[0-9A-Z]{16})", "AKIA***REDACTED***"),
     # GitHub tokens
-    (r'(ghp_[a-zA-Z0-9]{36})', 'ghp_***REDACTED***'),
-    (r'(github_pat_[a-zA-Z0-9_]{80,})', 'github_pat_***REDACTED***'),
+    (r"(ghp_[a-zA-Z0-9]{36})", "ghp_***REDACTED***"),
+    (r"(github_pat_[a-zA-Z0-9_]{80,})", "github_pat_***REDACTED***"),
     # Password/secret assignments
-    (r'(password\s*[:=]\s*["\x27]?)[^"\x27,;\s}]+', r'\1***REDACTED***'),
-    (r'(passwd\s*[:=]\s*["\x27]?)[^"\x27,;\s}]+', r'\1***REDACTED***'),
-    (r'(secret\s*[:=]\s*["\x27]?)[^"\x27,;\s}]+', r'\1***REDACTED***'),
+    (r'(password\s*[:=]\s*["\x27]?)[^"\x27,;\s}]+', r"\1***REDACTED***"),
+    (r'(passwd\s*[:=]\s*["\x27]?)[^"\x27,;\s}]+', r"\1***REDACTED***"),
+    (r'(secret\s*[:=]\s*["\x27]?)[^"\x27,;\s}]+', r"\1***REDACTED***"),
     # Database connection strings with credentials
-    (r'((?:mongodb(?:\+srv)?|postgres(?:ql)?|mysql|redis)://)[^@\s]+@', r'\1***USER***@'),
+    (r"((?:mongodb(?:\+srv)?|postgres(?:ql)?|mysql|redis)://)[^@\s]+@", r"\1***USER***@"),
     # JWT tokens
-    (r'(eyJ[a-zA-Z0-9_\-]{10,}\.[a-zA-Z0-9_\-]{10,}\.[a-zA-Z0-9_\-]{10,})', 'eyJ***REDACTED***'),
+    (r"(eyJ[a-zA-Z0-9_\-]{10,}\.[a-zA-Z0-9_\-]{10,}\.[a-zA-Z0-9_\-]{10,})", "eyJ***REDACTED***"),
     # Private key headers
-    (r'-----BEGIN\s+(RSA|DSA|EC|OPENSSH|PGP)\s+PRIVATE\s+KEY-----', '-----BEGIN REDACTED PRIVATE KEY-----'),
+    (r"-----BEGIN\s+(RSA|DSA|EC|OPENSSH|PGP)\s+PRIVATE\s+KEY-----", "-----BEGIN REDACTED PRIVATE KEY-----"),
     # Bearer tokens in headers
-    (r'(Authorization:\s*Bearer\s+)[a-zA-Z0-9._\x2d]+', r'\1***REDACTED***'),
+    (r"(Authorization:\s*Bearer\s+)[a-zA-Z0-9._\x2d]+", r"\1***REDACTED***"),
 ]
 
 
@@ -116,24 +116,49 @@ def redact_sensitive_content(text: str) -> str:
 # ── Data exfiltration detection constants ──────────────────────────────────────
 
 # Files that should never be read and sent over the network
-_EXFIL_SENSITIVE_FILES: frozenset = frozenset({
-    ".env", ".env.example", ".env.local", ".env.production",
-    "config.json",  # may contain credentials
-    ".git-credentials", ".gitconfig",
-    ".ssh/id_rsa", ".ssh/id_rsa.pub", ".ssh/id_ed25519", ".ssh/id_ed25519.pub",
-    ".ssh/config", ".ssh/authorized_keys",
-    "id_rsa", "id_ed25519",
-    "credentials.json", "credentials.yml", "credentials.yaml",
-    "service-account.json", "service-account-key.json",
-    ".npmrc", ".netrc",
-})
+_EXFIL_SENSITIVE_FILES: frozenset = frozenset(
+    {
+        ".env",
+        ".env.example",
+        ".env.local",
+        ".env.production",
+        "config.json",  # may contain credentials
+        ".git-credentials",
+        ".gitconfig",
+        ".ssh/id_rsa",
+        ".ssh/id_rsa.pub",
+        ".ssh/id_ed25519",
+        ".ssh/id_ed25519.pub",
+        ".ssh/config",
+        ".ssh/authorized_keys",
+        "id_rsa",
+        "id_ed25519",
+        "credentials.json",
+        "credentials.yml",
+        "credentials.yaml",
+        "service-account.json",
+        "service-account-key.json",
+        ".npmrc",
+        ".netrc",
+    }
+)
 
 # Commands that can send data to remote servers (exfiltration vectors)
-_EXFIL_NETWORK_COMMANDS: frozenset = frozenset({
-    "curl", "wget", "nc", "ncat", "netcat", "socat",
-    "ftp", "sftp", "scp", "rsync",
-    "telnet",
-})
+_EXFIL_NETWORK_COMMANDS: frozenset = frozenset(
+    {
+        "curl",
+        "wget",
+        "nc",
+        "ncat",
+        "netcat",
+        "socat",
+        "ftp",
+        "sftp",
+        "scp",
+        "rsync",
+        "telnet",
+    }
+)
 
 # Script interpreters that can execute inline code and bypass the command scanner
 # Format: (interpreter_binary, flag_that_takes_inline_code, description)
@@ -149,23 +174,44 @@ _SCRIPT_INTERPRETERS: list[tuple[str, str, str]] = [
 ]
 
 # Dangerous function/module calls that indicate file operations in script code
-_SCRIPT_FILE_READ_INDICATORS: frozenset = frozenset({
-    "open(", ".read(", ".read_text(", ".read_bytes(",
-    "readFile(", "readFileSync(", "readFileSync (",
-    "createReadStream(", "createReadStream (",
-    "File.read(", "File.open(",
-    "fread(", "file_get_contents(",
-})
+_SCRIPT_FILE_READ_INDICATORS: frozenset = frozenset(
+    {
+        "open(",
+        ".read(",
+        ".read_text(",
+        ".read_bytes(",
+        "readFile(",
+        "readFileSync(",
+        "readFileSync (",
+        "createReadStream(",
+        "createReadStream (",
+        "File.read(",
+        "File.open(",
+        "fread(",
+        "file_get_contents(",
+    }
+)
 
 # Dangerous function/module calls that indicate network operations in script code
-_SCRIPT_NETWORK_INDICATORS: frozenset = frozenset({
-    "urllib.request.urlopen(", "urllib.request.Request(",
-    "requests.get(", "requests.post(", "requests.put(", "requests.delete(",
-    "urlopen(", "urlretrieve(",
-    "fetch(", "http.", "https.",
-    "net/http", "net::HTTP",
-    "curl ", "wget ",
-})
+_SCRIPT_NETWORK_INDICATORS: frozenset = frozenset(
+    {
+        "urllib.request.urlopen(",
+        "urllib.request.Request(",
+        "requests.get(",
+        "requests.post(",
+        "requests.put(",
+        "requests.delete(",
+        "urlopen(",
+        "urlretrieve(",
+        "fetch(",
+        "http.",
+        "https.",
+        "net/http",
+        "net::HTTP",
+        "curl ",
+        "wget ",
+    }
+)
 
 
 # ── SSRF protection ─────────────────────────────────────────────────────────
@@ -173,34 +219,33 @@ _SCRIPT_NETWORK_INDICATORS: frozenset = frozenset({
 # Private/reserved IP ranges that should be blocked for SSRF prevention
 _PRIVATE_NETWORKS: list[Any] = [
     # IPv4 private/reserved
-    ipaddress.ip_network("0.0.0.0/8"),          # Current network (RFC 1122)
-    ipaddress.ip_network("10.0.0.0/8"),         # Private (RFC 1918)
-    ipaddress.ip_network("100.64.0.0/10"),      # Carrier-grade NAT (RFC 6598)
-    ipaddress.ip_network("127.0.0.0/8"),        # Loopback (RFC 1122)
-    ipaddress.ip_network("169.254.0.0/16"),     # Link-local (RFC 3927)
-    ipaddress.ip_network("172.16.0.0/12"),      # Private (RFC 1918)
-    ipaddress.ip_network("192.0.0.0/24"),       # IETF Protocol Assignments (RFC 6890)
-    ipaddress.ip_network("192.0.2.0/24"),       # TEST-NET-1 (RFC 5737)
-    ipaddress.ip_network("192.88.99.0/24"),     # 6to4 Relay Anycast (RFC 7526)
-    ipaddress.ip_network("192.168.0.0/16"),     # Private (RFC 1918)
-    ipaddress.ip_network("198.18.0.0/15"),      # Benchmarking (RFC 2544)
-    ipaddress.ip_network("198.51.100.0/24"),    # TEST-NET-2 (RFC 5737)
-    ipaddress.ip_network("203.0.113.0/24"),     # TEST-NET-3 (RFC 5737)
-    ipaddress.ip_network("224.0.0.0/4"),        # Multicast (RFC 5771)
-    ipaddress.ip_network("240.0.0.0/4"),        # Reserved (RFC 1112)
-    ipaddress.ip_network("255.255.255.255/32"), # Limited Broadcast
-
+    ipaddress.ip_network("0.0.0.0/8"),  # Current network (RFC 1122)
+    ipaddress.ip_network("10.0.0.0/8"),  # Private (RFC 1918)
+    ipaddress.ip_network("100.64.0.0/10"),  # Carrier-grade NAT (RFC 6598)
+    ipaddress.ip_network("127.0.0.0/8"),  # Loopback (RFC 1122)
+    ipaddress.ip_network("169.254.0.0/16"),  # Link-local (RFC 3927)
+    ipaddress.ip_network("172.16.0.0/12"),  # Private (RFC 1918)
+    ipaddress.ip_network("192.0.0.0/24"),  # IETF Protocol Assignments (RFC 6890)
+    ipaddress.ip_network("192.0.2.0/24"),  # TEST-NET-1 (RFC 5737)
+    ipaddress.ip_network("192.88.99.0/24"),  # 6to4 Relay Anycast (RFC 7526)
+    ipaddress.ip_network("192.168.0.0/16"),  # Private (RFC 1918)
+    ipaddress.ip_network("198.18.0.0/15"),  # Benchmarking (RFC 2544)
+    ipaddress.ip_network("198.51.100.0/24"),  # TEST-NET-2 (RFC 5737)
+    ipaddress.ip_network("203.0.113.0/24"),  # TEST-NET-3 (RFC 5737)
+    ipaddress.ip_network("224.0.0.0/4"),  # Multicast (RFC 5771)
+    ipaddress.ip_network("240.0.0.0/4"),  # Reserved (RFC 1112)
+    ipaddress.ip_network("255.255.255.255/32"),  # Limited Broadcast
     # IPv6 private/reserved
-    ipaddress.ip_network("::1/128"),            # Loopback
-    ipaddress.ip_network("::/96"),              # IPv4-compatible (deprecated)
-    ipaddress.ip_network("::ffff:0:0/96"),      # IPv4-mapped addresses
-    ipaddress.ip_network("64:ff9b::/96"),       # IPv4/IPv6 translation (RFC 6052)
-    ipaddress.ip_network("100::/64"),           # Discard-only (RFC 6666)
-    ipaddress.ip_network("2001:db8::/32"),      # Documentation (RFC 3849)
-    ipaddress.ip_network("2002::/16"),          # 6to4 (RFC 3056)
-    ipaddress.ip_network("fc00::/7"),           # Unique local (RFC 4193)
-    ipaddress.ip_network("fe80::/10"),          # Link-local (RFC 4291)
-    ipaddress.ip_network("ff00::/8"),           # Multicast (RFC 4291)
+    ipaddress.ip_network("::1/128"),  # Loopback
+    ipaddress.ip_network("::/96"),  # IPv4-compatible (deprecated)
+    ipaddress.ip_network("::ffff:0:0/96"),  # IPv4-mapped addresses
+    ipaddress.ip_network("64:ff9b::/96"),  # IPv4/IPv6 translation (RFC 6052)
+    ipaddress.ip_network("100::/64"),  # Discard-only (RFC 6666)
+    ipaddress.ip_network("2001:db8::/32"),  # Documentation (RFC 3849)
+    ipaddress.ip_network("2002::/16"),  # 6to4 (RFC 3056)
+    ipaddress.ip_network("fc00::/7"),  # Unique local (RFC 4193)
+    ipaddress.ip_network("fe80::/10"),  # Link-local (RFC 4291)
+    ipaddress.ip_network("ff00::/8"),  # Multicast (RFC 4291)
 ]
 
 
@@ -262,7 +307,7 @@ def _detect_dns_rebinding(
     """
     try:
         second_ips = resolver(hostname)
-    except (_socket.gaierror, OSError):
+    except _socket.gaierror, OSError:
         return first_ips, None
 
     if not second_ips:
@@ -320,7 +365,7 @@ def validate_url_target(
     # ── First resolution ────────────────────────────────────────────────
     try:
         first_ips = resolver(hostname)
-    except (_socket.gaierror, OSError):
+    except _socket.gaierror, OSError:
         return None  # Can't resolve — let the request proceed
 
     if not first_ips:
@@ -336,7 +381,9 @@ def validate_url_target(
     if rebind_error:
         logger.warning(
             "DNS rebinding detected for '%s': first=%s, second=%s",
-            hostname, first_ips, second_ips,
+            hostname,
+            first_ips,
+            second_ips,
         )
         return rebind_error
 

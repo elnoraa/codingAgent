@@ -4,15 +4,16 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from src.formatting import bold, dim, green, yellow, cyan, red
+from src.formatting import bold, cyan, dim, green, red, yellow
 
 if TYPE_CHECKING:
     from src.repl.repl import Repl
 
 
-def _get_last_assistant_text(repl: "Repl") -> str:
+def _get_last_assistant_text(repl: Repl) -> str:
     """Get the last assistant text response from messages."""
     from typing import cast
+
     for msg in reversed(repl.messages):
         if msg.get("role") == "assistant":
             content = msg.get("content", "")
@@ -30,7 +31,7 @@ def _get_last_assistant_text(repl: "Repl") -> str:
     return ""
 
 
-def handle_prompt(repl: "Repl", cmd: str) -> None:
+def handle_prompt(repl: Repl, cmd: str) -> None:
     """Handle /prompt command — save, load, list prompt templates."""
     from src.prompts import list_prompts, load_prompt, save_prompt
 
@@ -71,11 +72,12 @@ def handle_prompt(repl: "Repl", cmd: str) -> None:
         print()
         try:
             confirm = input(f"  {bold('Send this prompt as your message?')} {dim('[Y/n]')} ").strip().lower()
-        except (EOFError, KeyboardInterrupt):
+        except EOFError, KeyboardInterrupt:
             confirm = "n"
         if confirm in ("", "y", "yes"):
             repl._turn_number += 1
             from src.repl.repl import turn_separator_color
+
             color_fn = turn_separator_color(repl)
             repl._process_turn(prompt.content, color_fn)
 

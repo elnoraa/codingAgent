@@ -3,12 +3,11 @@
 from __future__ import annotations
 
 import json
-import logging
 import subprocess
 from typing import Any
 
-from src.tools import Tool, ToolContext
 from src.logging_config import get_logger
+from src.tools import Tool, ToolContext
 
 logger = get_logger(__name__)
 
@@ -18,7 +17,9 @@ def _run_docker(cmd: list[str], ctx: ToolContext, timeout: int = 60) -> tuple[in
     try:
         result = subprocess.run(
             ["docker"] + cmd,
-            capture_output=True, text=True, cwd=ctx.working_directory,
+            capture_output=True,
+            text=True,
+            cwd=ctx.working_directory,
             timeout=timeout,
         )
         return result.returncode, result.stdout.strip(), result.stderr.strip()
@@ -76,7 +77,8 @@ def execute(args: dict[str, Any], ctx: ToolContext) -> str:
         # List containers
         all_flag = ["--all"] if args.get("all") else []
         ret, stdout, stderr = _run_docker(
-            ["ps", "--format", "{{json .}}"] + all_flag, ctx,
+            ["ps", "--format", "{{json .}}"] + all_flag,
+            ctx,
         )
         if ret != 0:
             logger.warning("Docker ps failed: %s", stderr[:200])
@@ -99,7 +101,8 @@ def execute(args: dict[str, Any], ctx: ToolContext) -> str:
 
     elif action == "images":
         ret, stdout, stderr = _run_docker(
-            ["images", "--format", "{{json .}}"], ctx,
+            ["images", "--format", "{{json .}}"],
+            ctx,
         )
         if ret != 0:
             logger.warning("Docker images failed: %s", stderr[:200])
@@ -204,7 +207,9 @@ def execute(args: dict[str, Any], ctx: ToolContext) -> str:
             return "Error: 'container' and 'command' parameters required"
 
         ret, stdout, stderr = _run_docker(
-            ["exec", container] + command.split(), ctx, timeout=30,
+            ["exec", container] + command.split(),
+            ctx,
+            timeout=30,
         )
         if ret != 0:
             return f"Command failed (exit {ret}):\n{stderr}"
@@ -223,10 +228,7 @@ def execute(args: dict[str, Any], ctx: ToolContext) -> str:
         return stdout or "No compose services running."
 
     else:
-        return (
-            f"Unknown action: {action}\n"
-            f"Available actions: ps, images, build, up, down, logs, exec, compose"
-        )
+        return f"Unknown action: {action}\nAvailable actions: ps, images, build, up, down, logs, exec, compose"
 
 
 docker_tool = Tool(
