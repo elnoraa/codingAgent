@@ -26,6 +26,7 @@ repos:
         types: [python]
         pass_filenames: false
         always_run: true
+        timeout: 120
 
       - id: pytest
         name: pytest
@@ -34,3 +35,4 @@ repos:
         types: [python]
         pass_filenames: false
         always_run: true
+        timeout: 120
