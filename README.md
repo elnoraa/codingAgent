@@ -59,6 +59,8 @@ python main.py
 ### 📋 Plan-Driven Workflow
 - Create, save, and manage implementation plans in `plans/`
 - Structured plan format with YAML front-matter
+- Each feature gets its own branch (branch-per-task convention)
+- After implementation, feature branch is merged back to main and deleted
 - Auto-completion of plans on session restart
 - Review and approve plans before implementation
 
@@ -280,6 +282,18 @@ coding-agent/
 
 ## Development
 
+### Workflow
+
+This project follows a **plan-first, branch-per-task** workflow:
+
+1. **Plan** — Create or pick a plan from `plans/pending/`
+2. **Branch** — Create a feature branch from `main` (e.g., `feat-add-syntax-highlighting`)
+3. **Implement** — Make changes, update docs and tests
+4. **Commit** — `git commit` (pre-commit hook auto-runs tests)
+5. **Push** — Push the feature branch to the remote
+6. **Merge** — Switch to `main`, merge the feature branch, push, delete the feature branch
+7. **Complete** — Move the plan to `plans/completed/`
+
 ### Running Tests
 
 ```bash
@@ -301,6 +315,8 @@ pyright                         # Static type checking (standard mode)
 pre-commit install               # Install git hooks
 pre-commit run --all-files       # Run all hooks on all files
 ```
+
+Pre-commit hooks run automatically on `git commit`, including tests and linting.
 
 ### Adding a New Tool
 

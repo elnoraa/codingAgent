@@ -4,26 +4,45 @@ These are MANDATORY rules. The coding agent MUST follow all instructions in this
 
 ## Workflow Rules
 
-1. After implementing each feature or making significant changes, you MUST:
+1. **Plan-first cycle**: When starting a new task, first check `plans/pending/` — if a plan exists
+   there that matches the task, implement it. If no plan exists, create a new plan using `write_plan`
+   and save it to `plans/pending/` following the naming convention below.
+
+2. **Branch-per-task**: For each task, create a separate git branch from `main`:
+   a. Run `git_branch(action="create", name="<task-branch>")` to create a new branch
+   b. Run `git_branch(action="switch", name="<task-branch>")` to switch to it
+   c. Use a descriptive name like `feat-<short-description>` or `fix-<short-description>`
+
+3. **Implement and commit**: After implementing the plan on the task branch:
    a. Commit the changes using `git_commit(all=True)`
-   b. Push the changes to the remote using `git_push(branch=<current-branch>)`
-   c. Verify the commit was successful
+   b. Push the branch to the remote using `git_push(branch=<task-branch>)`
 
-2. Always run tests after implementing changes if tests exist.
+4. **Merge back to main**: After the feature branch is pushed:
+   a. Switch to main: `git_branch(action="switch", name="main")`
+   b. Merge the feature branch: `git_branch(action="merge", name="<task-branch>", source="<task-branch>")`
+   c. Push main: `git_push(branch="main")`
+   d. Delete the feature branch: `git_branch(action="delete", name="<task-branch>")`
 
-3. Never modify files outside the project directory.
+5. **No manual test running**: The pre-commit hook automatically runs tests on commit.
+   Do NOT call `run_tests` manually — the hook handles this.
 
-4. After successfully implementing a plan from `plans/pending/`, you MUST:
+6. **Documentation and tests**: When making code changes, you MUST:
+   a. Update the `README.md` if the change affects user-facing features, commands, or project structure
+   b. Add or update docstrings on all new or modified functions, classes, and methods
+   c. Create new test files (or add to existing ones) for all new functionality
+   d. All tests MUST use isolated temp directories (via `tempfile.TemporaryDirectory`
+      or pytest `tmp_path` fixture) — never write to the real project directories
+
+7. After successfully implementing a plan from `plans/pending/`, you MUST:
    a. Move the plan to `plans/completed/` by calling the `complete_plan` tool
       with the plan's name. This will also automatically restart the session
       for the next task.
 
-5. When starting a new task, check `plans/pending/` first — if a plan exists
-   there that matches the task, implement it and then move it to `plans/completed/`.
-
-6. Before calling `restart_session` to reset the session, you MUST first call
+8. Before calling `restart_session` to reset the session, you MUST first call
    `complete_plan` to move any pending plan to `plans/completed/`. Always call
    `complete_plan` before `restart_session`, never after.
+
+9. Never modify files outside the project directory.
 
 ## Resilience & Stability Rules
 
@@ -31,9 +50,8 @@ These are MANDATORY rules. The coding agent MUST follow all instructions in this
    If so, retry with adjusted parameters.
 2. For file write errors, check if the directory exists before retrying.
 3. After completing file modifications, always verify the result using read_file or diff.
-4. Run tests after making changes to confirm nothing is broken.
-5. If you encounter an unexpected error, report it clearly and suggest a next step.
-6. Break complex tasks into numbered sub-steps and complete them sequentially.
+4. If you encounter an unexpected error, report it clearly and suggest a next step.
+5. Break complex tasks into numbered sub-steps and complete them sequentially.
 
 ## File Operations Rules
 
@@ -63,9 +81,6 @@ These are MANDATORY rules. The coding agent MUST follow all instructions in this
    or pytest `tmp_path` fixture) — never write to the real project directories
    like `plans/` or `sessions/` during tests.
 
-6. Run the full test suite after every change with `pytest` and confirm
-   all tests pass before committing.
-
 ## Multi-Agent & Swarm Rules
 
 1. When spawning sub-agents, provide clear, self-contained tasks that can be completed independently.
@@ -85,9 +100,9 @@ When saving plans to `plans/pending/`, use the following naming format:
 
 Where `<type>` is one of: `feat`, `fix`, `refactor`, `docs`, `perf`, `ci`, `chore`, `security`, `deps`, `test`, `spike`.
 
-7. Do NOT create aggregate "roadmap" or "catalog" plans that list multiple features.
-   Each feature must have its own individual plan file. For example, if asked to plan
-   five features, create five separate plans — one per feature.
+Do NOT create aggregate "roadmap" or "catalog" plans that list multiple features.
+Each feature must have its own individual plan file. For example, if asked to plan
+five features, create five separate plans — one per feature.
 
 Examples:
 - `33-feat-add-syntax-highlighting.md`
