@@ -55,6 +55,7 @@ python main.py
 - **API Testing** — `api_tool` (HTTP requests to local/dev servers)
 - **Multi-Agent** — `spawn_agent`, `list_agents`, `send_to_agent`, `terminate_agent`, `run_swarm`
 - **Navigation** — `directory_tree`, `list_directory`, `diff`
+- **RAG (Retrieval-Augmented Generation)** — `rag_index`, `rag_query`, `rag_status`
 
 ### 📋 Plan-Driven Workflow
 - Create, save, and manage implementation plans in `plans/`
@@ -81,6 +82,28 @@ python main.py
 - Spawn sub-agents for parallel tasks
 - Run agent swarms: **sequential** (pipeline), **debate** (compare results), **broadcast** (best of N)
 - Orchestrator manages sub-agent lifecycle automatically
+
+### 🔍 RAG (Retrieval-Augmented Generation)
+Semantically search your project codebase using natural language — more powerful than `grep` for finding code by concept.
+
+- **`rag_index`** — Build or update a semantic search index over project files. Scans your codebase, chunks files intelligently (respecting function/class boundaries), and builds a TF-IDF index. Zero external dependencies — uses pure Python math.
+- **`rag_query`** — Ask natural language questions about your codebase. Returns relevant code chunks with file paths, line numbers, and relevance scores.
+- **`rag_status`** — Show index statistics: number of chunks, files indexed, vocabulary size, last indexed timestamp.
+- **`/rag` commands** — `/rag index` to build the index, `/rag status` to check, `/rag clear` to reset.
+
+The index is stored locally in `.rag_index/chunks.db` (SQLite) and persists across sessions. Incremental updates mean re-indexing only touches changed files.
+
+Example usage:
+```python
+# Index your project first
+rag_index(mode="project")
+
+# Then search semantically
+rag_query(query="error handling for database connections")
+
+# Or filter by file type
+rag_query(query="rate limiting implementation", fileFilter="**/*.py")
+```
 
 ### 🔌 Extensible Architecture
 - **MCP Bridge** — Connect to Model Context Protocol servers for additional tools

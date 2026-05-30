@@ -63,10 +63,10 @@ def record_session_start() -> None:
 
 def record_file_timestamp(path: str) -> None:
     """Record a file's modification time at session start."""
-    try:
+    import contextlib
+
+    with contextlib.suppress(OSError):
         _SESSION_FILE_TIMESTAMPS[os.path.abspath(path)] = os.path.getmtime(path)
-    except OSError:
-        pass
 
 
 def was_file_modified_during_session(path: str) -> bool:
@@ -114,6 +114,8 @@ class ToolContext:
     """ID of the agent executing this tool (default: 'main')."""
     confirm_edits: bool = False
     """If True, show diff and ask user to confirm before applying file edits."""
+    rag_index: object | None = None
+    """Reference to the RagIndex instance for RAG search (optional)."""
 
     def snapshot_file(self, path: str) -> None:
         """Read the current file content and store a snapshot before modification."""

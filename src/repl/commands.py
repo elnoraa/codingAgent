@@ -411,6 +411,48 @@ def dispatch(repl: Repl, cmd: str) -> None:
             logger.info("Session restarted (messages cleared)")
             print(f"  {green('✓')} {bold('Restarted.')} {dim('Session reset to turn 1.')}")
 
+        case "/rag":
+            parts_rag = cmd.split(maxsplit=2)
+            verb = parts_rag[1].strip() if len(parts_rag) > 1 else "status"
+
+            from src.rag import RagConfig, RagIndex
+
+            # Get or create RagIndex
+            rag_index = getattr(repl, "_rag_index", None)
+            if rag_index is None:
+                rag_index = RagIndex(RagConfig(), repl.working_directory)
+                try:
+                    rag_index.initialize()
+                except Exception as exc:
+                    print(f"  {dim(f'RAG init failed: {exc}')}")
+                    return
+                repl._rag_index = rag_index
+
+            if verb == "index":
+                print(f"  {dim('Building RAG index...')}")
+                import time as _time
+
+                start = _time.time()
+                result = rag_index.index_project()
+                elapsed = _time.time() - start
+                indexed = result["indexed_files"]
+                chunks = result["total_chunks"]
+                msg = f"{indexed} files, {chunks} chunks in {elapsed:.1f}s"
+                print(f"  {green('✓')} {bold('Indexed')} {dim(msg)}")
+
+            elif verb == "status":
+                print(f"  {rag_index.status()}")
+
+            elif verb == "clear":
+                rag_index.clear()
+                print(f"  {green('✓')} {dim('RAG index cleared.')}")
+
+            else:
+                print(f"  {dim('RAG commands:')}")
+                print(f"  {dim('  /rag index           — build/update the search index')}")
+                print(f"  {dim('  /rag status          — show index statistics')}")
+                print(f"  {dim('  /rag clear           — clear the index')}")
+
         case "/q":
             print(f"  {dim('Exiting...')}")
             raise EOFError()

@@ -117,6 +117,9 @@ class Repl:
         # File watcher
         self._file_watcher: Any = None
 
+        # RAG index (lazily initialized)
+        self._rag_index: Any = None
+
         # Branch manager
         self._branch_manager: Any = None
 
@@ -248,6 +251,15 @@ class Repl:
         self.tools.register(db_tool)
         self.tools.register(docker_tool)
 
+        # Register RAG tools
+        from src.tools.rag_index import rag_index_tool
+        from src.tools.rag_query import rag_query_tool
+        from src.tools.rag_status import rag_status_tool
+
+        self.tools.register(rag_index_tool)
+        self.tools.register(rag_query_tool)
+        self.tools.register(rag_status_tool)
+
         # Load custom tools from config
         if self._custom_tools_config:
             from src.custom_tools import load_custom_tools
@@ -309,7 +321,9 @@ class Repl:
         finally:
             # Always auto-save on exit
             if self._auto_save_interval > 0 and self._last_auto_save_path is not None:
-                try:
+                import contextlib
+
+                with contextlib.suppress(Exception):
                     from src.session import save_session
 
                     path = save_session(
@@ -321,15 +335,13 @@ class Repl:
                         is_autosave=True,
                     )
                     print(f"  {dim('Auto-saved session:')} {cyan(path)}")
-                except Exception:
-                    pass
 
             # Disconnect MCP servers on exit
             if self._mcp_bridge is not None:
-                try:
+                import contextlib
+
+                with contextlib.suppress(Exception):
                     self._mcp_bridge.disconnect_all()
-                except Exception:
-                    pass
 
     def _auto_save(self) -> None:
         """Auto-save the session if the interval has been reached."""
@@ -538,6 +550,7 @@ class Repl:
                 file_snapshots=self._file_snapshots,
                 orchestrator=self._orchestrator,
                 agent_id="main",
+                rag_index=self._rag_index,
             )
             # Pass confirm-edits flag for the diff-review feature
             context.confirm_edits = self._confirm_edits

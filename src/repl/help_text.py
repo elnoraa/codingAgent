@@ -94,6 +94,9 @@ HELP_TEXT = f"""\
   /reset-python           Reset the Python REPL (clear all variables)
   /deps <file>            Show what a Python file imports (dependencies)
   /impact <file>          Show what imports a Python file (impact analysis)
+  /rag index              Build or update the RAG search index
+  /rag status             Show RAG index statistics
+  /rag clear              Clear the RAG index
 
 {bold("Multi-line input")}
   End a line with \\  to continue typing on the next line.
@@ -142,6 +145,9 @@ HELP_TEXT = f"""\
   ci              CI/CD integration (detect, validate config, check pipeline status)
   db              Explore databases (SQLite, PostgreSQL, MySQL)
   docker          Manage Docker (containers, images, Compose)
+  rag_index       Build/update a semantic search index over project files
+  rag_query       Semantic search across your codebase using natural language
+  rag_status      Show RAG index status and statistics
 
 {bold("Modes")}
   CODE mode  {green("●")}  All tools available (read + write + execute)
@@ -445,6 +451,25 @@ Shows the status of all configured MCP (Model Context Protocol) servers:
 
 MCP servers are configured in config.json under the "mcpServers" key.
 See the project documentation for configuration examples.""",
+    "rag": """\
+Usage: /rag <subcommand>
+
+Manages the RAG (Retrieval-Augmented Generation) semantic search index.
+This index allows natural-language search across your project codebase.
+
+Subcommands:
+  /rag index    — Build or update the index (scans project files)
+  /rag status   — Show index statistics (chunks, files, languages)
+  /rag clear    — Clear the entire index
+
+After indexing, use the rag_query tool to search semantically.
+The index is stored in .rag_index/ and persists across sessions.
+
+Examples:
+  /rag index         Index the entire project
+  /rag index src/    Index only the src/ directory
+  /rag status        Show index statistics
+  /rag clear         Reset the index""",
 }
 
 
