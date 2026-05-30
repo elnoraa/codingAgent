@@ -144,3 +144,54 @@ Examples:
 - `36-docs-update-readme.md`
 
 This convention keeps plan files sortable by number, immediately scannable by type, and consistent across all sessions.
+
+## SOLID & DRY Architecture Rules (MANDATORY)
+
+All code changes MUST follow these architectural principles:
+
+### S — Single Responsibility Principle
+- Every module/class must have exactly ONE reason to change.
+- A file should do one thing and do it well.
+- **Bad:** 700-line file that handles UI, business logic, and persistence.
+- **Good:** Split into `ui.py`, `service.py`, `repository.py`.
+
+### O — Open/Closed Principle
+- Modules must be OPEN for extension but CLOSED for modification.
+- Add new behavior by creating new files/classes, NOT by modifying existing ones.
+- The tool discovery system (`src/tools/__init__.py` → `reload_tools()`) is the canonical example.
+- **Bad:** Adding an `elif` in a big `if/elif` chain to support a new tool type.
+- **Good:** Dropping a new `.py` file in the `src/tools/` directory that exports a `*_tool` variable.
+
+### L — Liskov Substitution Principle
+- A subclass/implementation must be replaceable for its parent type without breaking the system.
+- `Tool` instances (whether built-in, custom, or plugin) must all adhere to the same contract.
+- **Bad:** A custom tool that ignores `ToolContext.working_directory` and writes to `/etc/`.
+- **Good:** All tool `execute()` functions have the same signature and respect the same constraints.
+
+### I — Interface Segregation Principle
+- Keep interfaces small and focused. Don't create "god parameters."
+- Tools should only receive the context they actually need.
+- **Bad:** Passing a 10-field `ToolContext` when you only need `working_directory`.
+- **Good:** Using leaner context types or optional fields for specialized needs.
+- When adding new fields to `ToolContext`, ask: "Does EVERY tool need this?"
+
+### D — Dependency Inversion Principle
+- Depend on abstractions (protocols, interfaces, abstract base classes), not concrete implementations.
+- **Bad:** `from anthropic import Anthropic` inside a business-logic module.
+- **Good:** `class LlmClient(ABC)` with `AnthropicClient(LlmClient)` extending it.
+- Tools must NOT import from third-party SDKs directly — go through the abstraction layer.
+- File operations must go through `FileSystem` protocol when available.
+
+### DRY — Don't Repeat Yourself
+- Every piece of knowledge must have a SINGLE, unambiguous representation in the system.
+- **Bad:** Copy-pasting the same validation logic across 5 tools.
+- **Good:** One `FileWriteGuard` class used by all tools.
+- **Bad:** Duplicate redact-pattern lists in `security.py`, `session.py`, and `logging_config.py`.
+- **Good:** One `src/redaction.py` module as the single source of truth.
+- Before duplicating code, ask: "Can I extract this to a shared module?"
+
+### When to Apply These Rules
+- **Every new file** you create must respect SRP and OCP.
+- **Every edit** to an existing file should leave the code healthier than you found it (boy-scout rule).
+- **Extract, don't inline**: When you need the same logic in two places, extract it into a shared module.
+- **Ask before violating**: If you MUST violate a principle for a good reason, explain why in the plan.
