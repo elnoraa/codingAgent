@@ -16,6 +16,8 @@ import re as _re
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
+from .redaction import SENSITIVE_REDACT_PATTERNS
+
 LOG_FORMAT = "%(asctime)s AEST | %(levelname)-5s | %(name)-15s | %(message)s"
 DATE_FORMAT = "%Y-%m-%d %H:%M:%S"
 MAX_LOG_BYTES = 5 * 1024 * 1024  # 5 MB per log file
@@ -23,34 +25,8 @@ BACKUP_COUNT = 3  # keep 3 rotated log files
 
 _AEST_TZ = datetime.timezone(datetime.timedelta(hours=10))
 
-# ── Sensitive data redaction patterns for logs ──────────────────────────────────
-# Each tuple is (regex_pattern, replacement_text).
-# Applied case-insensitively to all log messages before writing to disk.
-
-_SENSITIVE_LOG_PATTERNS: list[tuple[str, str]] = [
-    # Anthropic / OpenAI / generic API keys (sk-... with alphanumeric and dashes)
-    (r"(sk-[a-zA-Z0-9\-]{20,})", "sk-***REDACTED***"),
-    # API key env var assignments in logs (e.g. ANTHROPIC_API_KEY=sk-...)
-    (r'(ANTHROPIC_API_KEY[^a-zA-Z0-9]\s*["\x27]?)[a-zA-Z0-9_\-]+', r"\1***REDACTED***"),
-    (r'(OPENAI_API_KEY[^a-zA-Z0-9]\s*["\x27]?)[a-zA-Z0-9_\-]+', r"\1***REDACTED***"),
-    # Password/secret assignments (e.g. password = "mypass" or password: mypass)
-    (r'(password\s*[:=]\s*["\x27]?)[^"\x27,;\s}]+', r"\1***REDACTED***"),
-    (r'(passwd\s*[:=]\s*["\x27]?)[^"\x27,;\s}]+', r"\1***REDACTED***"),
-    (r'(secret\s*[:=]\s*["\x27]?)[^"\x27,;\s}]+', r"\1***REDACTED***"),
-    # Database connection strings with credentials
-    (r"((?:mongodb(?:\+srv)?|postgres(?:ql)?|mysql|redis)://)[^@\s]+@", r"\1***USER***@"),
-    # AWS access keys
-    (r"(AKIA[0-9A-Z]{16})", "AKIA***REDACTED***"),
-    # Bearer tokens in headers
-    (r"(Authorization:\s*Bearer\s+)[a-zA-Z0-9._\x2d]+", r"\1***REDACTED***"),
-    # GitHub tokens
-    (r"(ghp_[a-zA-Z0-9]{36})", "ghp_***REDACTED***"),
-    (r"(github_pat_[a-zA-Z0-9_]{80,})", "github_pat_***REDACTED***"),
-    # JWT tokens
-    (r"(eyJ[a-zA-Z0-9_\-]{10,}\.[a-zA-Z0-9_\-]{10,}\.[a-zA-Z0-9_\-]{10,})", "eyJ***REDACTED***"),
-    # Private key headers
-    (r"-----BEGIN\s+(RSA|DSA|EC|OPENSSH|PGP)\s+PRIVATE\s+KEY-----", "-----BEGIN REDACTED PRIVATE KEY-----"),
-]
+# NOTE: The canonical redaction patterns have been moved to ``src/redaction.py``
+# to eliminate duplication. They are imported at the top of this module.
 
 
 class SensitiveDataFilter(logging.Filter):
@@ -63,15 +39,16 @@ class SensitiveDataFilter(logging.Filter):
 
     def filter(self, record: logging.LogRecord) -> bool:
         """Redact sensitive patterns in the log record. Always returns True."""
+        patterns = SENSITIVE_REDACT_PATTERNS
         if isinstance(record.msg, str):
-            for pattern, replacement in _SENSITIVE_LOG_PATTERNS:
+            for pattern, replacement in patterns:
                 record.msg = _re.sub(pattern, replacement, record.msg, flags=_re.IGNORECASE)
 
         if record.args:
             sanitized_args: list[object] = []
             for arg in record.args:
                 if isinstance(arg, str):
-                    for pattern, replacement in _SENSITIVE_LOG_PATTERNS:
+                    for pattern, replacement in patterns:
                         arg = _re.sub(pattern, replacement, arg, flags=_re.IGNORECASE)
                 sanitized_args.append(arg)
             record.args = tuple(sanitized_args)

@@ -19,7 +19,7 @@ def render_markdown(text: str, syntax_theme: str = "monokai") -> None:
     Falls back to plain print() if Markdown parsing fails.
     """
     # Sanitize dangerous ANSI sequences before rendering
-    from .security import strip_dangerous_ansi
+    from .ansi_sanitizer import strip_dangerous_ansi
 
     text = strip_dangerous_ansi(text)
     try:
@@ -85,7 +85,7 @@ def highlight_code(code: str, language: str = "", theme: str = "monokai") -> str
         Syntax-highlighted string (rich renderable), or original code on failure.
     """
     # Sanitize dangerous ANSI sequences before rendering
-    from .security import strip_dangerous_ansi
+    from .ansi_sanitizer import strip_dangerous_ansi
 
     code = strip_dangerous_ansi(code)
     try:

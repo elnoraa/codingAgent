@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import time
 import uuid
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any
 
 from src.tools import ToolContext
@@ -36,17 +36,6 @@ class AgentHandle:
     result: AgentResult | None = None
     parent_id: str | None = None
     created_at: float = 0.0
-
-
-@dataclass
-class SwarmResult:
-    """Result from a swarm execution."""
-
-    pattern: str
-    task: str
-    agent_results: list[AgentResult] = field(default_factory=list)
-    summary: str = ""
-    error: str | None = None
 
 
 # ── Orchestrator class ─────────────────────────────────────────────────────────

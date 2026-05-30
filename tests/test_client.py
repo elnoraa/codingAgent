@@ -1,16 +1,11 @@
-"""Tests for the LLM client module."""
+"""Tests for the LLM client and model routing modules."""
 
 from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
-from src.client import (
-    SENSITIVE_PARAMS,
-    LlmClient,
-    ModelConfig,
-    MultiModelClient,
-    _summarize_args,
-)
+from src.client import SENSITIVE_PARAMS, LlmClient, _summarize_args
+from src.model_routing import ModelConfig, MultiModelClient
 
 # ── _summarize_args tests ─────────────────────────────────────────────────
 
@@ -19,7 +14,7 @@ class TestSummarizeArgs:
     """Verify tool argument summarization with sensitive-data redaction."""
 
     def test_normal_string_included(self) -> None:
-        result = _summarize_args({"path": "/tmp/test.py"})
+        result = _summarize_args({"path": "/tmp/test.py"})  # noqa: S108
         assert "path=/tmp/test.py" in result
 
     def test_long_string_truncated(self) -> None:

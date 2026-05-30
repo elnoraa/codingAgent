@@ -11,7 +11,8 @@ from typing import cast
 
 import pytest
 
-from src.session import _redact_messages, _redact_text, delete_session, list_sessions, load_session, save_session
+from src.redaction import redact_messages, redact_text
+from src.session import _MAX_FILENAME_LENGTH, delete_session, list_sessions, load_session, save_session
 
 
 @pytest.fixture
@@ -184,33 +185,33 @@ def test_round_trip_preserves_data(temp_working_dir: str) -> None:
 class TestSessionRedaction:
     """Verify sensitive data redaction in session files."""
 
-    def test_redact_text_api_key(self) -> None:
+    def testredact_text_api_key(self) -> None:
         """API keys in text should be redacted."""
-        result = _redact_text("sk-test-key-abcdefghijklmnopqrstuvwx")
+        result = redact_text("sk-test-key-abcdefghijklmnopqrstuvwx")
         assert "sk-***REDACTED***" in result
         assert "sk-test-key-abcdefghijklmnopqrstuvwx" not in result
 
-    def test_redact_text_password(self) -> None:
+    def testredact_text_password(self) -> None:
         """Password assignments in text should be redacted."""
-        result = _redact_text('password = "mysecret123"')
+        result = redact_text('password = "mysecret123"')
         assert "***REDACTED***" in result
         assert "mysecret123" not in result
 
-    def test_redact_text_normal(self) -> None:
+    def testredact_text_normal(self) -> None:
         """Normal text should be unchanged."""
         text = "Hello, this is a normal conversation about Python."
-        assert _redact_text(text) == text
+        assert redact_text(text) == text
 
-    def test_redact_text_empty(self) -> None:
+    def testredact_text_empty(self) -> None:
         """Empty string should return empty."""
-        assert _redact_text("") == ""
+        assert redact_text("") == ""
 
-    def test_redact_messages_string_content(self) -> None:
+    def testredact_messages_string_content(self) -> None:
         """String message content should be redacted."""
         messages: list[dict[str, object]] = [
             {"role": "user", "content": "My key is sk-test-key-abcdefghijklmnopqrstuvwx"},
         ]
-        redacted = _redact_messages(messages)
+        redacted = redact_messages(messages)
         # Verify original is not modified
         orig_content = cast("str", messages[0]["content"])
         assert "sk-test-key-abcdefghijklmnopqrstuvwx" in orig_content
@@ -220,7 +221,7 @@ class TestSessionRedaction:
         assert "sk-***REDACTED***" in content
         assert "sk-test-key-abcdefghijklmnopqrstuvwx" not in content
 
-    def test_redact_messages_list_content(self) -> None:
+    def testredact_messages_list_content(self) -> None:
         """List-type message content (tool results) should be redacted."""
         messages: list[dict[str, object]] = [
             {
@@ -230,7 +231,7 @@ class TestSessionRedaction:
                 ],
             },
         ]
-        redacted = _redact_messages(messages)
+        redacted = redact_messages(messages)
         content = redacted[0].get("content", [])
         assert isinstance(content, list)
         assert len(content) == 1
@@ -298,9 +299,6 @@ class TestSessionRedaction:
 
 
 # ── Filename length tests ─────────────────────────────────────────────────────
-
-
-from src.session import _MAX_FILENAME_LENGTH
 
 
 def test_save_session_truncates_long_name(temp_working_dir: str) -> None:

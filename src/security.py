@@ -1,220 +1,37 @@
-"""Security utilities for the Coding Agent.
+"""SSRF (Server-Side Request Forgery) protection for the Coding Agent.
 
-Provides protection against:
-- SSRF (Server-Side Request Forgery) attacks
-- Data exfiltration via bash commands
-- Terminal ANSI escape code injection
-- Sensitive data leakage (API keys, passwords) in LLM summarization
+Provides URL target validation to block requests to private/internal IP
+addresses and detect DNS rebinding attacks.
+
+NOTE: Earlier versions of this module also contained ANSI sanitization,
+data exfiltration detection, and sensitive data redaction. Those have been
+split into their own modules (``ansi_sanitizer.py``, ``exfiltration_detection.py``,
+``redaction.py``) to follow the Single Responsibility Principle.
+They are re-exported here for backward compatibility.
 """
 
 from __future__ import annotations
 
 import ipaddress
 import logging
-import re as _re_module
 import socket as _socket
 from collections.abc import Callable
 from typing import Any
 from urllib.parse import urlparse as _urlparse
 
+# Backward-compatibility re-exports
+from src.ansi_sanitizer import strip_dangerous_ansi  # noqa: F401
+from src.exfiltration_detection import (  # noqa: F401
+    _EXFIL_NETWORK_COMMANDS,
+    _EXFIL_SENSITIVE_FILES,
+    _SCRIPT_FILE_READ_INDICATORS,
+    _SCRIPT_INTERPRETERS,
+    _SCRIPT_NETWORK_INDICATORS,
+)
+from src.redaction import redact_sensitive_content  # noqa: F401
+
 logger = logging.getLogger(__name__)
 
-
-# ── ANSI Terminal Escape Sanitization ──────────────────────────────────────────
-
-
-# Dangerous ANSI sequences that should be stripped from output before rendering.
-# These can be used for terminal injection attacks (cursor positioning, screen
-# clearing, title setting, keyboard remapping, etc.).
-_DANGEROUS_ANSI_PATTERNS: list[Any] = [
-    _re_module.compile(r"\x1b\[2J"),  # Clear entire screen
-    _re_module.compile(r"\x1b\[3J"),  # Clear scrollback
-    _re_module.compile(r"\x1b\[0J"),  # Clear from cursor to end of screen
-    _re_module.compile(r"\x1b\[1J"),  # Clear from beginning to cursor
-    _re_module.compile(r"\x1b\[\d*(?:;\d*)?[Hf]"),  # Cursor positioning
-    _re_module.compile(r"\x1b\[\?25[lh]"),  # Hide/show cursor
-    _re_module.compile(r"\x1b\]0;.+?\x07"),  # Set terminal title
-    _re_module.compile(r"\x1b\]2;.+?\x07"),  # Set terminal title (alternative)
-    _re_module.compile(r"\x1b\[\d*[n]"),  # Device status reports
-    _re_module.compile(r"\x1b\[[0-9;]*[t]"),  # XTerm window ops
-    _re_module.compile(r"\x1bc", _re_module.ASCII),  # RIS (Reset to Initial State)
-    _re_module.compile(r"\x1b][\\_\[\]]"),  # String terminators
-]
-
-
-def strip_dangerous_ansi(text: str) -> str:
-    """Strip dangerous ANSI escape sequences from text.
-
-    Preserves common formatting sequences (colors, bold, dim) but removes
-    sequences that could be used for terminal injection attacks.
-
-    Args:
-        text: The text to sanitize.
-
-    Returns:
-        Sanitized text with dangerous sequences removed.
-    """
-    if not text:
-        return text
-    result = text
-    for pattern in _DANGEROUS_ANSI_PATTERNS:
-        result = pattern.sub("", result)
-    return result
-
-
-# ── Sensitive data redaction ─────────────────────────────────────────────────
-
-
-# Sensitive patterns to redact before sending message content to LLM
-# for summarization. This prevents secrets from being transmitted to
-# the LLM provider.
-_SUMMARIZATION_REDACT_PATTERNS: list[tuple[str, str]] = [
-    # Anthropic / OpenAI / generic API keys
-    (r"(sk-[a-zA-Z0-9\-]{20,})", "sk-***REDACTED***"),
-    # AWS access keys
-    (r"(AKIA[0-9A-Z]{16})", "AKIA***REDACTED***"),
-    # GitHub tokens
-    (r"(ghp_[a-zA-Z0-9]{36})", "ghp_***REDACTED***"),
-    (r"(github_pat_[a-zA-Z0-9_]{80,})", "github_pat_***REDACTED***"),
-    # Password/secret assignments
-    (r'(password\s*[:=]\s*["\x27]?)[^"\x27,;\s}]+', r"\1***REDACTED***"),
-    (r'(passwd\s*[:=]\s*["\x27]?)[^"\x27,;\s}]+', r"\1***REDACTED***"),
-    (r'(secret\s*[:=]\s*["\x27]?)[^"\x27,;\s}]+', r"\1***REDACTED***"),
-    # Database connection strings with credentials
-    (r"((?:mongodb(?:\+srv)?|postgres(?:ql)?|mysql|redis)://)[^@\s]+@", r"\1***USER***@"),
-    # JWT tokens
-    (r"(eyJ[a-zA-Z0-9_\-]{10,}\.[a-zA-Z0-9_\-]{10,}\.[a-zA-Z0-9_\-]{10,})", "eyJ***REDACTED***"),
-    # Private key headers
-    (r"-----BEGIN\s+(RSA|DSA|EC|OPENSSH|PGP)\s+PRIVATE\s+KEY-----", "-----BEGIN REDACTED PRIVATE KEY-----"),
-    # Bearer tokens in headers
-    (r"(Authorization:\s*Bearer\s+)[a-zA-Z0-9._\x2d]+", r"\1***REDACTED***"),
-]
-
-
-def redact_sensitive_content(text: str) -> str:
-    """Redact known sensitive patterns from text content.
-
-    This is used before sending message content to the LLM for
-    summarization to prevent secrets from being transmitted to
-    the LLM provider.
-
-    Args:
-        text: The text to redact.
-
-    Returns:
-        Redacted text with sensitive values replaced.
-    """
-    if not text:
-        return text
-
-    result = text
-    for pattern, replacement in _SUMMARIZATION_REDACT_PATTERNS:
-        result = _re_module.sub(pattern, replacement, result, flags=_re_module.IGNORECASE)
-    return result
-
-
-# ── Data exfiltration detection constants ──────────────────────────────────────
-
-# Files that should never be read and sent over the network
-_EXFIL_SENSITIVE_FILES: frozenset = frozenset(
-    {
-        ".env",
-        ".env.example",
-        ".env.local",
-        ".env.production",
-        "config.json",  # may contain credentials
-        ".git-credentials",
-        ".gitconfig",
-        ".ssh/id_rsa",
-        ".ssh/id_rsa.pub",
-        ".ssh/id_ed25519",
-        ".ssh/id_ed25519.pub",
-        ".ssh/config",
-        ".ssh/authorized_keys",
-        "id_rsa",
-        "id_ed25519",
-        "credentials.json",
-        "credentials.yml",
-        "credentials.yaml",
-        "service-account.json",
-        "service-account-key.json",
-        ".npmrc",
-        ".netrc",
-    }
-)
-
-# Commands that can send data to remote servers (exfiltration vectors)
-_EXFIL_NETWORK_COMMANDS: frozenset = frozenset(
-    {
-        "curl",
-        "wget",
-        "nc",
-        "ncat",
-        "netcat",
-        "socat",
-        "ftp",
-        "sftp",
-        "scp",
-        "rsync",
-        "telnet",
-    }
-)
-
-# Script interpreters that can execute inline code and bypass the command scanner
-# Format: (interpreter_binary, flag_that_takes_inline_code, description)
-_SCRIPT_INTERPRETERS: list[tuple[str, str, str]] = [
-    ("python", "-c", "Python inline code execution"),
-    ("python3", "-c", "Python 3 inline code execution"),
-    ("node", "-e", "Node.js inline code execution"),
-    ("node", "-p", "Node.js inline print execution"),
-    ("ruby", "-e", "Ruby inline code execution"),
-    ("perl", "-e", "Perl inline code execution"),
-    ("php", "-r", "PHP inline code execution"),
-    ("php", "-R", "PHP inline code processing"),
-]
-
-# Dangerous function/module calls that indicate file operations in script code
-_SCRIPT_FILE_READ_INDICATORS: frozenset = frozenset(
-    {
-        "open(",
-        ".read(",
-        ".read_text(",
-        ".read_bytes(",
-        "readFile(",
-        "readFileSync(",
-        "readFileSync (",
-        "createReadStream(",
-        "createReadStream (",
-        "File.read(",
-        "File.open(",
-        "fread(",
-        "file_get_contents(",
-    }
-)
-
-# Dangerous function/module calls that indicate network operations in script code
-_SCRIPT_NETWORK_INDICATORS: frozenset = frozenset(
-    {
-        "urllib.request.urlopen(",
-        "urllib.request.Request(",
-        "requests.get(",
-        "requests.post(",
-        "requests.put(",
-        "requests.delete(",
-        "urlopen(",
-        "urlretrieve(",
-        "fetch(",
-        "http.",
-        "https.",
-        "net/http",
-        "net::HTTP",
-        "curl ",
-        "wget ",
-    }
-)
-
-
-# ── SSRF protection ─────────────────────────────────────────────────────────
 
 # Private/reserved IP ranges that should be blocked for SSRF prevention
 _PRIVATE_NETWORKS: list[Any] = [

@@ -14,13 +14,16 @@ import json
 import random as _random
 from typing import Any, cast
 
-from .logging_config import get_logger
-from .security import redact_sensitive_content
-
-logger = get_logger(__name__)
-
 # Re-export common symbols from sub-modules for backward compatibility.
 # New code should import directly from the appropriate module.
+from .ansi_sanitizer import strip_dangerous_ansi  # noqa: F401
+from .exfiltration_detection import (  # noqa: F401
+    _EXFIL_NETWORK_COMMANDS,
+    _EXFIL_SENSITIVE_FILES,
+    _SCRIPT_FILE_READ_INDICATORS,
+    _SCRIPT_INTERPRETERS,
+    _SCRIPT_NETWORK_INDICATORS,
+)
 from .formatting import (  # noqa: F401
     R,
     Spinner,
@@ -43,6 +46,7 @@ from .formatting import (  # noqa: F401
     show_diff_and_confirm,
     yellow,
 )
+from .logging_config import get_logger
 from .markdown import (  # noqa: F401
     EXTENSION_LANG_MAP,
     detect_language,
@@ -50,15 +54,8 @@ from .markdown import (  # noqa: F401
     render_markdown,
 )
 from .rate_limiter import RateLimiter  # noqa: F401
-from .security import (  # noqa: F401
-    _EXFIL_NETWORK_COMMANDS,
-    _EXFIL_SENSITIVE_FILES,
-    _SCRIPT_FILE_READ_INDICATORS,
-    _SCRIPT_INTERPRETERS,
-    _SCRIPT_NETWORK_INDICATORS,
-    strip_dangerous_ansi,
-    validate_url_target,
-)
+from .redaction import redact_sensitive_content  # noqa: F401
+from .security import validate_url_target  # noqa: F401
 from .validation import (  # noqa: F401
     MAX_CODE_LENGTH,
     MAX_COMMAND_LENGTH,
@@ -72,6 +69,8 @@ from .validation import (  # noqa: F401
     validate_write_path,
     validate_write_path_atomic,
 )
+
+logger = get_logger(__name__)
 
 # ── Context management ─────────────────────────────────────────────────────
 
@@ -205,7 +204,7 @@ def compute_backoff(
     """
     cap = min(base_delay * (2**attempt), max_delay)
     if jitter:
-        return _random.uniform(0, cap)
+        return _random.uniform(0, cap)  # noqa: S311 — not used for crypto
     return cap
 
 
@@ -220,9 +219,7 @@ def is_transient_error(error: Exception) -> bool:
 
     if isinstance(error, (APIConnectionError, RateLimitError, InternalServerError)):
         return True
-    if isinstance(error, APIStatusError) and error.status_code in (429, 502, 503, 504):
-        return True
-    return False
+    return bool(isinstance(error, APIStatusError) and error.status_code in (429, 502, 503, 504))
 
 
 # ── Conversation Summarization ──────────────────────────────────────────
