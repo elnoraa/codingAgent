@@ -1,13 +1,19 @@
 """Terminal formatting and display utilities.
 
 Provides ANSI color helpers, JSON colorization, an animated spinner,
-diff display, and table/panel printing utilities.
+diff display, table/panel printing utilities, a progress bar, a
+confirmation prompt helper, and a long-output pager.
+
+Following SOLID & DRY: each utility has a single responsibility,
+all depend on stdlib abstractions (TextIO, shutil), and shared
+patterns (confirmation prompts, terminal width) are extracted once.
 """
 
 from __future__ import annotations
 
 import difflib
 import json
+import shutil
 import sys
 import threading
 import time
@@ -53,6 +59,17 @@ def magenta(s: str) -> str:
 
 def red(s: str) -> str:
     return f"{_code(31)}{s}{R}"
+
+
+# ── Terminal utilities ────────────────────────────────────────────────────────
+
+
+def get_terminal_width(fallback: int = 80) -> int:
+    """Get the current terminal width, with a fallback default."""
+    try:
+        return shutil.get_terminal_size().columns
+    except Exception:
+        return fallback
 
 
 def color_json(obj: object, indent: int = 2) -> str:
@@ -233,8 +250,8 @@ class Spinner:
         self._running = False
         if self._thread:
             self._thread.join(timeout=0.5)
-        # Clear the spinner line entirely
-        self._stream.write("\r" + " " * 80 + "\r")
+        # Clear the spinner line entirely using dynamic terminal width
+        self._stream.write("\r" + " " * get_terminal_width() + "\r")
         if final_message:
             self._stream.write(final_message)
             self._stream.flush()
@@ -245,6 +262,141 @@ class Spinner:
 
     def __exit__(self, *args: object) -> None:
         self.stop()
+
+
+# ── Progress Bar ──────────────────────────────────────────────────────────────
+
+
+class ProgressBar:
+    """A lightweight, single-line progress bar for terminal operations.
+
+    Renders as::
+
+        Indexing files...  [████████░░░░░░░░░░░░]  45%  (45/100 files)
+
+    Usage::
+
+        bar = ProgressBar(total=100, message="Processing...")
+        for i in range(100):
+            do_work(i)
+            bar.update(i + 1)
+        bar.finish("  Done!")
+
+    Can also be used as a context manager::
+
+        with ProgressBar(total=100, message="Working...") as bar:
+            for i in range(100):
+                do_work(i)
+                bar.update(i + 1)
+    """
+
+    def __init__(
+        self,
+        total: int,
+        message: str = "",
+        *,
+        stream: TextIO = sys.stdout,
+        bar_width: int | None = None,
+    ) -> None:
+        self.total = max(total, 1)
+        self.current = 0
+        self._message = message
+        self._stream = stream
+        self._bar_width = bar_width or (get_terminal_width() - 20)
+        self._start_time = time.time()
+        self._finished = False
+
+    def update(self, current: int, message: str = "") -> None:
+        """Update progress to *current* (0-based or 1-based)."""
+        self.current = min(current, self.total)
+        pct = self.current / self.total
+        filled = int(pct * self._bar_width)
+        bar = "█" * filled + "░" * (self._bar_width - filled)
+        elapsed = time.time() - self._start_time
+        msg = message or self._message
+        self._stream.write(f"\r  {msg} [{bar}] {pct * 100:3.0f}%  ({self.current}/{self.total})  {elapsed:.1f}s")
+        self._stream.flush()
+
+    def finish(self, final_message: str = "") -> None:
+        """Complete the progress bar and optionally write a final message."""
+        if self._finished:
+            return
+        self._finished = True
+        self._stream.write("\r" + " " * get_terminal_width() + "\r")
+        if final_message:
+            self._stream.write(final_message)
+            self._stream.flush()
+
+    def __enter__(self) -> ProgressBar:
+        return self
+
+    def __exit__(self, *args: object) -> None:
+        self.finish()
+
+
+# ── Confirmation prompt ───────────────────────────────────────────────────────
+
+
+def confirm(prompt: str = "Continue?", default_yes: bool = True) -> bool:
+    """Display a [Y/n] or [y/N] confirmation prompt and return the result.
+
+    Args:
+        prompt: The question to display.
+        default_yes: If True, pressing Enter defaults to yes; otherwise no.
+
+    Returns:
+        True if confirmed, False if rejected.
+    """
+    marker = "[Y/n]" if default_yes else "[y/N]"
+    print(f"  {yellow('?')} {prompt} {dim(marker)} ", end="", flush=True)
+    try:
+        response = input().strip().lower()
+    except EOFError, KeyboardInterrupt:
+        print()
+        return default_yes
+    if not response:
+        return default_yes
+    return response in ("y", "yes")
+
+
+# ── Pager for long output ────────────────────────────────────────────────────
+
+
+def page_output(lines: list[str], *, stream: TextIO = sys.stdout) -> None:
+    """Display long output one screenful at a time, pausing after each page.
+
+    Falls back to printing all lines if the output fits on one screen.
+
+    Args:
+        lines: The lines to display.
+        stream: The output stream (default: sys.stdout).
+    """
+    import contextlib
+
+    from src.formatting import dim
+
+    height = 24
+    with contextlib.suppress(Exception):
+        height = shutil.get_terminal_size().lines - 2
+
+    if len(lines) <= height:
+        for line in lines:
+            stream.write(line + "\n")
+        stream.flush()
+        return
+
+    for i in range(0, len(lines), height):
+        chunk = lines[i : i + height]
+        for line in chunk:
+            stream.write(line + "\n")
+        stream.flush()
+        if i + height < len(lines):
+            remaining = len(lines) - (i + height)
+            try:
+                input(f"  {dim(f'— {remaining} more lines. Press Enter to continue, q to quit —')}")
+            except EOFError, KeyboardInterrupt:
+                stream.write("\n")
+                return
 
 
 # ── Diff display ──────────────────────────────────────────────────────────
@@ -278,10 +430,5 @@ def show_diff_and_confirm(original: str, modified: str, filepath: str) -> bool:
         else:
             print(dim(line.rstrip()))
 
-    # Ask for confirmation
-    print(f"\n  {yellow('Apply these changes?')} [Y/n] ", end="", flush=True)
-    try:
-        response = input().strip().lower()
-    except EOFError, KeyboardInterrupt:
-        response = "n"
-    return response in ("", "y", "yes")
+    # Ask for confirmation using the shared helper (DRY)
+    return confirm("Apply these changes?", default_yes=True)
