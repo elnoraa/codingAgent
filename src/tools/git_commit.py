@@ -20,7 +20,7 @@ def execute(args: dict[str, Any], _ctx: ToolContext) -> str:
     # Validate path is within the working directory
     error = _ctx.validate_write_path(root_dir)
     if error:
-        return error
+        raise ValueError(error)
 
     # Check if we're in a git repo
     try:
@@ -31,9 +31,9 @@ def execute(args: dict[str, Any], _ctx: ToolContext) -> str:
             check=True,
         )
     except subprocess.CalledProcessError:
-        return f"[Error] {root_dir} is not inside a git repository"
+        raise ValueError(f"{root_dir} is not inside a git repository")
     except FileNotFoundError:
-        return "[Error] git is not installed"
+        raise RuntimeError("git is not installed")
 
     # Stage all files if requested
     if all_files:
@@ -46,9 +46,9 @@ def execute(args: dict[str, Any], _ctx: ToolContext) -> str:
                 timeout=30,
             )
         except subprocess.TimeoutExpired:
-            return "[Error] git add timed out"
+            raise TimeoutError("git add timed out")
         except subprocess.CalledProcessError as exc:
-            return f"[Error] git add failed: {exc.stderr.strip()}"
+            raise RuntimeError(f"git add failed: {exc.stderr.strip()}")
 
     # Check if there's anything staged
     try:
@@ -60,10 +60,10 @@ def execute(args: dict[str, Any], _ctx: ToolContext) -> str:
             check=True,
         )
         if not result.stdout.strip():
-            return "[Error] Nothing to commit. Use all=true to stage all changes, or stage files manually."
+            raise ValueError("Nothing to commit. Use all=true to stage all changes, or stage files manually.")
         diff_stat = result.stdout.strip()
     except subprocess.CalledProcessError as exc:
-        return f"[Error] {exc.stderr.strip()}"
+        raise RuntimeError(exc.stderr.strip())
 
     # Generate commit message if not provided
     if not message and auto_message:
@@ -87,8 +87,9 @@ def execute(args: dict[str, Any], _ctx: ToolContext) -> str:
     if not message:
         message = "Update project files"
 
-    # Create the commit
-    try:
+    # Attempt the commit, with retry logic for pre-commit hooks that modify files
+    max_attempts = 3
+    for attempt in range(max_attempts):
         result = subprocess.run(
             ["git", "commit", "-m", message],
             capture_output=True,
@@ -96,15 +97,61 @@ def execute(args: dict[str, Any], _ctx: ToolContext) -> str:
             cwd=root_dir,
             timeout=120,
         )
-    except subprocess.TimeoutExpired:
-        return "[Error] git commit timed out"
-    except Exception as exc:
-        return f"[Error] {exc}"
 
-    if result.returncode != 0:
-        return f"[Error] Commit failed:\n{result.stderr.strip()}"
+        if result.returncode == 0:
+            # Commit succeeded
+            return f"✅ {result.stdout.strip()}"
 
-    return f"✅ {result.stdout.strip()}"
+        stderr = result.stderr.strip()
+
+        # Detect if pre-commit hooks modified files (common with ruff --fix)
+        # The pattern is typically: "Files were modified by this hook" or similar
+        if attempt < max_attempts - 1 and _hooks_modified_files(stderr):
+            logger.info(
+                "Pre-commit hooks modified files, staging and retrying (attempt %d/%d)", attempt + 1, max_attempts
+            )
+            try:
+                subprocess.run(
+                    ["git", "add", "-A"],
+                    capture_output=True,
+                    cwd=root_dir,
+                    check=True,
+                    timeout=30,
+                )
+            except subprocess.CalledProcessError as exc:
+                raise RuntimeError(
+                    f"Retry failed: could not stage changes after hook modifications: {exc.stderr.strip()}"
+                )
+            continue
+
+        # Check if commit was rejected by a hook (non-modification failure)
+        if _hooks_rejected_commit(stderr):
+            raise RuntimeError(f"Commit rejected by pre-commit hook:\n{stderr}")
+
+        # Some other failure — show the full output
+        raise RuntimeError(f"Commit failed:\n{stderr}")
+
+    raise RuntimeError("Commit failed after pre-commit hooks modified files on multiple attempts")
+
+
+def _hooks_modified_files(stderr: str) -> bool:
+    """Check if pre-commit hook stderr indicates files were modified."""
+    indicators = [
+        "files were modified by this hook",
+        "reformatted",
+        "fixed",
+        "ruff",
+        "autofix",
+    ]
+    return any(indicator in stderr.lower() for indicator in indicators)
+
+
+def _hooks_rejected_commit(stderr: str) -> bool:
+    """Check if pre-commit hook stderr indicates a hook rejection (not a modification)."""
+    lines = stderr.split("\n")
+    # Count lines that look like hook failures (contain "Failed" or "failed")
+    failure_count = sum(1 for line in lines if "failed" in line.lower())
+    return failure_count > 0
 
 
 def _generate_commit_message(diff_text: str, diff_stat: str) -> str:
