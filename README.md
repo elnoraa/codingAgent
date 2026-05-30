@@ -1,6 +1,6 @@
 # Coding Agent
 
-An AI-powered coding assistant that runs in your terminal. It connects to an LLM backend (e.g., Anthropic Claude or DeepSeek) and provides a rich interactive environment with **100+ tools** for code exploration, editing, debugging, and project management.
+An AI-powered coding assistant that runs in your terminal. It connects to an LLM backend (e.g., Anthropic Claude or DeepSeek) and provides a rich interactive environment with **47+ tools** for code exploration, editing, debugging, and project management.
 
 ```
                         .---.
@@ -44,17 +44,19 @@ python main.py
 - Supports multiple models (DeepSeek, Claude 3.x) with per-mode routing
 - Three modes: **CODE** (full access), **PLAN** (read-only exploration), **ASK** (read-only Q&A)
 
-### 🛠️ 40+ Built-In Tools
-- **File Operations** — `read_file`, `write_file`, `edit_file`, `replace_in_files`, `glob`, `grep`, `file_search`, `rename_file`
+### 🛠️ 47+ Built-In Tools
+- **File Operations** — `read_file`, `write_file`, `edit_file`, `replace_in_files`, `glob`, `grep`, `file_search`, `rename_file`, `diff`
 - **Git Integration** — `git_commit`, `git_push`, `git_status`, `git_log`, `git_revert`, `git_branch`
 - **Code Quality** — `run_tests`, `syntax_check`, `verify_content`, `lint`
-- **System** — `bash` (shell execution), `python` (Python REPL), `url_fetch`, `web_search`
+- **System** — `bash` (shell execution), `python` (Python REPL), `url_fetch`, `web_search`, `environment`
+- **Diagnostics** — `config`, `undo`, `think`
 - **Planning** — `write_plan`, `edit_plan`, `complete_plan`
 - **Database** — `db_tool` (SQLite, PostgreSQL, MySQL exploration)
 - **DevOps** — `docker_tool`, `precommit_tool`, `ci_tool`
 - **API Testing** — `api_tool` (HTTP requests to local/dev servers)
 - **Multi-Agent** — `spawn_agent`, `list_agents`, `send_to_agent`, `terminate_agent`, `run_swarm`
-- **Navigation** — `directory_tree`, `list_directory`, `diff`
+- **Navigation** — `directory_tree`, `list_directory`
+- **Session** — `restart_session`
 - **RAG (Retrieval-Augmented Generation)** — `rag_index`, `rag_query`, `rag_status`
 
 ### 📋 Plan-Driven Workflow
@@ -138,10 +140,14 @@ rag_query(query="rate limiting implementation", fileFilter="**/*.py")
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `ANTHROPIC_API_KEY` | — | Your API key **(required)** |
-| `ANTHROPIC_BASE_URL` | `https://api.deepseek.com/anthropic` | API endpoint |
+| `ANTHROPIC_BASE_URL` | `https://api.deepseek.com/anthropic` | API endpoint (works with DeepSeek, Anthropic, OpenAI-compatible) |
 | `ANTHROPIC_MODEL` | `deepseek-chat` | Model name |
 | `MAX_TOKENS` | `4096` | Max response tokens |
-| `LOG_LEVEL` | `INFO` | Logging level |
+| `TEMPERATURE` | `0.7` | Response temperature |
+| `LOG_LEVEL` | `INFO` | Logging level (DEBUG, INFO, WARNING, ERROR) |
+| `CODE_MODE_MODEL` | — | Model override for CODE mode |
+| `PLAN_MODE_MODEL` | — | Model override for PLAN mode |
+| `ASK_MODE_MODEL` | — | Model override for ASK mode |
 
 ### `config.json`
 
@@ -159,7 +165,7 @@ Example configuration file at the project root:
 }
 ```
 
-Additional supported keys: `model`, `maxTokens`, `temperature`, `topP`, `systemPrompt`, `customPersona`, `contextFiles`, `customToolsConfig`, `mcpServers`, `autoSaveInterval`.
+Additional supported keys: `model`, `maxTokens`, `temperature`, `topP`, `systemPrompt`, `customPersona`, `contextFiles`, `customToolsConfig`, `mcpServers`, `autoSaveInterval`, `modeModels` (per-mode model overrides), `rateLimit` (calls/minute), `sessionEncryption` (AES-GCM key).
 
 ---
 
@@ -192,6 +198,18 @@ Additional supported keys: `model`, `maxTokens`, `temperature`, `topP`, `systemP
 | `/profile` | Manage config profiles |
 | `/backup` | Manage backups |
 | `/restart` | Reset session |
+| `/rag` | RAG commands: index, query, status, clear |
+| `/undo` | Undo last file edit |
+| `/undolist` | List file snapshots for undo |
+| `/export` | Export conversation |
+| `/scaffold` | Scaffold new projects |
+| `/task` | Manage tasks |
+| `/watch` | Watch files for changes |
+| `/watchers` | List active file watchers |
+| `/deps` | Show dependency analysis |
+| `/impact` | Show change impact analysis |
+| `/notifications` | Toggle desktop notifications |
+| `/branch` | Branch management commands |
 | `/exit` or `exit` | Quit |
 
 ---
@@ -214,38 +232,65 @@ coding-agent/
 │   ├── main.py              # CLI entry, config loading
 │   ├── client.py            # LLM API client (streaming, retry)
 │   ├── repl/                # Interactive REPL
-│   │   ├── repl.py          # Core REPL loop (Repl class)
-│   │   ├── commands.py      # Command dispatcher
-│   │   ├── tool_runner.py   # Tool execution helpers
-│   │   ├── help_text.py     # Help text, model pricing
-│   │   ├── system_prompt.py # System prompt builder
-│   │   ├── ui.py            # Tab completion, multiline input
-│   │   └── *.py             # Command handlers
-│   ├── tools/               # Tool implementations (40+ files)
+│   │   ├── repl.py             # Core REPL loop (Repl class)
+│   │   ├── commands.py         # Command dispatcher
+│   │   ├── tool_runner.py      # Tool execution helpers
+│   │   ├── help_text.py        # Help text, model pricing
+│   │   ├── system_prompt.py    # System prompt builder
+│   │   ├── ui.py               # Tab completion, multiline input
+│   │   ├── auxiliary.py        # Auxiliary utility commands
+│   │   ├── backup_commands.py  # Backup/restore commands
+│   │   ├── branch_commands.py  # Branch management commands
+│   │   ├── export_commands.py  # Session export commands
+│   │   ├── lint_commands.py    # Linting commands
+│   │   ├── plan_commands.py    # Plan management commands
+│   │   ├── profile_commands.py # Profile commands
+│   │   ├── prompt_commands.py  # Prompt template commands
+│   │   ├── scaffold_commands.py # Scaffold commands
+│   │   ├── session_commands.py # Session save/load commands
+│   │   ├── snippet_commands.py # Snippet management commands
+│   │   ├── task_commands.py    # Task management commands
+│   │   └── watch_commands.py   # File watching commands
+│   ├── tools/               # Tool implementations (47+ files)
 │   ├── tool_base.py         # Tool, ToolContext, ToolRegistry
-│   ├── session.py           # Session save/load (encrypted)
-│   ├── security.py          # SSRF, exfiltration, sanitization
-│   ├── plan.py              # Plan CRUD operations
+│   ├── agent.py             # Agent loop & message handling
+│   ├── ansi_sanitizer.py    # ANSI escape code sanitization
 │   ├── backup.py            # Backup/restore
+│   ├── branch_manager.py    # Git branch operations
 │   ├── changelog.py         # Audit trail
-│   ├── logging_config.py    # Logging setup
-│   ├── formatting.py        # Terminal formatting (Rich)
-│   ├── markdown.py          # Markdown rendering
-│   ├── diagrams.py          # Mermaid diagram rendering
-│   ├── python_repl.py       # Embedded Python REPL
-│   ├── mcp_bridge.py        # MCP server integration
-│   ├── orchestrator.py      # Multi-agent orchestration
-│   ├── plugin_loader.py     # Plugin discovery & loading
+│   ├── client.py            # LLM API client (streaming, retry)
 │   ├── custom_tools.py      # Custom tool loading from config
-│   ├── validation.py        # Write-path validation
-│   ├── rate_limiter.py      # Rate limiting
+│   ├── dep_analyzer.py      # Dependency graph analysis
+│   ├── diagrams.py          # Mermaid diagram rendering
+│   ├── exporter.py          # Session export
+│   ├── exfiltration_detection.py # Data exfiltration detection
+│   ├── file_watcher.py      # File watching service
+│   ├── formatting.py        # Terminal formatting (Rich)
+│   ├── logging_config.py    # Logging setup
+│   ├── markdown.py          # Markdown rendering
+│   ├── mcp_bridge.py        # MCP server integration
+│   ├── mode.py              # Mode management (code/plan/ask)
+│   ├── model_routing.py     # Per-mode model routing
+│   ├── notifications.py     # Desktop notifications
+│   ├── orchestrator.py      # Multi-agent orchestration
+│   ├── plan.py              # Plan CRUD operations
+│   ├── plugin_loader.py     # Plugin discovery & loading
 │   ├── profiles.py          # Configuration profiles
 │   ├── prompts.py           # Prompt template management
+│   ├── python_repl.py       # Embedded Python REPL
+│   ├── rag.py               # RAG index engine
+│   ├── rate_limiter.py      # Rate limiting
+│   ├── redaction.py         # Sensitive data redaction
+│   ├── scaffold.py          # Project scaffolding
+│   ├── security.py          # SSRF, exfiltration, sanitization
+│   ├── session.py           # Session save/load (encrypted)
 │   ├── snippets.py          # Snippet management
+│   ├── swarm.py             # Swarm execution types
+│   ├── task_manager.py      # Task management
 │   ├── theme.py             # Theme support
-│   ├── notifications.py     # Desktop notifications
-│   ├── dep_analyzer.py      # Dependency graph analysis
-│   └── utils.py             # Shared utilities
+│   ├── utils.py             # Shared utilities
+│   ├── validation.py        # Write-path validation
+│   └── main.py              # CLI entry, config loading
 │
 ├── tools/                   # Compatibility shim (re-exports from src/)
 ├── plugins/                 # User-installed plugins
@@ -254,13 +299,14 @@ coding-agent/
 │   ├── pending/             # Plans awaiting approval
 │   └── completed/           # Completed plans
 ├── sessions/                # Saved conversation sessions
+├── tasks/                   # Task tracking
 ├── logs/                    # Application logs
 │
 └── tests/                   # Test suite (pytest)
     ├── test_repl.py
     ├── test_client.py
     ├── test_session.py
-    └── ... (90+ test files)
+    └── ... (77+ test files)
 ```
 
 ---
@@ -269,7 +315,7 @@ coding-agent/
 
 ```
 ┌─────────────────────────────────────────────────────┐
-│                   main.py                            │
+│                   main.py / src/main.py               │
 │         (entry point, config loading)                │
 └────────────┬────────────────────────────┬───────────┘
              │                            │
@@ -281,24 +327,32 @@ coding-agent/
 │  • retry/backoff     │    │  • mode switching         │
 │  • tool dispatch     │◄───│  • tool execution         │
 │  • multi-model       │    │  • command dispatch       │
+│  • model routing     │    │  • command handlers       │
 └────────┬────────────┘    └──────────┬────────────────┘
          │                            │
          ▼                            ▼
 ┌─────────────────────┐    ┌──────────────────────────┐
 │    ToolRegistry      │    │    Tool implementations  │
-│  • register/get/all  │───►│  (40+ tools in src/tools/)│
+│  • register/get/all  │───►│  (47+ tools in src/tools/)│
 │  • to_anthropic_tools│    └──────────────────────────┘
 │  • rebuild (reload)  │
 └─────────────────────┘
          │
          ▼
-┌─────────────────────┐
-│    ToolContext        │
-│  • working_directory  │
-│  • file_snapshots     │
-│  • path validation    │
-│  • orchestrator ref   │
-└─────────────────────┘
+┌─────────────────────────────────────────────────────┐
+│                   ToolContext                         │
+│  • working_directory  • file_snapshots                │
+│  • path validation    • orchestrator ref              │
+│  • agent context      • mode                          │
+└─────────────────────────────────────────────────────┘
+         │
+         ▼
+┌─────────────────────┐    ┌──────────────────────────┐
+│   Orchestrator       │    │   Session / Plan / Backup │
+│  • agent lifecycle   │    │  • save/load/encrypt      │
+│  • swarm execution   │    │  • plan CRUD              │
+│  • sub-agent mgmt    │    │  • backup/restore         │
+└─────────────────────┘    └──────────────────────────┘
 ```
 
 ---
