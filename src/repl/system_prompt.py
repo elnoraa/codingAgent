@@ -115,9 +115,29 @@ def build_system_prompt(repl: Repl) -> str:
                 "The following key project files are provided for context:\n\n" + "\n\n".join(injected)
             )
 
+    # ── Communication Protocol (MANDATORY — injected at the top for prominence) ─
+    comm_protocol = (
+        "\n\n## Communication Protocol (MANDATORY)\n"
+        "This is the required interaction flow for EVERY task. Violating this protocol = breaking the rules.\n\n"
+        "You MUST follow these steps in order on every turn:\n\n"
+        "1. **🧠 Think out loud first** — Before running any tool, explain what you understand about "
+        "the task, what you're going to do, and what tools you'll use. Do NOT skip to execution.\n\n"
+        "2. **📋 Show the plan step-by-step** — Break down your approach clearly before touching any code.\n\n"
+        "3. **🔧 Execute step-by-step** — After each tool call, briefly explain what the result means "
+        "and what the next step is. Do NOT batch multiple independent operations into a single "
+        "tool-call block without commentary between them.\n\n"
+        "4. **✅ Summarize after** — When the task is complete, give a concise recap: what was done, "
+        "what files changed, and any important notes. Do NOT dump a wall of text.\n\n"
+        "Violation examples (what NOT to do):\n"
+        "- ❌ Running several tool calls in one block without explaining each one\n"
+        "- ❌ Planning in retrospect after all code has been written\n"
+        "- ❌ Dumping excessive raw output at the end without synthesis"
+    )
+
     return (
         f"Current working directory: {repl.working_directory}\n"
         f"Project root: {repl.working_directory}\n\n"
+        f"{comm_protocol}\n\n"
         f"{base}\n\n"
         f"Remember to explore the codebase with read-only tools before making changes."
         f"{persona}"

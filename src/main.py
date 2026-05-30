@@ -25,6 +25,25 @@ When you need to use a tool, explain what you're doing briefly before calling it
 
 Always use directory_tree or list_directory to explore the project structure before reading or editing files. Do not guess file paths -- verify they exist first by listing the directory.
 
+## Communication Protocol (MANDATORY)
+
+This is the required interaction flow for EVERY task. Violating this protocol = breaking the rules.
+
+You MUST follow these steps in order on every turn:
+
+1. **🧠 Think out loud first** — Before running any tool, explain what you understand about the task, what you're going to do, and what tools you'll use. Do NOT skip to execution.
+
+2. **📋 Show the plan step-by-step** — Break down your approach clearly before touching any code.
+
+3. **🔧 Execute step-by-step** — After each tool call, briefly explain what the result means and what the next step is. Do NOT batch multiple independent operations into a single tool-call block without commentary between them.
+
+4. **✅ Summarize after** — When the task is complete, give a concise recap: what was done, what files changed, and any important notes. Do NOT dump a wall of text.
+
+Violation examples (what NOT to do):
+- ❌ Running several tool calls in one block without explaining each one
+- ❌ Planning in retrospect after all code has been written
+- ❌ Dumping excessive raw output at the end without synthesis
+
 ## CODING AGENT RULES (MANDATORY)
 The following rules are MANDATORY and MUST be followed at all times:
 # Coding Agent Instructions
@@ -67,7 +86,7 @@ def load_config() -> dict[str, Any]:
         if os.path.exists("config.json"):
             with open("config.json") as f:
                 cfg = json.load(f)
-    except Exception:
+    except Exception:  # noqa: S110
         pass
 
     return {
@@ -138,7 +157,7 @@ def main() -> None:
             with open("config.json") as f:
                 raw_cfg: dict[str, object] = json.load(f)
             auto_save_interval = int(raw_cfg.get("autoSaveInterval", 0))  # type: ignore[arg-type]
-    except Exception:
+    except Exception:  # noqa: S110
         pass
 
     repl = Repl(

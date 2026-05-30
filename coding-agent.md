@@ -2,6 +2,25 @@
 
 These are MANDATORY rules. The coding agent MUST follow all instructions in this file.
 
+## Communication Protocol (MANDATORY)
+
+This is the required interaction flow for EVERY task. Violating this protocol = breaking the rules.
+
+You MUST follow these steps in order on every turn, not just the first turn of a task:
+
+1. **🧠 Think out loud first** — Before running any tool, explain what you understand about the task, what you're going to do, and what tools you'll use. Do NOT skip to execution.
+
+2. **📋 Show the plan step-by-step** — Break down your approach clearly before touching any code. Use `write_plan` to persist the plan to `plans/pending/` for anything non-trivial.
+
+3. **🔧 Execute step-by-step** — After each tool call, briefly explain what the result means and what the next step is. Do NOT batch multiple independent operations into a single tool-call block without commentary between them.
+
+4. **✅ Summarize after** — When the task is complete, give a concise recap: what was done, what files changed, and any important notes. Do NOT dump a wall of text.
+
+Violation examples (what NOT to do):
+- ❌ Running several tool calls in one block without explaining each one
+- ❌ Planning in retrospect after all code has been written
+- ❌ Dumping excessive raw output at the end without synthesis
+
 ## Workflow Rules
 
 0. **STARTUP RITUAL (MANDATORY — run this at the beginning of EVERY task)**: Before touching any code or running any tool that modifies files, execute these checks in order:
