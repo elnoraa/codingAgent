@@ -122,7 +122,7 @@ def _handle_bash_tool(args: dict[str, object], ctx: ToolContext, defn: CustomToo
         return error
 
     try:
-        result = subprocess.run(
+        result = subprocess.run(  # noqa: S602 — intentional: bash tools execute shell commands
             command,
             shell=True,
             capture_output=True,
@@ -180,8 +180,8 @@ def _handle_http_tool(args: dict[str, object], ctx: ToolContext, defn: CustomToo
         import urllib.parse
         import urllib.request
 
-        req = urllib.request.Request(url, method=method)
-        with urllib.request.urlopen(req, timeout=15) as response:
+        req = urllib.request.Request(url, method=method)  # noqa: S310
+        with urllib.request.urlopen(req, timeout=15) as response:  # noqa: S310
             body = response.read().decode("utf-8", errors="replace")
             return f"HTTP {response.status}:\n{body[:2000]}"
     except Exception as e:
@@ -219,38 +219,10 @@ def _handle_python_tool(args: dict[str, object], ctx: ToolContext, defn: CustomT
         except Exception as e:
             return f"Error executing script: {e}"
 
-    # Fallback: unrestricted execution (no working directory set)
-    import io
-    import sys as _sys
-
-    old_stdout = _sys.stdout
-    old_stderr = _sys.stderr
-    captured_stdout = io.StringIO()
-    captured_stderr = io.StringIO()
-
-    try:
-        _sys.stdout = captured_stdout
-        _sys.stderr = captured_stderr
-
-        # Make args available as variables in the script namespace
-        local_vars: dict[str, Any] = dict(args)
-        exec(script, local_vars)
-
-        output = captured_stdout.getvalue()
-        error_output = captured_stderr.getvalue()
-        result = ""
-        if output.strip():
-            result += output.strip()
-        if error_output.strip():
-            if result:
-                result += "\n"
-            result += error_output.strip()
-        return result or "Script completed."
-    except Exception as e:
-        return f"Error executing script: {e}"
-    finally:
-        _sys.stdout = old_stdout
-        _sys.stderr = old_stderr
+    # NOTE: The unrestricted exec() fallback (H5) has been removed.
+    # PythonRepl is always used now, providing consistent sandboxing (DIP compliance).
+    # This prevents arbitrary code execution via custom tools.
+    return "Error: No working directory configured for Python execution."
 
 
 def _make_execute(defn: CustomToolDef) -> Any:

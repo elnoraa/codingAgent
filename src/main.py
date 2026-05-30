@@ -81,6 +81,11 @@ def load_config() -> dict[str, Any]:
         print("Copy .env.example to .env and add your API key.")
         sys.exit(1)
 
+    # Remove the API key from the environment immediately after reading it (H2).
+    # This prevents it from leaking to subprocesses spawned by any tool.
+    # The key is stored only in the LlmClient object (encapsulated per DIP).
+    os.environ.pop("ANTHROPIC_API_KEY", None)
+
     cfg: dict[str, Any] = {}
     try:
         if os.path.exists("config.json"):
@@ -89,9 +94,18 @@ def load_config() -> dict[str, Any]:
     except Exception:  # noqa: S110
         pass
 
+    # Validate ANTHROPIC_BASE_URL if overridden from default (M2)
+    base_url = os.environ.get("ANTHROPIC_BASE_URL", "https://api.deepseek.com/anthropic")
+    if base_url != "https://api.deepseek.com/anthropic":
+        from .security import validate_url_target
+
+        url_error = validate_url_target(base_url)
+        if url_error:
+            logger.warning("ANTHROPIC_BASE_URL validation warning: %s", url_error)
+
     return {
         "api_key": api_key,
-        "base_url": os.environ.get("ANTHROPIC_BASE_URL", "https://api.deepseek.com/anthropic"),
+        "base_url": base_url,
         "model": cfg.get("model") or os.environ.get("ANTHROPIC_MODEL", "deepseek-chat"),
         "max_tokens": cfg.get("maxTokens") or int(os.environ.get("MAX_TOKENS", "4096")),
         "system_prompt": cfg.get("systemPrompt", DEFAULT_SYSTEM_PROMPT),

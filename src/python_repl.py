@@ -194,6 +194,21 @@ class PythonRepl:
             opener=None,
         ):
             """Restricted open() — only allows write modes within the working directory."""
+            import os as _os
+
+            # Check for non-path arguments that bypass the path check (M9 — LSP fix)
+            if not isinstance(file, (str, _os.PathLike)):
+                # File descriptors, io.BufferedWriter, etc. are not path-like.
+                # Converting via str() would produce "<io.BufferedWriter name='/etc/passwd'>"
+                # which is NOT a valid path. Reject these for write modes.
+                if any(c in mode for c in ("w", "a", "x", "+")):
+                    raise PermissionError(
+                        f"Error: Only string or Path-like file arguments are allowed "
+                        f"for write modes. Got {type(file).__name__}."
+                    )
+                # Read-only from non-path objects is allowed (e.g., stdin)
+                return original_open(file, mode, buffering, encoding, errors, newline, closefd, opener)
+
             if any(c in mode for c in ("w", "a", "x", "+")):
                 from src.utils import validate_write_path
 
@@ -264,23 +279,26 @@ class PythonRepl:
                     if isinstance(node.func, ast.Name) and node.func.id == "__import__":
                         return "Error: Calling __import__ directly is not allowed in the restricted REPL."
                     # Block type.__subclasses__() escape
-                    if isinstance(node.func, ast.Attribute):
-                        if node.func.attr in ("__subclasses__", "__base__", "__bases__", "__mro__"):
-                            return (
-                                f"Error: Access to '{node.func.attr}' is blocked "
-                                f"in the restricted REPL (sandbox escape prevention)."
-                            )
+                    if isinstance(node.func, ast.Attribute) and node.func.attr in (
+                        "__subclasses__",
+                        "__base__",
+                        "__bases__",
+                        "__mro__",
+                    ):  # noqa: SIM102
+                        return (
+                            f"Error: Access to '{node.func.attr}' is blocked "
+                            f"in the restricted REPL (sandbox escape prevention)."
+                        )
                 # Block 'import os' etc via normal import statements
                 if isinstance(node, ast.Import):
                     for alias in node.names:
                         base = alias.name.split(".")[0]
                         if base in forbidden_imports:
                             return f"Error: Module '{alias.name}' is not allowed in the restricted REPL."
-                if isinstance(node, ast.ImportFrom):
-                    if node.module:
-                        base = node.module.split(".")[0]
-                        if base in forbidden_imports:
-                            return f"Error: Module '{node.module}' is not allowed in the restricted REPL."
+                if isinstance(node, ast.ImportFrom) and node.module:  # noqa: SIM102
+                    base = node.module.split(".")[0]
+                    if base in forbidden_imports:
+                        return f"Error: Module '{node.module}' is not allowed in the restricted REPL."
         except SyntaxError:
             pass  # Will be caught by compile() later
 
@@ -328,13 +346,13 @@ class PythonRepl:
                 if self._restrict_to_working_directory:
                     # Use restricted globals for the exec
                     restricted_globals = self._make_restricted_globals()
-                    exec(compiled, restricted_globals)
+                    exec(compiled, restricted_globals)  # noqa: S102 — intentional: this IS the Python REPL
                     # Merge back any new variables into self._locals
                     for k, v in restricted_globals.items():
                         if k != "__builtins__":
                             self._locals[k] = v
                 else:
-                    exec(compiled, self._locals)
+                    exec(compiled, self._locals)  # noqa: S102 — intentional: this IS the Python REPL
             except Exception:
                 self._error_count += 1
                 import traceback

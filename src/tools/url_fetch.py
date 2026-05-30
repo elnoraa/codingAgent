@@ -1,6 +1,14 @@
+"""Tool: url_fetch — fetch URL content using Python's built-in urllib.
+
+Uses stdlib only (DIP compliance — no dependency on external binaries like curl/wget).
+Keeps URLs within process memory (M5 — prevents URL leakage via /proc).
+Applies SSRF protection (reuses validate_url_target from security.py, DRY).
+"""
+
 from __future__ import annotations
 
-import subprocess
+import urllib.error
+import urllib.request
 from typing import Any
 
 from src.logging_config import get_logger
@@ -24,66 +32,45 @@ def execute(args: dict[str, Any], _ctx: ToolContext) -> str:
     if error:
         return error
 
-    # SSRF protection: block private/internal IPs
-    try:
-        from src.utils import validate_url_target
+    # SSRF protection: block private/internal IPs (DRY: reuse from security.py)
+    from src.security import validate_url_target
 
-        ssrf_error = validate_url_target(url)
-        if ssrf_error:
-            return ssrf_error
-    except ImportError:
-        pass
+    ssrf_error = validate_url_target(url)
+    if ssrf_error:
+        return ssrf_error
 
-    # Use curl to fetch the URL
+    # Fetch using urllib.request (stdlib) instead of curl/wget subprocess (M5)
+    # This keeps the URL within process memory, preventing leakage via /proc
     try:
-        result = subprocess.run(
-            ["curl", "-sSL", "-m", str(timeout), url],
-            capture_output=True,
-            text=True,
-            timeout=timeout + 5,
-        )
-    except FileNotFoundError:
-        # Curl not available, try wget
-        try:
-            result = subprocess.run(
-                ["wget", "-q", "-O", "-", "--timeout=" + str(timeout), url],
-                capture_output=True,
-                text=True,
-                timeout=timeout + 5,
-            )
-        except FileNotFoundError:
-            return "[Error] Neither curl nor wget is installed on this system"
-        except subprocess.TimeoutExpired:
-            return "[Error] Request timed out"
-        except Exception as exc:
-            return f"[Error] {exc}"
-    except subprocess.TimeoutExpired:
-        return "[Error] Request timed out"
+        req = urllib.request.Request(url, headers={"User-Agent": "CodingAgent/1.0"})  # noqa: S310
+        with urllib.request.urlopen(req, timeout=timeout) as response:  # noqa: S310
+            content_type = response.headers.get("Content-Type", "")
+            content_bytes = response.read()
+            content = content_bytes.decode("utf-8", errors="replace")
+            content_length = len(content)
+    except urllib.error.HTTPError as exc:
+        return f"[Error] HTTP {exc.code}: {exc.reason}"
+    except urllib.error.URLError as exc:
+        return f"[Error] Failed to fetch URL: {exc.reason}"
+    except ValueError as exc:
+        return f"[Error] Invalid URL: {exc}"
+    except OSError as exc:
+        return f"[Error] Connection failed: {exc}"
     except Exception as exc:
         return f"[Error] {exc}"
 
-    if result.returncode != 0:
-        error_msg = result.stderr.strip() or f"curl exited with code {result.returncode}"
-        return f"[Error] Failed to fetch URL: {error_msg}"
-
-    content = result.stdout.strip()
-
-    # Try to get content type
-    content_type = ""
-    for line in result.stderr.split("\n"):
-        if "Content-Type:" in line:
-            content_type = line.split(":", 1)[1].strip()
-            break
-
     # Truncate if too long
+    truncated = False
     if len(content) > max_length:
         content = content[:max_length]
-        content += f"\n\n... (truncated, full response was {len(result.stdout.strip())} bytes)"
+        truncated = True
 
     header = f"URL: {url}"
     if content_type:
         header += f" | Content-Type: {content_type}"
-    header += f" | {len(result.stdout.strip())} bytes"
+    header += f" | {content_length} bytes"
+    if truncated:
+        header += f" (showing {max_length} chars)"
 
     return header + "\n\n" + content
 
@@ -92,7 +79,7 @@ url_fetch_tool = Tool(
     name="url_fetch",
     description=(
         "Fetch a URL and return its text content. Useful for reading documentation, "
-        "API responses, or web pages. Uses curl (or wget as fallback). "
+        "API responses, or web pages. Uses urllib (stdlib). "
         "Truncates long responses."
     ),
     input_schema={

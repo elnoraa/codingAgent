@@ -1,4 +1,10 @@
-"""Docker integration for managing containers and images."""
+"""Docker integration for managing containers and images.
+
+Security: Applies write-path validation, data exfiltration scanning, and
+command substitution checks (reusing the same scanners from bash_tool.py
+per DRY principles). Paths accepted by build/up/down actions are validated
+against the working directory.
+"""
 
 from __future__ import annotations
 
@@ -12,10 +18,66 @@ from src.tools import Tool, ToolContext
 logger = get_logger(__name__)
 
 
+def _check_docker_path(path: str, ctx: ToolContext) -> str | None:
+    """Validate a path parameter is within the working directory.
+
+    Reuses ctx.validate_write_path() — DRY: don't write a second path validator.
+    """
+    if not path:
+        return None
+    return ctx.validate_write_path(path)
+
+
+def _check_docker_command_for_security(command: str, ctx: ToolContext) -> str | None:
+    """Check a Docker exec command for security violations.
+
+    Reuses the bash tool's command scanner and exfiltration detection (DRY).
+    """
+    # Import the command scanner from bash_tool (DRY: reuse, don't rewrite)
+    try:
+        from src.tools.bash_tool import _check_command_for_outside_writes
+    except ImportError:
+        pass
+    else:
+        scanner_error = _check_command_for_outside_writes(command, ctx.working_directory)
+        if scanner_error:
+            return scanner_error
+
+    # Check for sensitive environment variable access
+    from src.exfiltration_detection import _EXFIL_NETWORK_COMMANDS, _EXFIL_SENSITIVE_FILES
+
+    command_lower = command.lower()
+    for sensitive_file in _EXFIL_SENSITIVE_FILES:
+        if sensitive_file in command_lower:
+            parts = sensitive_file.split("/")
+            if any(part in command_lower for part in parts):
+                logger.warning(
+                    "Docker exec blocked: command references sensitive file '%s'",
+                    sensitive_file,
+                )
+                return (
+                    f"Error: Docker exec command references sensitive file "
+                    f"'{sensitive_file}'. This is blocked for security."
+                )
+
+    for net_cmd in _EXFIL_NETWORK_COMMANDS:
+        if net_cmd in command_lower:
+            logger.warning(
+                "Docker exec blocked: command uses network tool '%s'",
+                net_cmd,
+            )
+            return (
+                f"Error: Docker exec command uses network tool '{net_cmd}'. "
+                f"This could be used for data exfiltration and is blocked."
+            )
+
+    return None
+
+
 def _run_docker(cmd: list[str], ctx: ToolContext, timeout: int = 60) -> tuple[int, str, str]:
     """Run a docker command and return (returncode, stdout, stderr)."""
     try:
-        result = subprocess.run(
+        result = subprocess.run(  # noqa: S603
             ["docker"] + cmd,
             capture_output=True,
             text=True,
@@ -131,6 +193,17 @@ def execute(args: dict[str, Any], ctx: ToolContext) -> str:
 
         logger.info("Docker build: path=%s, tag=%s, dockerfile=%s", path, tag, dockerfile)
 
+        # Validate paths within working directory (SRP: security is separated from logic)
+        path_error = _check_docker_path(path, ctx)
+        if path_error:
+            return path_error
+        if dockerfile:
+            df_error = _check_docker_path(dockerfile, ctx)
+            if df_error:
+                return df_error
+
+        logger.info("Docker build: path=%s, tag=%s, dockerfile=%s", path, tag, dockerfile)
+
         cmd = ["build"]
         if tag:
             cmd.extend(["-t", tag])
@@ -151,6 +224,12 @@ def execute(args: dict[str, Any], ctx: ToolContext) -> str:
         detached = args.get("detach", True)
         file = args.get("file", "")
 
+        # Validate compose file path (M8: path validation)
+        if file:
+            file_error = _check_docker_path(file, ctx)
+            if file_error:
+                return file_error
+
         cmd = ["compose", "up"]
         if detached:
             cmd.append("-d")
@@ -168,6 +247,12 @@ def execute(args: dict[str, Any], ctx: ToolContext) -> str:
         # docker compose down
         file = args.get("file", "")
         volumes = args.get("volumes", False)
+
+        # Validate compose file path (M8)
+        if file:
+            file_error = _check_docker_path(file, ctx)
+            if file_error:
+                return file_error
 
         cmd = ["compose", "down"]
         if volumes:
@@ -206,8 +291,23 @@ def execute(args: dict[str, Any], ctx: ToolContext) -> str:
         if not container or not command:
             return "Error: 'container' and 'command' parameters required"
 
+        # Security: scan the command before executing (H1)
+        logger.warning("Docker exec action requested — executing command inside container %s", container)
+        security_error = _check_docker_command_for_security(command, ctx)
+        if security_error:
+            return security_error
+
+        # Use shlex.split() for proper quoted-argument handling (M6 — LSP compliance)
+        import shlex
+
+        try:
+            split_command = shlex.split(command)
+        except ValueError as exc:
+            # shlex.split can raise ValueError on unbalanced quotes
+            return f"Error: Invalid command syntax — {exc}"
+
         ret, stdout, stderr = _run_docker(
-            ["exec", container] + command.split(),
+            ["exec", container] + split_command,
             ctx,
             timeout=30,
         )
@@ -218,6 +318,13 @@ def execute(args: dict[str, Any], ctx: ToolContext) -> str:
     elif action == "compose":
         # docker compose ps
         file = args.get("file", "")
+
+        # Validate compose file path (M8)
+        if file:
+            file_error = _check_docker_path(file, ctx)
+            if file_error:
+                return file_error
+
         cmd = ["compose", "ps"]
         if file:
             cmd.extend(["-f", file])

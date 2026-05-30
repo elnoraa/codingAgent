@@ -192,7 +192,7 @@ def load_session(name: str, working_directory: str) -> dict[str, object] | None:
                 "Session loaded (encrypted): name=%s, messages=%d, mode=%s", safe_name, msg_count, data.get("mode", "?")
             )
             return data
-        except Exception as exc:
+        except (json.JSONDecodeError, OSError, ValueError) as exc:
             logger.warning("Failed to load encrypted session %s: %s", safe_name, exc)
             return None
 

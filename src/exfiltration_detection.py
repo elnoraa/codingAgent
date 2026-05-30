@@ -35,6 +35,8 @@ _EXFIL_SENSITIVE_FILES: frozenset = frozenset(
         "service-account-key.json",
         ".npmrc",
         ".netrc",
+        "/proc/self/environ",  # H2: contains all environment variables including leaked secrets
+        "/proc/self/fd",  # can be used to read open file descriptors
     }
 )
 
